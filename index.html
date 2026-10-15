@@ -74,6 +74,9 @@
     { path: 'boss-lag/', title: '보스가 뜨면 왜 렉이 걸릴까?', length: '1:22',
       desc: '인원이 몰리면 브로드캐스트가 N×(N−1)로 늘고, 시야 반경이 2배면 보이는 인원이 4배가 되는 이유. 광역기 · 이펙트 · AI 부하, 서버 · 망 · 클라에서 터지는 지점과 대응.',
       tags: ['broadcast N²', 'AOI', 'view radius', 'boss fight'] },
+    { path: 'slow-client/', title: '클라가 느리면 서버도 느려질까?', length: '1:23',
+      desc: '느린 회선 · 기기가 수신 버퍼 → Zero Window → 서버 송신 버퍼 → 앱 송신 큐로 압력을 거꾸로 전달하는 과정, 서버가 느려지는 네 경로, 격리 설계와 인프라 확인법.',
+      tags: ['backpressure', 'zero window', 'send queue', 'slow consumer'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {
