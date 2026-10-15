@@ -54,25 +54,25 @@
 
 <div class="player">
   <div class="stage" id="stage">
-    <canvas id="c" width="1920" height="1080" aria-label="클라가 느리면 서버도 느려질까 모션그래픽"></canvas>
+    <canvas id="c" width="1920" height="1080" aria-label="클라가 느리면 서버도 느려진다 모션그래픽"></canvas>
     <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
   </div>
   <div class="bar">
     <button class="btn" id="play" aria-label="재생"></button>
-    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="93" aria-valuenow="0">
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="110" aria-valuenow="0">
       <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
     </div>
-    <div class="time" id="time">0:00 / 1:32</div>
+    <div class="time" id="time">0:00 / 1:49</div>
     <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
   <div class="chapters" id="chapters"></div>
 </div>
 <script>
 // ─────────────────────────────────────────────────────────────
-//  클라가 느리면 서버도 느려질까 — 백프레셔와 격리
+//  클라가 느리면 서버도 느려진다 — 보스전, 수신 큐, 백프레셔
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
-const W = 1920, H = 1080, DURATION = 92.5;
+const W = 1920, H = 1080, DURATION = 109.5;
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 
@@ -244,12 +244,14 @@ function background(t) {
 
 // [start, end, number, title, subtitle] — one row per chapter. Chapters own the top-left header zone (y < 190).
 const HEAD = [
-  [5.0, 15.0, '01', '답: 조건부로 맞다', '서버가 느린 클라를 기다리느냐, 격리하느냐'],
-  [15.0, 26.0, '02', '느린 클라의 두 종류', '느린 회선, 느린 기기'],
-  [26.0, 41.0, '03', '압력이 서버로 거꾸로 온다', '수신 버퍼 → Zero Window → 송신 버퍼 → 앱 송신 큐'],
-  [41.0, 55.0, '04', '서버가 느려지는 네 가지 경로', '기다리거나, 쌓아두거나, 락을 쥐거나, 몰려오거나'],
-  [55.0, 76.0, '05', '잘 만든 서버는 격리한다', '느린 클라는 혼자만 느리게 — 그리고 상한만으로는 새는 곳'],
-  [76.0, 87.0, '06', '인프라에서 확인하는 법', 'Send-Q · Zero Window · 세션 큐 · 메모리 · 틱을 같이 본다'],
+  [5.0, 16.0, '01', '보스전에 생기는 일', '받아야 할 양은 늘고, 클라가 처리하는 속도는 떨어진다'],
+  [16.0, 28.0, '02', '클라 안의 수신 큐', '수신 스레드가 받고, 메인 스레드가 프레임마다 꺼낸다'],
+  [28.0, 39.0, '03', '소켓이 안 비워지는 순간', '수신 스레드가 멈추거나, 회선이 느리거나'],
+  [39.0, 54.0, '04', '압력이 서버로 거꾸로 온다', '수신 버퍼 → Zero Window → 송신 버퍼 → 앱 송신 큐'],
+  [54.0, 68.0, '05', '상한 전에도 서버는 느려진다', '메모리 · 버퍼 · 재시도 — 몇 명이면 작고, 몰리면 커진다'],
+  [68.0, 80.0, '06', '송신 큐 상한은 안전장치', '닿으면 끊긴다 — 닿지 않게 운영한다'],
+  [80.0, 93.0, '07', '해결 방법', '클라는 빨리 뽑아내고, 서버는 클라당 보내는 양을 묶는다'],
+  [93.0, 104.0, '08', '인프라에서 확인하는 법', 'Send-Q · Zero Window · 세션 큐 · 끊김 수 · 클라 지표'],
 ];
 function headers(t) {
   for (const [s, e, n, title, sub] of HEAD) {
@@ -270,11 +272,16 @@ function progress(t) {
   const g = ctx.createLinearGradient(x0, 0, x1, 0);
   g.addColorStop(0, C.proto); g.addColorStop(.5, C.bot); g.addColorStop(1, C.pub);
   ctx.fillStyle = g; ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
-  for (const h of HEAD) {
+  HEAD.forEach((h, i) => {
     const x = x0 + (x1 - x0) * h[0] / DURATION;
+    const nx = i + 1 < HEAD.length ? x0 + (x1 - x0) * HEAD[i + 1][0] / DURATION : x1;
     ctx.fillStyle = t >= h[0] ? C.text : C.faint; ctx.fillRect(x, y - 4, 2, 11);
-    txt(h[2] + ' ' + h[3], x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
-  }
+    // label only as long as the gap to the next tick allows
+    let lab = h[2] + ' ' + h[3];
+    while (lab.length > 2 && tw(lab, 16, 600) > nx - x - 18) lab = lab.slice(0, -1);
+    if (lab !== h[2] + ' ' + h[3]) lab = lab.length > 4 ? lab.slice(0, -1).trimEnd() + '…' : h[2];
+    txt(lab, x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
+  });
   ctx.restore();
 }
 
@@ -298,11 +305,11 @@ function words(ws, cx, y, t, t0, o = {}) {
 //  INTRO (0 – 5.2) — config driven
 // ═════════════════════════════════════════════════════════════
 const TITLE = {
-  eyebrow: 'BACKPRESSURE · TCP WINDOW · SEND QUEUE · SLOW CONSUMER',
+  eyebrow: 'BOSS FIGHT · RECEIVE QUEUE · TCP WINDOW · SEND QUEUE',
   line1: ['클라가', '느리면'], line1Colors: [C.pub, null],
-  line2: ['서버도', '느려질까?'], line2Colors: [C.server, null],
-  sub: '느린 클라가 서버를 끌어내리는 경로와, 그걸 막는 방법',
-  story: [['느린 클라', C.pub], ['수신 버퍼', C.proto], ['Zero Window', C.red], ['서버 송신 큐', C.server], ['격리', C.bot]],
+  line2: ['서버도', '느려진다'], line2Colors: [C.server, null],
+  sub: '클라 성능이 서버까지 끌어내리는 경로, 그리고 줄이는 방법',
+  story: [['보스전', C.pub], ['클라 수신 큐', C.client], ['Zero Window', C.red], ['서버 송신 큐', C.server], ['빨리 뽑아내기', C.bot]],
 };
 function sTitle(t) {
   const a = win(t, 0, 5.2, .6); if (a <= 0) return;
@@ -366,193 +373,227 @@ function flowArrow(x0, x1, y, k, col, rate, u, label) {
 }
 
 // ═════════════════════════════════════════════════════════════
-//  01 · the answer: conditionally yes
+//  01 · boss fight: more to receive, less processing
 // ═════════════════════════════════════════════════════════════
-function sAnswer(t) {
+const BUDGET = 200; // packets the main thread drains per frame (example)
+const inRate = s => s < 3 ? 1500 : s < 4 ? lerp(1500, 8000, s - 3) : 8000;
+const fpsAt = s => s < 3 ? 60 : s < 4.5 ? lerp(60, 15, (s - 3) / 1.5) : 15;
+function sSqueeze(t) {
   const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  [[120, '서버가 느린 클라를 기다리면', C.red, true], [980, '서버가 느린 클라를 격리하면', C.bot, false]].forEach(([x, title, col, bad], i) => {
-    const k = eo(p(u, .3 + i * .5, .6)); if (k <= 0) return;
-    panel(x, 215, 820, 480, { alpha: k, stroke: rgba(col, .5) });
-    txt(title, x + 30, 262, { size: 26, weight: 800, color: col, alpha: k });
-    const sx = x + 410, sy = 440, slow = eo(p(u, 2 + i * .3, 1));
-    for (let j = 0; j < 8; j++) {
-      const an = j / 8 * Math.PI * 2 + .2, cx = sx + Math.cos(an) * 300, cy = sy + Math.sin(an) * 150, isSlow = j === 2;
-      const hurt = isSlow || (bad && slow > .5), col2 = isSlow ? C.pub : hurt ? C.red : C.bot;
-      ctx.save(); ctx.globalAlpha *= k * .4; ctx.strokeStyle = col2; ctx.lineWidth = 2; if (hurt) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cy); ctx.stroke(); ctx.restore();
-      const f = (u * (hurt ? .25 : .8) + j * .13) % 1; dot(lerp(sx, cx, f), lerp(sy, cy, f), 4, col2, k * .9, 10);
-      dot(cx, cy, isSlow ? 16 : 12, col2, k, 14);
-      if (isSlow) txt('느린 클라', cx, cy + 40, { size: 17, weight: 800, color: C.pub, align: 'center', alpha: k });
-    }
-    ctx.save(); ctx.globalAlpha *= k; ctx.shadowColor = bad && slow > .5 ? C.red : C.server; ctx.shadowBlur = 30; rr(sx - 80, sy - 50, 160, 100, 16); ctx.fillStyle = C.panel; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = bad && slow > .5 ? C.red : C.server; ctx.lineWidth = 3; ctx.stroke(); ctx.restore();
-    txt('서버', sx, sy + 9, { size: 26, weight: 800, align: 'center', color: bad && slow > .5 ? C.red : C.server, alpha: k });
-    txt(bad ? '모두가 같이 느려진다' : '느린 클라만 손해', sx, 670, { size: 24, weight: 800, color: col, align: 'center', alpha: k * slow });
-  });
-  txt('맞다 — 단, 서버가 느린 클라를 기다리거나 그 몫을 무한히 쌓아둘 때', W / 2, 800, { size: 32, weight: 800, align: 'center', alpha: eo(p(u, 4.5, .6)) });
-  txt('어디서 기다리게 되는지, 압력이 어떻게 거꾸로 전달되는지를 따라가 보자', W / 2, 856, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 5.3, .6)) });
+  const k = eo(p(u, .1, .6));
+  panel(120, 215, 1680, 560, { alpha: k, stroke: rgba(C.pub, .4) });
+  txt('클라 한 명 기준 (예시: 프레임당 처리 예산 ' + BUDGET + '개)', 150, 262, { size: 22, weight: 800, color: C.pub, alpha: k });
+  const x0 = 260, x1 = 1700, yb = 700, yt = 320, VMAX = 13000;
+  const gx = s => x0 + (x1 - x0) * s / 10, gy = v => yb - (yb - yt) * v / VMAX;
+  ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.lineWidth = 1;
+  [0, 4000, 8000, 12000].forEach(v => { ctx.beginPath(); ctx.moveTo(x0, gy(v)); ctx.lineTo(x1, gy(v)); ctx.stroke(); txt(fmt(v), x0 - 14, gy(v) + 6, { size: 15, mono: true, color: C.faint, align: 'right' }); });
+  ctx.restore();
+  txt('패킷 / 초', x0 - 14, yt - 22, { size: 15, color: C.dim, align: 'right', alpha: k });
+  // boss marker
+  const kb = eo(p(u, 1.6, .4));
+  ctx.save(); ctx.globalAlpha *= kb; ctx.setLineDash([6, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(gx(3), yt + 8); ctx.lineTo(gx(3), yb); ctx.stroke(); ctx.restore();
+  chip('보스 등장', gx(3), yt - 14, C.red, { align: 'center', size: 15, alpha: kb });
+  const smax = clamp((u - 1) / 6) * 10; if (smax <= 0) { ctx.restore(); return; }
+  // backlog shading where incoming > capacity
+  let backlog = 0;
+  ctx.save(); ctx.globalAlpha *= k * .25; ctx.fillStyle = C.red;
+  for (let s = 0; s < smax; s += .05) {
+    const cap = fpsAt(s) * BUDGET, inc = inRate(s);
+    if (inc > cap) { ctx.fillRect(gx(s), gy(inc), gx(.05) - gx(0) + 1, gy(cap) - gy(inc)); backlog += (inc - cap) * .05; }
+  }
+  ctx.restore();
+  const line = (fn, col) => { ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.beginPath(); for (let s = 0; s <= smax; s += .05) { const X = gx(s), Y = gy(fn(s)); s ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.stroke(); ctx.restore(); };
+  line(inRate, C.server); line(s => fpsAt(s) * BUDGET, C.client);
+  dot(gx(smax), gy(inRate(smax)), 7, C.server, k, 14); dot(gx(smax), gy(fpsAt(smax) * BUDGET), 7, C.client, k, 14);
+  txt('받아야 할 패킷', 1340, gy(8000) - 16, { size: 18, weight: 800, color: C.server, alpha: k * clamp(smax - 5) });
+  txt('처리할 수 있는 패킷 = FPS × ' + BUDGET, 300, gy(12000) - 16, { size: 18, weight: 800, color: C.client, alpha: k });
+  chip('FPS ' + Math.round(fpsAt(smax)), 1780, 262 - 8, fpsAt(smax) < 30 ? C.red : C.bot, { align: 'right', size: 18, alpha: k });
+  if (backlog > 0) txt('밀린 패킷 ' + fmt(backlog) + '개', 1770, 330, { size: 26, weight: 800, mono: true, color: C.red, align: 'right', alpha: k });
+  txt('받을 양이 가장 많은 순간에, 처리하는 속도는 가장 느리다', W / 2, 850, { size: 32, weight: 800, align: 'center', alpha: eo(p(u, 7.4, .6)) });
+  txt('이 차이가 어딘가에 쌓인다 — 클라 안에서 시작해 서버까지 올라올 수 있다', W / 2, 906, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 8.2, .6)) });
   ctx.restore();
 }
 
 // ═════════════════════════════════════════════════════════════
-//  02 · two kinds of slow clients
+//  02 · the client's own receive queue
 // ═════════════════════════════════════════════════════════════
-function sKinds(t) {
+function sClientQueue(t) {
   const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  [[120, '느린 회선', '대역폭 부족 · 손실 · 와이파이 · 모바일', '받는 속도 < 서버가 보내는 속도', C.proto],
-   [980, '느린 기기', '낮은 FPS · 메인 스레드가 프레임마다 소켓을 읽음', '읽고 처리하는 속도 < 도착하는 속도', C.pub]].forEach(([x, title, sub, rule, col], i) => {
-    const k = eo(p(u, .3 + i * .5, .6)); if (k <= 0) return;
-    panel(x, 215, 820, 470, { alpha: k, stroke: rgba(col, .45) });
-    txt(title, x + 30, 265, { size: 30, weight: 800, color: col, alpha: k });
-    txt(sub, x + 30, 305, { size: 19, color: C.dim, alpha: k });
-    const lvl = clamp((u - 1.5 - i * .3) / 5);
-    flowArrow(x + 60, x + 300, 470, k, C.server, 1.2, u, '서버 → 초당 많이');
-    tank(x + 320, 360, 180, 220, lvl, col, k);
-    txt(i === 0 ? '회선 · 커널' : '커널 수신 버퍼', x + 410, 610, { size: 16, color: C.dim, align: 'center', alpha: k });
-    flowArrow(x + 520, x + 760, 470, k, col, .35, u, i === 0 ? '받는 속도 제한' : '프레임당 처리 한도');
-    if (i === 1) { txt(lvl > .6 ? 'FPS 12' : 'FPS 60', x + 640, 540, { size: 22, weight: 800, mono: true, color: lvl > .6 ? C.red : C.bot, align: 'center', alpha: k }); }
-    txt(rule, x + 410, 662, { size: 22, weight: 800, align: 'center', color: lvl > .9 ? C.red : C.text, alpha: k });
-  });
-  txt('원인은 달라도 결과는 같다: 수신측이 못 따라가고, 버퍼가 차기 시작한다', W / 2, 800, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 5.5, .6)) });
+  const boss = u > 4.5, k = eo(p(u, .1, .6));
+  const ql = boss ? .12 + .8 * clamp((u - 4.5) / 4.5) : .12;
+  tank(160, 330, 240, 300, .08, C.proto, k);
+  txt('클라 커널 수신 버퍼', 280, 670, { size: 21, weight: 800, color: C.proto, align: 'center', alpha: k });
+  txt('수신 스레드가 바로 비운다', 280, 700, { size: 16, color: C.dim, align: 'center', alpha: k });
+  flowArrow(410, 740, 480, eo(p(u, .4, .5)), C.proto, 1.4, u, '수신 스레드');
+  tank(760, 330, 320, 300, ql, C.client, eo(p(u, .4, .5)));
+  txt('수신 큐 (앱 메모리)', 920, 670, { size: 21, weight: 800, color: C.client, align: 'center', alpha: k });
+  txt(boss ? '꺼내는 속도보다 빨리 쌓인다' : '바로바로 비워진다', 920, 700, { size: 16, color: boss ? C.red : C.dim, align: 'center', alpha: k });
+  flowArrow(1090, 1420, 480, eo(p(u, .8, .5)), C.client, boss ? .3 : 1.2, u, '메인 스레드: 프레임당 ' + BUDGET + '개');
+  const kl = eo(p(u, .8, .5));
+  panel(1440, 380, 320, 200, { alpha: kl, stroke: rgba(boss ? C.red : C.client, .5) });
+  txt('게임 로직 · 렌더', 1600, 450, { size: 24, weight: 800, align: 'center', alpha: kl });
+  txt(boss ? 'FPS 15 → 초당 3,000개' : 'FPS 60 → 초당 12,000개', 1600, 500, { size: 19, weight: 800, mono: true, color: boss ? C.red : C.bot, align: 'center', alpha: kl });
+  txt(boss ? '보스전: 들어오는 8,000개 / 초' : '평소: 들어오는 1,500개 / 초', 1600, 540, { size: 16, color: C.dim, align: 'center', alpha: kl });
+  if (boss) chip('보스전', 1600, 360, C.red, { align: 'center', size: 16, alpha: eo(p(u, 4.5, .4)) });
+  txt('한 프레임에 다 털 수 없으니 처리량에 한도를 둔다 — 그만큼 큐에 남는다', W / 2, 820, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 6.5, .6)) });
+  txt('여기까지는 클라 안의 문제: 오래된 이동을 늦게 반영(렉 · 러버밴딩), 클라 메모리 증가', W / 2, 876, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 7.3, .6)) });
   ctx.restore();
 }
 
 // ═════════════════════════════════════════════════════════════
-//  03 · backpressure travels back to the server
+//  03 · when the socket stops draining
+// ═════════════════════════════════════════════════════════════
+function sStall(t) {
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6));
+  panel(120, 215, 720, 560, { alpha: k, stroke: rgba(C.red, .4) });
+  txt('수신 스레드가 멈추면', 150, 262, { size: 22, weight: 800, color: C.red, alpha: k });
+  tank(180, 330, 220, 300, clamp((u - 1.2) / 5), C.proto, k);
+  txt('커널 수신 버퍼', 290, 670, { size: 19, weight: 800, color: C.proto, align: 'center', alpha: k });
+  tank(560, 330, 220, 300, .985, C.client, k);
+  txt('수신 큐', 670, 670, { size: 19, weight: 800, color: C.client, align: 'center', alpha: k });
+  flowArrow(410, 550, 480, k, C.red, 0, u, '');
+  chip('정지', 480, 450, C.red, { align: 'center', size: 16, alpha: k });
+  txt('소켓이 안 비워진다', 480, 730, { size: 20, weight: 800, color: C.red, align: 'center', alpha: k * eo(p(u, 3, .5)) });
+  noteRow([['수신 큐가 상한에 닿음', '큐가 가득 차면 수신 스레드가 기다린다'],
+           ['GC 정지', 'C# · 유니티 클라: GC가 모든 스레드를 잠깐 멈춘다'],
+           ['락 경합', '메인 스레드가 큐 락을 오래 잡으면 수신 스레드가 막힌다'],
+           ['앱 백그라운드', '모바일 OS가 앱을 일시 정지 → 모든 스레드 정지'],
+           ['느린 회선', '클라 구현과 무관 — 클라 최적화로는 못 고친다']], u, .8, 280, C.red, 1, 900, 900);
+  txt('이때부터 클라 커널 수신 버퍼가 차고, 압력이 서버로 향한다', W / 2, 860, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 6.2, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  04 · backpressure travels back to the server
 // ═════════════════════════════════════════════════════════════
 const TANKS = [
   [160, '서버 앱 송신 큐', '세션별 · 메모리', C.server, 5.2, 8.5],
   [520, '서버 커널 송신 버퍼', 'SO_SNDBUF', C.proto, 3.4, 1.6],
   [1120, '클라 커널 수신 버퍼', 'SO_RCVBUF', C.proto, 1.0, 2.0],
-  [1480, '클라 앱 처리', '프레임마다 조금씩', C.client, 0, 0],
+  [1480, '클라 수신 큐', '가득 · 수신 스레드 정지', C.client, 0, 0],
 ];
 function sBackpressure(t) {
-  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const y = 330, h = 300, w = 260;
   TANKS.forEach(([x, lab, sub, col, t0, dur], i) => {
     const k = eo(p(u, .2 + i * .15, .5));
-    const lvl = i === 3 ? .25 : clamp((u - t0) / Math.max(.1, dur)), over = i === 0 ? Math.max(0, (u - t0 - dur * .6)) * 30 : 0;
+    const lvl = i === 3 ? .985 : clamp((u - t0) / Math.max(.1, dur)), over = i === 0 ? Math.max(0, (u - t0 - dur * .6)) * 30 : 0;
     tank(x, y, w, h, i === 0 ? Math.min(1, lvl) : lvl, col, k, Math.min(36, over));
     txt(lab, x + w / 2, y + h + 40, { size: 21, weight: 800, color: col, align: 'center', alpha: k });
     txt(sub, x + w / 2, y + h + 70, { size: 16, color: C.dim, align: 'center', mono: true, alpha: k });
   });
-  // network arrow between server kernel and client kernel
   const zero = u >= 3.1;
   flowArrow(800, 1100, 420, eo(p(u, .6, .5)), zero ? C.red : C.proto, zero ? 0 : 1.2, u, zero ? '' : '데이터');
   ctx.save(); ctx.globalAlpha *= eo(p(u, 2.6, .4)); ctx.strokeStyle = C.client; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(1100, 520); ctx.lineTo(800, 520); ctx.stroke(); ctx.restore();
   chip('ACK: 수신 윈도우 = 0', 950, 548, C.red, { align: 'center', size: 16, alpha: eo(p(u, 2.8, .4)) });
   if (zero) chip('송신 중단', 950, 420, C.red, { align: 'center', size: 18 });
-  flowArrow(1390, 1470, 480, eo(p(u, .6, .5)), C.client, .3, u, '');
+  flowArrow(1390, 1470, 480, eo(p(u, .6, .5)), C.red, 0, u, '');
   flowArrow(60, 150, 480, eo(p(u, .6, .5)), C.server, 1.5, u, '');
-  txt('브로드캐스트는 계속 생성 →', 160, 270, { size: 16, weight: 700, color: C.server, alpha: eo(p(u, .8, .5)) });
-  // step captions
-  const STEPS = [[1.0, '① 클라 수신 버퍼가 찬다'], [2.8, '② 클라가 "더 못 받아" (Zero Window)'], [3.4, '③ 서버 커널 송신 버퍼가 찬다'], [5.0, '④ send()가 EAGAIN 또는 블로킹'], [5.4, '⑤ 서버 앱 송신 큐가 계속 늘어난다']];
+  txt('보스전 브로드캐스트는 계속 생성 →', 160, 270, { size: 16, weight: 700, color: C.server, alpha: eo(p(u, .8, .5)) });
+  const STEPS = [[1.0, '① 클라 수신 버퍼가 찬다'], [2.8, '② 클라가 "더 못 받아" (Zero Window)'], [3.4, '③ 서버 커널 송신 버퍼가 찬다'], [5.0, '④ send()가 EAGAIN'], [5.4, '⑤ 서버 앱 송신 큐가 계속 늘어난다']];
   STEPS.forEach(([s, lab], i) => {
     const kk = eo(p(u, s + .3, .4)); if (kk <= 0) return;
     txt(lab, 120 + (i % 3) * 580, 800 + Math.floor(i / 3) * 52, { size: 23, weight: 800, color: i >= 3 ? C.red : C.text, alpha: kk });
   });
-  txt('TCP는 받는 쪽이 못 받으면 보내는 쪽을 멈춘다 — 그 압력이 서버 앱까지 거꾸로 올라온다', W / 2, 935, { size: 24, color: C.dim, align: 'center', alpha: eo(p(u, 8.6, .6)) });
+  txt('TCP는 받는 쪽이 못 받으면 보내는 쪽을 멈춘다 — 클라가 못 뽑아낸 만큼이 서버 앱에 남는다', W / 2, 935, { size: 24, color: C.dim, align: 'center', alpha: eo(p(u, 8.6, .6)) });
   ctx.restore();
 }
 
 // ═════════════════════════════════════════════════════════════
-//  04 · how the server gets slower
+//  05 · the server slows down before the cap
 // ═════════════════════════════════════════════════════════════
-function sPaths(t) {
-  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+function sCosts(t) {
+  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  let f = cardFrame(0, u, '① 블로킹 send', '로직 스레드가 send()에서 멈춤 → 그 존 전원이 정지', C.red);
-  if (f) { const { x, y, k, v } = f, now = (v % 4) * 80;
-    txt('Zone A', x + 36, y + 238, { size: 16, weight: 700, color: C.dim, mono: true, alpha: k });
-    [[0, 30, C.server], [30, 20, C.faint], [50, 25, C.server], [75, 160, C.red], [235, 30, C.server]].forEach(([s, d, col]) => { const vis = clamp((now - s) / d); if (vis <= 0) return; ctx.save(); ctx.globalAlpha *= k; rr(x + 140 + s * 2.4, y + 218, d * 2.4 * vis - 2, 32, 5); ctx.fillStyle = rgba(col, col === C.faint ? .15 : .6); ctx.fill(); ctx.restore(); });
-    if (now > 120) txt('send() 대기 — 느린 클라 1명 때문에', x + 140 + 155 * 2.4 / 2 + 75 * 2.4 / 2 - 60, y + 290, { size: 17, weight: 800, color: C.red, align: 'center', alpha: k }); }
-  f = cardFrame(1, u, '② 무제한 송신 큐', '느린 세션 몫이 계속 쌓임 → 메모리 증가 → GC 정지 · OOM', C.server);
-  if (f) { const { x, y, k, v } = f, mem = Math.min(1, (v % 6) / 5);
-    for (let i = 0; i < 6; i++) { const big = i === 2, hgt = big ? 30 + 140 * mem : 20 + (i * 7) % 18; ctx.save(); ctx.globalAlpha *= k; rr(x + 120 + i * 110, y + 310 - hgt, 70, hgt, 6); ctx.fillStyle = rgba(big ? (mem > .7 ? C.red : C.pub) : C.server, .6); ctx.fill(); ctx.restore(); txt(big ? '느린' : 's' + (i + 1), x + 155 + i * 110, y + 332, { size: 14, color: C.dim, align: 'center', alpha: k }); }
-    txt('메모리 ' + Math.round(2 + mem * 14) + 'GB', x + 790, y + 160, { size: 22, weight: 800, mono: true, color: mem > .7 ? C.red : C.text, align: 'right', alpha: k }); }
-  f = cardFrame(2, u, '③ 락을 잡은 채 대기', '세션 · 채널 락을 쥐고 send → 다른 스레드도 줄줄이 대기', C.proto);
-  if (f) { const { x, y, k, v } = f, now = (v % 4) * 80;
-    ['IO #1', 'Zone A', 'Zone B'].forEach((lab, r) => { txt(lab, x + 36, y + 200 + r * 44 + 18, { size: 15, weight: 700, color: C.dim, mono: true, alpha: k });
-      const segs = r === 0 ? [[0, 20, C.proto], [20, 180, C.red]] : [[0, 40 + r * 10, C.server], [40 + r * 10, 150, C.red]];
-      segs.forEach(([s, d, col]) => { const vis = clamp((now - s) / d); if (vis <= 0) return; ctx.save(); ctx.globalAlpha *= k; rr(x + 150 + s * 2.6, y + 200 + r * 44, d * 2.6 * vis - 2, 26, 5); ctx.fillStyle = rgba(col, col === C.red && r > 0 ? .25 : .6); ctx.fill(); ctx.restore(); }); });
-    if (now > 60) txt('락 보유 + 느린 send', x + 150 + 100 * 2.6, y + 218, { size: 14, weight: 700, align: 'center', alpha: k }); }
-  f = cardFrame(3, u, '④ 몰아치는 입력', '멈췄던 클라가 밀린 입력을 한꺼번에 → 처리 폭증 · 검증 오탐', C.pub);
-  if (f) { const { x, y, k, v } = f, cyc = v % 4;
-    for (let j = 0; j < 14; j++) { const s = j < 4 ? j * .25 : 2.2 + (j - 4) * .02; if (cyc < s) continue; dot(x + 120 + s * 240 + (j >= 4 ? (j % 3) * 6 : 0), y + 250 - (j >= 4 ? (j % 4) * 14 : 0), 7, j >= 4 ? C.red : C.pub, k, 12); }
-    txt('정지', x + 120 + 1.6 * 240, y + 300, { size: 16, color: C.dim, align: 'center', alpha: k });
-    if (cyc > 2.3) chip('속도핵 의심 · 처리 스파이크', x + 760, y + 250, C.red, { align: 'right', size: 15, alpha: k }); }
-  ctx.restore();
-}
-
-// ═════════════════════════════════════════════════════════════
-//  05 · a well-built server isolates
-// ═════════════════════════════════════════════════════════════
-function sIsolate(t) {
-  const [S] = HEAD[4]; const a = win(t, S, S + 10, .5); if (a <= 0) return;
-  const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  const k = eo(p(u, .1, .6));
-  panel(120, 215, 700, 470, { alpha: k, stroke: rgba(C.bot, .4) });
-  txt('세션 송신 큐 (느린 클라)', 150, 260, { size: 22, weight: 800, color: C.bot, alpha: k });
-  const lvl = Math.min(1, clamp((u - .8) / 3)), capY = 330;
-  tank(330, 300, 280, 300, lvl * .8, C.pub, k);
-  ctx.save(); ctx.globalAlpha *= k; ctx.setLineDash([8, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(310, capY); ctx.lineTo(630, capY); ctx.stroke(); ctx.restore();
-  txt('상한', 650, capY + 6, { size: 17, weight: 800, color: C.red, alpha: k });
-  const merge = u > 3.8;
-  chip(merge ? '이동 패킷: 최신값으로 덮어쓰기' : '쌓이는 중…', 470, 640, merge ? C.bot : C.pub, { align: 'center', size: 16, alpha: k });
-  if (u > 6) chip('상한 초과가 계속되면 → 세션 정리', 470, 300 - 20, C.red, { align: 'center', size: 15, alpha: eo(p(u, 6, .4)) });
-  noteRow([['논블로킹 send · I/O 스레드 분리', '로직 스레드는 절대 send()를 기다리지 않는다'], ['세션별 송신 큐 상한', '느린 세션 몫은 그 세션 안에서만 쌓인다'],
-           ['상태 패킷은 최신값만', '이동 · HP는 덮어써도 된다 — 밀린 과거는 버린다'], ['상한 초과가 지속되면 정리', '끊고 재접속시키는 게 모두에게 낫다'],
-           ['버퍼 풀 · 재사용', '할당을 줄여 GC 부담을 막는다'], ['클라도 매 프레임 수신을 다 비운다', '처리 예산을 두고 렌더와 분리']], u, .8, 270, C.bot, 1, 880, 920);
-  txt('느린 클라가 서버를 늦추지 못하게 하는 게 서버의 책임', W / 2, 870, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 5.5, .6)) });
-  ctx.restore();
-}
-
-
-// 05 · part B — where isolation still leaks even with a queue cap
-function sLeaks(t) {
-  const [S, E] = HEAD[4]; const a = win(t, S + 9.7, E, .5); if (a <= 0) return;
-  const u = t - S - 9.7; ctx.save(); ctx.globalAlpha = a;
-  chip('상한만으로는 새는 곳', 1800, 112, C.red, { align: 'right', size: 22, alpha: eo(p(u, 0, .5)) });
-  let f = cardFrame(0, u, 'IOCP 대기 중인 보내기', 'WSASend는 완료될 때까지 버퍼를 붙잡는다 → 대기 요청 수 · 바이트에도 상한', C.proto);
-  if (f) { const { x, y, k, v } = f, n = Math.min(14, Math.floor(v * 3));
-    txt('느린 세션의 대기 요청', x + 36, y + 170, { size: 17, color: C.dim, alpha: k });
-    for (let i = 0; i < n; i++) { ctx.save(); ctx.globalAlpha *= k; rr(x + 36 + i * 54, y + 200, 44, 70, 6); ctx.fillStyle = rgba(i >= 8 ? C.red : C.proto, .55); ctx.fill(); ctx.restore(); }
-    ctx.save(); ctx.globalAlpha *= k; ctx.setLineDash([6, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 36 + 8 * 54 - 5, y + 190); ctx.lineTo(x + 36 + 8 * 54 - 5, y + 280); ctx.stroke(); ctx.restore();
-    txt('필요한 상한', x + 36 + 8 * 54 - 5, y + 304, { size: 15, weight: 700, color: C.red, align: 'center', alpha: k });
-    txt('대기 ' + n + '건 · ' + n * 64 + 'KB 고정', x + 790, y + 170, { size: 18, weight: 800, mono: true, color: n >= 8 ? C.red : C.text, align: 'right', alpha: k }); }
-  f = cardFrame(1, u, '공유 브로드캐스트 버퍼', '여러 세션이 함께 참조 → 가장 느린 세션이 보낼 때까지 해제되지 않는다', C.server);
+  let f = cardFrame(0, u, '① 세션 송신 큐 메모리', '느린 세션 수 × 쌓인 양 — 할당 · 복사 · GC 부담이 늘어난다', C.server);
+  if (f) { const { x, y, k, v } = f, mem = Math.min(1, v / 5);
+    for (let i = 0; i < 6; i++) { const slow = i === 1 || i === 2 || i === 4, hgt = slow ? 30 + 110 * mem * (i === 2 ? 1 : .7) : 20 + (i * 7) % 18; ctx.save(); ctx.globalAlpha *= k; rr(x + 120 + i * 110, y + 310 - hgt, 70, hgt, 6); ctx.fillStyle = rgba(slow ? C.pub : C.server, .6); ctx.fill(); ctx.restore(); txt(slow ? '느린' : 's' + (i + 1), x + 155 + i * 110, y + 332, { size: 14, color: C.dim, align: 'center', alpha: k }); }
+    txt('큐 메모리 ' + (2 + mem * 4).toFixed(1) + 'GB', x + 790, y + 160, { size: 22, weight: 800, mono: true, align: 'right', alpha: k }); }
+  f = cardFrame(1, u, '② 공유 브로드캐스트 버퍼', '여러 세션이 함께 참조 → 가장 느린 세션이 보낼 때까지 해제되지 않는다', C.proto);
   if (f) { const { x, y, k, v } = f, bx = x + 150, by = y + 240;
     const done = i => i !== 3 && v > .6 + i * .3;
     const ref = 6 - [0, 1, 2, 3, 4, 5].filter(done).length;
-    ctx.save(); ctx.globalAlpha *= k; rr(bx - 70, by - 45, 140, 90, 12); ctx.fillStyle = rgba(ref <= 1 && v > 3 ? C.red : C.server, .3); ctx.fill(); ctx.strokeStyle = C.server; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.globalAlpha *= k; rr(bx - 70, by - 45, 140, 90, 12); ctx.fillStyle = rgba(C.proto, .3); ctx.fill(); ctx.strokeStyle = C.proto; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
     txt('패킷 버퍼', bx, by - 6, { size: 18, weight: 800, align: 'center', alpha: k });
-    txt('ref ' + ref, bx, by + 22, { size: 18, weight: 800, mono: true, color: ref === 1 ? C.red : C.server, align: 'center', alpha: k });
+    txt('ref ' + ref, bx, by + 22, { size: 18, weight: 800, mono: true, color: ref === 1 ? C.red : C.proto, align: 'center', alpha: k });
     for (let i = 0; i < 6; i++) { const sx = x + 470 + (i % 3) * 110, sy = y + 190 + Math.floor(i / 3) * 100, d = done(i), slow = i === 3;
-      ctx.save(); ctx.globalAlpha *= k * (d ? .25 : .8); ctx.strokeStyle = slow ? C.pub : C.server; ctx.lineWidth = 2; ctx.setLineDash(d ? [4, 6] : []); ctx.beginPath(); ctx.moveTo(bx + 70, by); ctx.lineTo(sx - 22, sy); ctx.stroke(); ctx.restore();
-      dot(sx, sy, 14, slow ? C.pub : d ? C.faint : C.server, k, 10); txt(slow ? '느린' : '완료', sx, sy + 38, { size: 14, color: slow ? C.pub : C.dim, align: 'center', alpha: k * (slow || d ? 1 : 0) }); } }
-  f = cardFrame(2, u, 'EAGAIN 처리', '실패 즉시 재시도 · 쓰기 가능 이벤트를 계속 감시 → CPU가 헛돈다', C.pub);
-  if (f) { const { x, y, k, v } = f, cpu = Math.min(100, 15 + v * 18), an = v * 8;
+      ctx.save(); ctx.globalAlpha *= k * (d ? .25 : .8); ctx.strokeStyle = slow ? C.pub : C.proto; ctx.lineWidth = 2; ctx.setLineDash(d ? [4, 6] : []); ctx.beginPath(); ctx.moveTo(bx + 70, by); ctx.lineTo(sx - 22, sy); ctx.stroke(); ctx.restore();
+      dot(sx, sy, 14, slow ? C.pub : d ? C.faint : C.proto, k, 10); txt(slow ? '느린' : '완료', sx, sy + 38, { size: 14, color: slow ? C.pub : C.dim, align: 'center', alpha: k * (slow || d ? 1 : 0) }); } }
+  f = cardFrame(2, u, '③ 쓰기 재시도', '부분 전송 · EAGAIN · 쓰기 가능 알림 처리가 늘어난다', C.pub);
+  if (f) { const { x, y, k, v } = f, cpu = 12 + Math.min(1, v / 4) * 22, an = v * 8;
     ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = C.pub; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x + 170, y + 245, 50, an, an + Math.PI * 1.6); ctx.stroke();
     const ex = x + 170 + Math.cos(an + Math.PI * 1.6) * 50, ey = y + 245 + Math.sin(an + Math.PI * 1.6) * 50; dot(ex, ey, 7, C.pub, 1, 14); ctx.restore();
-    txt('send → EAGAIN → send …', x + 170, y + 325, { size: 15, mono: true, color: C.dim, align: 'center', alpha: k });
-    txt('IO 스레드 CPU', x + 320, y + 236, { size: 18, weight: 700, alpha: k });
-    ctx.save(); ctx.globalAlpha *= k; rr(x + 320, y + 252, 440, 26, 8); ctx.fillStyle = 'rgba(148,163,184,0.1)'; ctx.fill(); rr(x + 320, y + 252, 440 * cpu / 100, 26, 8); ctx.fillStyle = rgba(cpu > 80 ? C.red : C.pub, .65); ctx.fill(); ctx.restore();
-    txt(Math.round(cpu) + '%', x + 760, y + 236, { size: 20, weight: 800, mono: true, align: 'right', color: cpu > 80 ? C.red : C.text, alpha: k });
-    txt('→ 버퍼가 비었다는 알림만 받고 다시 시도', x + 320, y + 318, { size: 16, color: C.bot, alpha: k }); }
-  f = cardFrame(3, u, '숨은 대기', '소켓은 논블로킹이어도 로직 스레드가 다른 데서 기다린다', C.red);
-  if (f) { const { x, y, k, v } = f, now = (v % 4) * 90;
+    txt('send → EAGAIN → 대기 → send', x + 170, y + 325, { size: 15, mono: true, color: C.dim, align: 'center', alpha: k });
+    txt('IO 스레드 CPU (예시)', x + 320, y + 236, { size: 18, weight: 700, alpha: k });
+    ctx.save(); ctx.globalAlpha *= k; rr(x + 320, y + 252, 440, 26, 8); ctx.fillStyle = 'rgba(148,163,184,0.1)'; ctx.fill(); rr(x + 320, y + 252, 440 * cpu / 100, 26, 8); ctx.fillStyle = rgba(C.pub, .65); ctx.fill(); ctx.restore();
+    txt(Math.round(cpu) + '%', x + 760, y + 236, { size: 20, weight: 800, mono: true, align: 'right', alpha: k }); }
+  f = cardFrame(3, u, '④ 기다리는 구조라면 1명으로도', '로직 스레드가 send()나 락에서 기다리면 그 존 전체가 멈춘다', C.red);
+  if (f) { const { x, y, k, v } = f, now = (v % 4) * 80;
     txt('Zone A', x + 36, y + 238, { size: 16, weight: 700, color: C.dim, mono: true, alpha: k });
-    [[0, 25, C.server], [25, 40, C.red, '세션 락'], [65, 20, C.server], [85, 45, C.red, '동기 로깅'], [130, 20, C.server], [150, 40, C.red, 'TLS · 라이브러리'], [190, 30, C.server]].forEach(([s0, d, col, lab]) => {
-      const vis = clamp((now - s0) / d); if (vis <= 0) return;
-      ctx.save(); ctx.globalAlpha *= k; rr(x + 130 + s0 * 2.8, y + 218, d * 2.8 * vis - 2, 32, 5); ctx.fillStyle = rgba(col, .6); ctx.fill(); ctx.restore();
-      if (lab && vis >= 1) txt(lab, x + 130 + (s0 + d / 2) * 2.8, y + 290, { size: 15, weight: 700, color: C.red, align: 'center', alpha: k }); }); }
-  txt('격리 = 큐 상한 + 대기 요청 상한 + 버퍼 공유 끊기 + 헛도는 재시도 없애기 + 숨은 대기 제거', W / 2, 975, { size: 22, weight: 800, align: 'center', alpha: eo(p(u, 6.5, .6)) });
+    [[0, 30, C.server], [30, 20, C.faint], [50, 25, C.server], [75, 160, C.red], [235, 30, C.server]].forEach(([s, d, col]) => { const vis = clamp((now - s) / d); if (vis <= 0) return; ctx.save(); ctx.globalAlpha *= k; rr(x + 140 + s * 2.4, y + 218, d * 2.4 * vis - 2, 32, 5); ctx.fillStyle = rgba(col, col === C.faint ? .15 : .6); ctx.fill(); ctx.restore(); });
+    if (now > 120) txt('send() · 락 대기 — 느린 클라 1명 때문에', x + 140 + 155 * 2.4 / 2 + 75 * 2.4 / 2 - 60, y + 290, { size: 17, weight: 800, color: C.red, align: 'center', alpha: k }); }
+  txt('①~③은 몇 명이면 티가 안 난다 — 보스전처럼 느린 클라가 몰리고 트래픽도 최고일 때 겹쳐서 커진다', W / 2, 975, { size: 22, weight: 800, align: 'center', alpha: eo(p(u, 6.5, .6)) });
   ctx.restore();
 }
 
 // ═════════════════════════════════════════════════════════════
-//  06 · how infra can tell
+//  06 · the send-queue cap is a safety net
+// ═════════════════════════════════════════════════════════════
+function sCap(t) {
+  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const capY = 360, ty = 340, th = 300;
+  [[120, '상한에 닿으면', C.red, true], [980, '닿기 전에 보내는 양을 묶으면', C.bot, false]].forEach(([x, title, col, bad], i) => {
+    const k = eo(p(u, .2 + i * .5, .6)); if (k <= 0) return;
+    panel(x, 215, 820, 500, { alpha: k, stroke: rgba(col, .45) });
+    txt(title, x + 30, 262, { size: 24, weight: 800, color: col, alpha: k });
+    const ph = Math.max(0, u - 1 - i * .5) % 4.5, cut = bad && ph > 3 && ph < 3.9;
+    const lvl = bad ? (ph <= 3 ? Math.min(.95, ph / 3 * .95) : cut ? .95 : 0) : .55 * (1 - Math.exp(-ph * 1.4));
+    const tx = x + 120;
+    tank(tx, ty, 260, th, lvl, bad ? C.pub : C.bot, k);
+    ctx.save(); ctx.globalAlpha *= k; ctx.setLineDash([8, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tx - 20, capY); ctx.lineTo(tx + 280, capY); ctx.stroke(); ctx.restore();
+    txt('상한', tx + 296, capY + 6, { size: 17, weight: 800, color: C.red, alpha: k });
+    txt('세션 송신 큐', tx + 130, ty + th + 36, { size: 18, weight: 800, color: C.dim, align: 'center', alpha: k });
+    const rx = x + 480;
+    if (bad) {
+      chip(ph <= 3 ? '보스 패턴 — 쌓이는 중' : cut ? '접속 종료' : '재접속', rx + 140, 420, ph <= 3 ? C.pub : cut ? C.red : C.server, { align: 'center', size: 17, alpha: k });
+      txt('보스전마다 반복', rx + 140, 480, { size: 20, weight: 800, color: C.red, align: 'center', alpha: k * eo(p(u, 5, .5)) });
+      txt('그 유저는 계속 튕긴다', rx + 140, 512, { size: 17, color: C.dim, align: 'center', alpha: k * eo(p(u, 5, .5)) });
+    } else {
+      ['이동은 최신값으로 덮어쓰기', '먼 대상은 갱신 빈도 낮춤', '시야 인원 상한'].forEach((s, j) => chip(s, rx + 140, 410 + j * 56, C.bot, { align: 'center', size: 16, alpha: k * eo(p(u, 1.5 + j * .4, .4)) }));
+    }
+  });
+  txt('장비 임계치 · 인원 제한은 서버 전체 기준 — 한 세션의 큐는 그 클라가 받아가는 속도에 달렸다', W / 2, 800, { size: 26, weight: 800, align: 'center', alpha: eo(p(u, 6.5, .6)) });
+  txt('상한은 넉넉하게 두는 마지막 안전장치, 실제로는 닿지 않게 클라당 보내는 양을 줄인다', W / 2, 856, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 7.3, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  07 · fixes, client side and server side
+// ═════════════════════════════════════════════════════════════
+function sFixes(t) {
+  const [S, E] = HEAD[6]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k1 = eo(p(u, .2, .5)), k2 = eo(p(u, 3.2, .5));
+  txt('클라 — 빨리 뽑아낸다', 120, 250, { size: 28, weight: 800, color: C.client, alpha: k1 });
+  txt('서버 — 클라당 보내는 양을 묶는다', 980, 250, { size: 28, weight: 800, color: C.server, alpha: k2 });
+  noteRow([['수신 전용 스레드', '렌더와 무관하게 소켓을 계속 비운다'], ['프레임당 처리 예산 + 최신값만', '밀린 이동은 버리고 마지막 상태만 반영'],
+           ['수신 경로 할당 줄이기', '버퍼 풀 · 재사용으로 GC 정지를 줄인다'], ['보스전 렌더 부하 낮추기', '이펙트 · LOD 조절로 메인 스레드 여유 확보'],
+           ['큐 락은 짧게', '꺼낼 때 통째로 바꿔치기(swap)']], u, .6, 320, C.client, 1, 120, 820);
+  noteRow([['논블로킹 send · I/O 분리', '로직 스레드는 send()를 기다리지 않는다'], ['클라당 송신량 묶기', '시야 인원 상한 · 먼 대상은 갱신 빈도 낮춤'],
+           ['송신 큐의 이동은 덮어쓰기', '같은 대상의 이전 이동 패킷은 교체'], ['대기 요청 · 공유 버퍼에도 상한', 'IOCP 대기 바이트 · 참조 버퍼가 묶이지 않게'],
+           ['큐 상한은 마지막 안전장치', '닿으면 끊김 — 위 단계로 닿지 않게 막는다']], u, 3.4, 320, C.server, 1, 980, 820);
+  txt('느린 회선은 클라가 못 고치고, 클라 처리는 서버가 못 고친다 — 그래서 양쪽 다', W / 2, 860, { size: 28, weight: 800, align: 'center', alpha: eo(p(u, 7.5, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  08 · how infra can tell
 // ═════════════════════════════════════════════════════════════
 const SS = [
   "$ ss -tn state established '( sport = :7777 )'",
@@ -569,7 +610,7 @@ const SS = [
   'session_kicked_slow_total',
 ];
 function sDetect(t) {
-  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[7]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const k = eo(p(u, .1, .6));
   panel(120, 215, 960, 560, { alpha: k, stroke: rgba(C.proto, .4) });
@@ -578,13 +619,14 @@ function sDetect(t) {
   code(SS, 150, 270, { size: 18, lh: 38, chars: total * p(u, .4, 4) });
   ctx.restore();
   if (u > 3) { ctx.save(); ctx.globalAlpha *= eo(p(u, 3, .4)); ctx.fillStyle = rgba(C.red, .12); ctx.fillRect(140, 270 + 4 * 38 - 26, 920, 34); ctx.restore(); chip('느린 클라: 2.5MB 미전송', 1060, 270 + 4 * 38 - 9, C.red, { align: 'right', size: 14 }); }
-  const J = [['소수 세션만 Send-Q가 크고, 틱 · 메모리는 정상', '격리가 잘 된 것 → 그 클라(회선 · 기기) 문제', C.bot],
-             ['Send-Q 큰 세션이 늘면서 메모리 · GC · 틱 p99가 같이 오름', '서버가 느린 클라에 끌려가는 중 → 설계 문제', C.red],
-             ['보스전 · 이벤트 때만 Send-Q가 전반적으로 큼', '보내는 양 자체가 과다 → 브로드캐스트 줄이기', C.server]];
+  const J = [['소수 세션만 Send-Q가 크고, 틱 · 메모리는 정상', '그 클라의 회선 · 기기 문제', C.bot],
+             ['보스전에 Send-Q 큰 세션이 몰리고 메모리 · 틱 p99도 오름', '느린 클라 몫을 서버가 떠안는 중', C.red],
+             ['session_kicked_slow_total이 보스전마다 증가', '상한에 닿고 있다 → 클라당 송신량 · 클라 처리 점검', C.server],
+             ['클라 지표: 수신 큐 길이 · 프레임 시간', '보스전에 같이 튀면 클라 처리가 병목', C.client]];
   txt('어떻게 판단하나', 1130, 260, { size: 24, weight: 800, alpha: eo(p(u, 2, .5)) });
   J.forEach(([ti, de, col], i) => {
-    const kk = eo(p(u, 2.4 + i * .8, .5)); if (kk <= 0) return;
-    const y = 330 + i * 150;
+    const kk = eo(p(u, 2.4 + i * .7, .5)); if (kk <= 0) return;
+    const y = 325 + i * 115;
     dot(1140, y - 9, 8, col, kk, 12);
     txt(ti, 1164, y, { size: 20, weight: 800, alpha: kk });
     txt(de, 1164, y + 34, { size: 19, color: col, weight: 700, alpha: kk });
@@ -597,9 +639,9 @@ function sDetect(t) {
 //  OUTRO — summary strip + tagline (last ~5.5s)
 // ═════════════════════════════════════════════════════════════
 const OUTRO = {
-  nodes: [[C.pub, '느린 클라', '회선 · 기기'], [C.proto, '수신 버퍼', '가득'], [C.red, 'Zero Window', '송신 중단'], [C.server, '서버 송신 큐', '증가 · 메모리'], [C.bot, '격리', '상한 · 덮어쓰기 · 정리']],
-  tagline: ['기다리면', '같이', '느려지고,', '끊어내면', '혼자', '느리다.'], taglineColors: [C.red, null, null, C.bot, null, null],
-  footer: 'Slow client → Zero window → SNDBUF full → App send queue → Isolate',
+  nodes: [[C.pub, '보스전', '받을 양↑ 처리↓'], [C.client, '클라 수신 큐', '프레임당 한도'], [C.proto, '소켓 정체', 'Zero Window'], [C.server, '서버 부담', '메모리 · 버퍼 · 재시도'], [C.red, '큐 상한', '닿으면 끊김']],
+  tagline: ['클라가', '빨리', '뽑아내야', '서버도', '버틴다.'], taglineColors: [C.client, null, null, C.server, null],
+  footer: 'Boss fight → Client queue → Zero window → Server send queue → Cap',
 };
 function sOutro(t) {
   const S = DURATION - 5.5; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
@@ -626,7 +668,7 @@ function sOutro(t) {
 function renderAt(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
   background(t);
-  sTitle(t); sAnswer(t); sKinds(t); sBackpressure(t); sPaths(t); sIsolate(t); sLeaks(t); sDetect(t); sOutro(t);
+  sTitle(t); sSqueeze(t); sClientQueue(t); sStall(t); sBackpressure(t); sCosts(t); sCap(t); sFixes(t); sDetect(t); sOutro(t);
   headers(t); progress(t);
   // final fade to black
   const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
