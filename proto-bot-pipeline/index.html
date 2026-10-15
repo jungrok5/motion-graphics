@@ -45,6 +45,11 @@
   .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
   .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
   @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
 </style>
 
 <div class="player">
@@ -258,7 +263,7 @@ function headers(t) {
 }
 function progress(t) {
   const x0 = 120, x1 = 1800, y = 1040;
-  const a = clamp(Math.min(t - 4.6, 63.4 - t) * 2) * .9; if (a <= 0) return;
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
   ctx.save(); ctx.globalAlpha = a;
   ctx.fillStyle = 'rgba(148,163,184,0.15)'; ctx.fillRect(x0, y, x1 - x0, 3);
   const g = ctx.createLinearGradient(x0, 0, x1, 0);
@@ -805,7 +810,7 @@ function renderAt(t) {
   sTitle(t); sProto(t); sCodegen(t); sServerFirst(t); sPublisher(t); sOutro(t);
   headers(t); progress(t);
   // final fade to black
-  const fo = p(t, 63.4, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
 }
 window.renderAt = renderAt;
 window.DURATION = DURATION;
@@ -889,8 +894,13 @@ if (!location.search.includes('render')) {
     else if (e.key === 'Home') seek(0);
   });
 
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
   ui();
-  window.ready.then(() => { draw(); requestAnimationFrame(frame); });
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
   renderAt(POSTER);
 }
 </script>
