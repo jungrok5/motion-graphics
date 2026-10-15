@@ -122,6 +122,36 @@
 
 - 플레이어: [`tcp-retransmission/`](https://jungrok5.github.io/motion-graphics/tcp-retransmission/)
 
+## skill-journey (85s)
+
+"내 스킬 하나가 상대 화면에 뜨기까지" — 입력부터 상대 화면까지의 경로. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 전체 지도 | 내 클라 → 네트워크 → 게임 서버 → 네트워크 → 상대 클라 |
+| 02 내 클라 안에서 | 키 입력 → 게임 루프 → 예측 실행 → UseSkillReq 생성 → 직렬화 · 암호화 → send() → NIC |
+| 03 네트워크 구간 | 공유기 · ISP · 백본 · 방화벽 · LB를 지나는 편도 ≈ RTT/2 |
+| 04 서버 안에서 | NIC → I/O 스레드 → 세션 → 존 큐(다음 틱 대기) → 검증 · 판정 · AOI · 브로드캐스트 → 송신 |
+| 05 상대 화면까지 | 다운링크 → recv → 다음 프레임 → 보간 버퍼(~100ms) → 애니 · 이펙트 → 화면 |
+| 06 시간을 다 더하면 | 예시 합계 ≈ 221ms, 가장 큰 덩어리: 보간 · 네트워크 왕복 · 틱 대기 |
+
+- 플레이어: [`skill-journey/`](https://jungrok5.github.io/motion-graphics/skill-journey/)
+
+## tick-and-rtt (83s)
+
+"50ms와 RTT, 렉은 어디서 생길까?" — 틱 처리시간 예산과 RTT의 영향. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 틱은 서버 세계의 시계 | 20Hz = 50ms마다 세계가 한 칸, 조건: 처리시간 < 틱 간격 |
+| 02 50ms를 넘으면 | 다음 틱이 밀림 → 8Hz, 응답 = 틱 대기 + 처리: 70ms → 180ms, 존 전원이 동시에 |
+| 03 끊김과 왜곡 | 스냅샷 간격 증가 → 보간 버퍼 바닥, 쿨다운 지연, 틱 몰아치기, dt 증가 |
+| 04 RTT란 | 업링크 + 서버(틱 대기 · 처리) + 다운링크, RTT 30ms vs 200ms |
+| 05 RTT가 느리면 | 결과 확인 지연 · 남이 보는 나는 과거 · 판정 불일치(랙 보상) · 보정 폭 증가 · 지터 |
+| 06 정리 | 틱 처리시간 vs RTT vs 지터 비교표, 체감 지연 공식 |
+
+- 플레이어: [`tick-and-rtt/`](https://jungrok5.github.io/motion-graphics/tick-and-rtt/)
+
 ## 새 영상 만들기 (Claude Code 스킬)
 
 이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고

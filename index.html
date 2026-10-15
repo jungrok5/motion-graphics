@@ -65,6 +65,12 @@
     { path: 'tcp-retransmission/', title: '사라진 패킷 하나가 전부를 멈춘다', length: '1:21',
       desc: 'TCP 재전송이 왜 · 언제 생기는지(Fast Retransmit vs RTO, HOL 블로킹), 클라 · 서버 · 인프라에 나타나는 현상과 메트릭, 확인 명령과 완화법.',
       tags: ['TCP', 'retransmission', 'RTO', 'metrics'] },
+    { path: 'skill-journey/', title: '내 스킬 하나가 상대 화면에 뜨기까지', length: '1:25',
+      desc: '버튼 입력부터 예측 실행 · 패킷 생성, 네트워크 홉, 서버의 I/O · 큐 · 틱 검증 · 판정 · AOI, 다운링크, 상대 클라의 보간 · 렌더까지 단계별 경로와 지연 합계.',
+      tags: ['input', 'packet', 'server tick', 'interpolation'] },
+    { path: 'tick-and-rtt/', title: '50ms와 RTT, 렉은 어디서 생길까?', length: '1:23',
+      desc: '서버 틱 처리시간이 50ms를 넘으면 왜 문제인지(응답 · 끊김 · 시간 왜곡), RTT가 느리면 무엇이 달라지는지(결과 지연 · 과거의 나 · 판정 불일치 · 지터).',
+      tags: ['tick budget', 'RTT', 'jitter', 'lag compensation'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {
