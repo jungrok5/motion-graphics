@@ -59,6 +59,12 @@
     { path: 'lag-diagnosis/', title: '렉 걸렸다. 서버 탓일까, 내 탓일까?', length: '1:13',
       desc: '클라렉 · 네트워크렉 · 서버렉의 증상과 원인, 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 판별하는 순서.',
       tags: ['frame time', 'RTT', 'server tick', 'diagnosis'] },
+    { path: 'server-tick/', title: '서버 안의 50ms, 무슨 일이 일어날까?', length: '1:21',
+      desc: 'MMO 게임서버의 스레드 구조(I/O · 메시지 큐 · 존별 로직 · DB 워커)와 틱 루프, 그리고 큐 적체 · AOI 폭발 · DB · 락 · GC가 틱을 늦추는 방식과 볼 지표.',
+      tags: ['threads', 'tick loop', 'message queue', 'AOI'] },
+    { path: 'tcp-retransmission/', title: '사라진 패킷 하나가 전부를 멈춘다', length: '1:21',
+      desc: 'TCP 재전송이 왜 · 언제 생기는지(Fast Retransmit vs RTO, HOL 블로킹), 클라 · 서버 · 인프라에 나타나는 현상과 메트릭, 확인 명령과 완화법.',
+      tags: ['TCP', 'retransmission', 'RTO', 'metrics'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {

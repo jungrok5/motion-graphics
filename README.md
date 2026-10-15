@@ -92,6 +92,36 @@
 
 - 플레이어: [`lag-diagnosis/`](https://jungrok5.github.io/motion-graphics/lag-diagnosis/)
 
+## server-tick (81s)
+
+"서버 안의 50ms, 무슨 일이 일어날까?" — MMO 게임서버의 스레드 구조, 틱 루프, 부하가 틱에 끼치는 영향. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 스레드 구조 | I/O 스레드 → 존별 메시지 큐 → 존당 로직 스레드(틱 루프) → 송신 큐 → I/O 송신, DB는 비동기 워커 |
+| 02 틱 루프 | 50ms 예산: 메시지 처리 → 월드 업데이트 → AOI → 브로드캐스트 → 대기 |
+| 03 큐가 밀릴 때 | 유입 > 처리 → 큐 깊이 증가 → 틱 예산 초과 → 악순환 |
+| 04 AOI · 브로드캐스트 폭발 | N명이 모이면 틱당 N×(N−1) 패킷, 송신 큐 적체, 느린 클라부터 끊김 |
+| 05 틱을 막는 것들 | I/O 포화 · 동기 DB 호출 · 락 경합 · GC Stop-the-world |
+| 06 어디를 보나 | 구간별 지표와 이상 신호 표 |
+
+- 플레이어: [`server-tick/`](https://jungrok5.github.io/motion-graphics/server-tick/)
+
+## tcp-retransmission (81s)
+
+"사라진 패킷 하나가 전부를 멈춘다" — TCP 재전송의 원인과 클라 · 서버 · 인프라에 나타나는 현상과 메트릭. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 잃으면 다시 보낸다 | Seq/ACK, 손실, Dup ACK × 3 → Fast Retransmit |
+| 02 언제 생기나 | 혼잡(라우터 큐 tail drop) · 무선/핸드오버 · NIC 링 버퍼 오버플로 · ACK 유실/MTU 블랙홀 |
+| 03 두 가지 재전송 | Fast Retransmit(≈1 RTT) vs RTO(최소 200ms, 2배씩 백오프), 게임 트래픽은 RTO로 빠지기 쉬움 |
+| 04 Head-of-Line 블로킹 | 뒤에 도착한 세그먼트도 커널 버퍼에서 대기 → 앱에는 정지 후 몰림 |
+| 05 클라 · 서버 · 인프라 | 표시 핑 급등 · 송신 큐/메모리 증가 · 재전송률 · RTO · SRTT · cwnd · drop |
+| 06 확인하고 줄이기 | `ss -ti`, `nstat`, Prometheus, Wireshark 필터 / UDP · thin-stream · 송신 큐 상한 · TCP_USER_TIMEOUT |
+
+- 플레이어: [`tcp-retransmission/`](https://jungrok5.github.io/motion-graphics/tcp-retransmission/)
+
 ## 새 영상 만들기 (Claude Code 스킬)
 
 이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고
