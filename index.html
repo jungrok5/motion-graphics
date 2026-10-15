@@ -71,6 +71,9 @@
     { path: 'tick-and-rtt/', title: '50ms와 RTT, 렉은 어디서 생길까?', length: '1:23',
       desc: '서버 틱 처리시간이 50ms를 넘으면 왜 문제인지(응답 · 끊김 · 시간 왜곡), RTT가 느리면 무엇이 달라지는지(결과 지연 · 과거의 나 · 판정 불일치 · 지터).',
       tags: ['tick budget', 'RTT', 'jitter', 'lag compensation'] },
+    { path: 'boss-lag/', title: '보스가 뜨면 왜 렉이 걸릴까?', length: '1:22',
+      desc: '인원이 몰리면 브로드캐스트가 N×(N−1)로 늘고, 시야 반경이 2배면 보이는 인원이 4배가 되는 이유. 광역기 · 이펙트 · AI 부하, 서버 · 망 · 클라에서 터지는 지점과 대응.',
+      tags: ['broadcast N²', 'AOI', 'view radius', 'boss fight'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {

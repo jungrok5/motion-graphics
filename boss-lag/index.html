@@ -1,0 +1,658 @@
+<meta charset="utf-8">
+<title>Boss Fight Lag</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: 0; margin: auto; width: 84px; height: 84px; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 30px; height: 30px; margin-left: 5px; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="보스가 뜨면 왜 렉이 걸리는지 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="83" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:22</div>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+</div>
+<script>
+// ─────────────────────────────────────────────────────────────
+//  보스가 뜨면 왜 렉이 걸리나 — 인원 집중, N² 브로드캐스트, 시야 반경
+//  Every frame is a pure function of time: renderAt(t).
+// ─────────────────────────────────────────────────────────────
+const W = 1920, H = 1080, DURATION = 82.5;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+const C = {
+  bg: '#070a13', text: '#e8ecf4', dim: '#8b95a7', faint: '#4b5568',
+  proto: '#a78bfa', client: '#38bdf8', server: '#fbbf24', bot: '#34d399',
+  pub: '#f472b6', red: '#f87171', panel: '#0e1424', line: '#24304a',
+};
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+// fade in at s, fade out at e
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const R = rng(7);
+const PARTS = Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * H, vx: (R() - .5) * 14, vy: -4 - R() * 10, s: 1 + R() * 2, a: .05 + R() * .18 }));
+
+// ── drawing helpers ──────────────────────────────────────────
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = C.text, align = 'left', base = 'alphabetic', alpha = 1, mono = false, ls = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono);
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  if (ls) ctx.letterSpacing = ls + 'px';
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function panel(x, y, w, h, o = {}) {
+  const { r = 18, fill = C.panel, stroke = C.line, glow = null, glowA = 1, alpha = 1, lw = 1.5, dash = null } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  if (glow) { ctx.shadowColor = rgba(glow, .55 * glowA); ctx.shadowBlur = 50; }
+  rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+  if (dash) ctx.setLineDash(dash);
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function chip(label, x, y, color, o = {}) {
+  const { alpha = 1, size = 18, align = 'left', fillA = .14 } = o;
+  font(size, 700, true);
+  const w = ctx.measureText(label).width + size * 1.2, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  rr(X, y - h / 2, w, h, h / 2); ctx.fillStyle = rgba(color, fillA); ctx.fill();
+  ctx.strokeStyle = rgba(color, .7); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, X + w / 2, y + 1); ctx.restore();
+  return w;
+}
+function dot(x, y, r, color, a = 1, glow = 18) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = color; ctx.shadowBlur = glow;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function check(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .36, y); ctx.lineTo(x - s * .1, y + s * .26); ctx.lineTo(x + s * .38, y - s * .28); ctx.stroke(); ctx.restore();
+}
+function cross(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .3, y - s * .3); ctx.lineTo(x + s * .3, y + s * .3);
+  ctx.moveTo(x + s * .3, y - s * .3); ctx.lineTo(x - s * .3, y + s * .3); ctx.stroke(); ctx.restore();
+}
+function botIcon(x, y, s, color, a = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * .07);
+  rr(x - s / 2, y - s * .36, s, s * .72, s * .2); ctx.fillStyle = rgba(color, .15); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - s * .36); ctx.lineTo(x, y - s * .54); ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y - s * .6, s * .07, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - s * .16, y + s * .18); ctx.lineTo(x + s * .16, y + s * .18); ctx.stroke();
+  ctx.restore();
+}
+function bezPt(P, t) {
+  const [a, b, c, d] = P, u = 1 - t;
+  return [u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
+          u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]];
+}
+function bezLine(P, k, color, lw = 2, a = 1) {
+  if (k <= 0 || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+  for (let i = 0; i <= 48; i++) { const q = bezPt(P, k * i / 48); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ── tiny syntax highlighter ──────────────────────────────────
+const KW = new Set(['syntax', 'package', 'message', 'public', 'sealed', 'partial', 'class', 'final', 'var', 'new', 'const', 'get', 'set']);
+const TY = new Set(['string', 'int32', 'int64', 'int', 'int32_t', 'IMessage']);
+function tokens(line) {
+  const out = [], re = /(\/\/.*$|"[^"]*"|\s+|\d+|[A-Za-z_]\w*|.)/g; let m;
+  while ((m = re.exec(line))) {
+    const s = m[0]; let c = C.text;
+    if (s.startsWith('//')) c = C.faint;
+    else if (s[0] === '"') c = '#86efac';
+    else if (/^\d+$/.test(s)) c = C.server;
+    else if (KW.has(s)) c = C.proto;
+    else if (TY.has(s)) c = C.client;
+    else if (/^[^\w\s]$/.test(s)) c = C.dim;
+    out.push([s, c]);
+  }
+  return out;
+}
+// lines: array of strings. chars: how many characters are revealed (newline = 1).
+// insert: {idx, s, k, chars} — a line sliding in at idx (k: 0..1).
+function code(lines, x, y, o = {}) {
+  const { size = 24, lh = 36, chars = Infinity, alpha = 1, insert = null, hlW = 600 } = o;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, 500, true); ctx.textBaseline = 'alphabetic';
+  const cw = ctx.measureText('M').width; let left = chars, cursor = null;
+  const drawLine = (s, yy, limit) => {
+    let col = 0;
+    for (const [tok, c] of tokens(s)) {
+      if (limit <= 0) break;
+      const vis = tok.slice(0, limit); ctx.fillStyle = c;
+      ctx.fillText(vis, x + col * cw, yy); col += vis.length; limit -= vis.length;
+    }
+    return col;
+  };
+  let shift = 0;
+  const drawInsert = i => {
+    if (!insert || i !== insert.idx || insert.k <= 0) return;
+    {
+      const yy = y + i * lh; const k = insert.k;
+      ctx.save(); ctx.globalAlpha *= k;
+      ctx.fillStyle = rgba(C.bot, .16 * (insert.flash ?? 1)); ctx.fillRect(x - 18, yy - lh * .74, hlW, lh);
+      ctx.fillStyle = C.bot; ctx.fillRect(x - 18, yy - lh * .74, 4, lh);
+      drawLine(insert.s, yy, insert.chars ?? Infinity); ctx.restore();
+      shift = insert.k;
+    }
+  };
+  lines.forEach((ln, i) => {
+    drawInsert(i);
+    if (left <= 0) return;
+    const yy = y + (i + shift) * lh;
+    const col = drawLine(ln, yy, left);
+    cursor = [x + col * cw, yy]; left -= ln.length + 1;
+  });
+  drawInsert(lines.length);
+  ctx.restore();
+  return { cw, cursor };
+}
+
+// ── background, headers, progress ────────────────────────────
+function background(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const glow = (cx, cy, r, col) => { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+  glow(W * .18 + Math.sin(t * .2) * 80, H * .1, 900, 'rgba(167,139,250,0.10)');
+  glow(W * .86, H * .92 + Math.cos(t * .17) * 60, 900, 'rgba(56,189,248,0.08)');
+  ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
+  const off = (t * 10) % 60; ctx.beginPath();
+  for (let x = -60 + off; x < W; x += 60) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = -60 + off; y < H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  for (const q of PARTS) {
+    const x = ((q.x + t * q.vx) % W + W) % W, y = ((q.y + t * q.vy) % H + H) % H;
+    ctx.fillStyle = `rgba(200,210,255,${q.a})`; ctx.fillRect(x, y, q.s, q.s);
+  }
+}
+
+// [start, end, number, title, subtitle] — one row per chapter. Chapters own the top-left header zone (y < 190).
+const HEAD = [
+  [5.0, 15.0, '01', '사람이 몰린다', '보스가 뜨는 순간, 흩어져 있던 플레이어가 한곳으로'],
+  [15.0, 28.0, '02', '브로드캐스트는 N × (N − 1)', '한 명의 변화를 보는 사람 모두에게 복제해서 보낸다'],
+  [28.0, 41.0, '03', '시야가 넓으면 더 나빠진다', '반경이 2배면 보이는 사람은 4배'],
+  [41.0, 53.0, '04', '보스 전투가 더하는 것', '광역기 · 이펙트 · AI · HP 갱신도 모두 N에 비례'],
+  [53.0, 66.0, '05', '어디서 터지나', '서버 CPU → 틱 → 아웃바운드 → 클라 수신 → 클라 렌더'],
+  [66.0, 77.0, '06', '게임은 이렇게 줄인다', '보내는 양을 줄이거나, 모이는 인원을 나눈다'],
+];
+function headers(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a;
+    chip(n, 120 - (1 - k) * 30, 106, C.proto, { size: 22, alpha: k });
+    txt(title, 196 - (1 - k) * 30, 122, { size: 50, weight: 800, alpha: k });
+    txt(sub, 122, 174, { size: 27, weight: 500, color: C.dim, alpha: k2 });
+    ctx.restore();
+  }
+}
+function progress(t) {
+  const x0 = 120, x1 = 1800, y = 1040;
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(148,163,184,0.15)'; ctx.fillRect(x0, y, x1 - x0, 3);
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, C.proto); g.addColorStop(.5, C.bot); g.addColorStop(1, C.pub);
+  ctx.fillStyle = g; ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
+  for (const h of HEAD) {
+    const x = x0 + (x1 - x0) * h[0] / DURATION;
+    ctx.fillStyle = t >= h[0] ? C.text : C.faint; ctx.fillRect(x, y - 4, 2, 11);
+    txt(h[2] + ' ' + h[3], x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
+  }
+  ctx.restore();
+}
+
+// ── word-by-word title ───────────────────────────────────────
+function words(ws, cx, y, t, t0, o = {}) {
+  const { size = 96, weight = 800, stagger = .12, colors = [] } = o;
+  font(size, weight); const sp = size * .28;
+  const widths = ws.map(w => ctx.measureText(w).width);
+  let x = cx - (widths.reduce((a, b) => a + b, 0) + sp * (ws.length - 1)) / 2;
+  ws.forEach((w, i) => {
+    const k = eo(p(t, t0 + i * stagger, .8));
+    ctx.save(); ctx.globalAlpha *= k; font(size, weight); ctx.fillStyle = colors[i] || C.text;
+    if (colors[i]) { ctx.shadowColor = rgba(colors[i], .5); ctx.shadowBlur = 40; }
+    ctx.fillText(w, x, y + (1 - k) * 46); ctx.restore();
+    x += widths[i] + sp;
+  });
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  INTRO (0 – 5.2) — config driven
+// ═════════════════════════════════════════════════════════════
+const TITLE = {
+  eyebrow: 'CROWD · AOI · BROADCAST N² · VIEW RADIUS',
+  line1: ['보스가', '뜨면'], line1Colors: [C.red, null],
+  line2: ['왜', '렉이', '걸릴까?'], line2Colors: [],
+  sub: '인원이 몰리면 서버가 보내야 할 패킷이 인원의 제곱으로 늘어나는 이유',
+  story: [['인원 집중', C.pub], ['N²', C.client], ['시야 r²', C.red], ['서버 · 망', C.server], ['클라', C.proto]],
+};
+function sTitle(t) {
+  const a = win(t, 0, 5.2, .6); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt(TITLE.eyebrow, W / 2, 330, { size: 22, weight: 600, color: C.dim, align: 'center', mono: true, ls: 5, alpha: eo(p(t, .2, .8)) });
+  words(TITLE.line1, W / 2, 470, t, .45, { size: 104, colors: TITLE.line1Colors });
+  words(TITLE.line2, W / 2, 600, t, .85, { size: 104, colors: TITLE.line2Colors });
+  txt(TITLE.sub, W / 2, 690, { size: 30, color: C.dim, align: 'center', alpha: eo(p(t, 1.7, .8)) });
+  const n = TITLE.story.length, x0 = 520, x1 = 1400, y = 820, k = eio(p(t, 2.1, 1.6));
+  ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(lerp(x0, x1, k), y); ctx.stroke();
+  TITLE.story.forEach(([lab, col], i) => {
+    const x = lerp(x0, x1, i / (n - 1)), kk = eback(p(t, 2.1 + i * .3, .6)); if (kk <= 0) return;
+    dot(x, y, 9 * kk, col, 1, 24);
+    txt(lab, x, y + 44, { size: 20, weight: 600, color: col, align: 'center', mono: true, alpha: clamp(kk) });
+  });
+  const tp = p(t, 2.4, 2.2); if (tp > 0 && tp < 1) dot(lerp(x0, x1, eio(tp)), y, 5, '#fff', 1, 30);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  shared helpers
+// ═════════════════════════════════════════════════════════════
+// Roles: pub = 플레이어, red = 보스 · 과부하, client = 브로드캐스트 · 클라, server = 서버 · 틱, proto = 네트워크, bot = 정상 · 해결
+const fmt = n => Math.round(n).toLocaleString('en-US');
+function noteRow(items, u, t0, y0, col, cols = 2, x0 = 120, span = 1700) {
+  items.forEach(([ti, de], i) => {
+    const k = eo(p(u, t0 + i * .45, .5)); if (k <= 0) return;
+    const x = x0 + (i % cols) * (span / cols), y = y0 + Math.floor(i / cols) * 88;
+    dot(x + 10, y - 9, 7, col, k, 12);
+    txt(ti, x + 32, y, { size: 24, weight: 800, alpha: k });
+    if (de) txt(de, x + 32, y + 32, { size: 19, color: C.dim, alpha: k });
+  });
+}
+function cardFrame(i, u, title, desc, col) {
+  const x = 120 + (i % 2) * 850, y = 210 + Math.floor(i / 2) * 370, t0 = .3 + i * .5, k = eo(p(u, t0, .6));
+  if (k <= 0) return null;
+  panel(x, y + (1 - k) * 30, 830, 340, { alpha: k, stroke: rgba(col, .45) });
+  txt(title, x + 36, y + 58, { size: 29, weight: 800, color: col, alpha: k });
+  txt(desc, x + 36, y + 98, { size: 20, color: C.dim, alpha: k });
+  return { x, y, k, v: Math.max(0, u - t0 - .4) };
+}
+function bossIcon(x, y, s, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = C.red; ctx.shadowBlur = 40;
+  ctx.beginPath(); ctx.arc(x, y, s, 0, 7); ctx.fillStyle = rgba(C.red, .85); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = C.bg; [[-.35, -.15], [.35, -.15]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(x + dx * s, y + dy * s, s * .14, 0, 7); ctx.fill(); });
+  ctx.beginPath(); ctx.moveTo(x - s * .7, y - s * .7); ctx.lineTo(x - s * .45, y - s * 1.25); ctx.lineTo(x - s * .2, y - s * .85); ctx.moveTo(x + s * .7, y - s * .7); ctx.lineTo(x + s * .45, y - s * 1.25); ctx.lineTo(x + s * .2, y - s * .85);
+  ctx.fillStyle = rgba(C.red, .85); ctx.fill(); ctx.restore();
+}
+const PLAYERS = (() => { const r = rng(21); return Array.from({ length: 200 }, (_, i) => {
+  const a = r() * Math.PI * 2, d = Math.sqrt(r());
+  return { sx: 160 + r() * 1600, sy: 240 + r() * 390, tx: 960 + Math.cos(a) * d * 230, ty: 440 + Math.sin(a) * d * 120, delay: r() * 2.6, near: i < 20 }; }); })();
+
+// ═════════════════════════════════════════════════════════════
+//  01 · people converge
+// ═════════════════════════════════════════════════════════════
+function sConverge(t) {
+  const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6));
+  panel(120, 215, 1680, 450, { alpha: k, stroke: rgba(C.pub, .3) });
+  const kb = eback(p(u, 1.4, .7));
+  if (kb > 0) { ctx.save(); ctx.globalAlpha *= clamp(kb) * .5; ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.ellipse(960, 440, 280, 150, 0, 0, 7); ctx.stroke(); ctx.restore(); bossIcon(960, 440, 34 * clamp(kb, 0, 1.2)); }
+  let inArea = 0;
+  PLAYERS.forEach(pl => {
+    const f = pl.near ? 1 : eio(p(u, 2 + pl.delay, 3.2));
+    const x = lerp(pl.near ? pl.tx : pl.sx, pl.tx, f), y = lerp(pl.near ? pl.ty : pl.sy, pl.ty, f);
+    if (((x - 960) / 280) ** 2 + ((y - 440) / 150) ** 2 <= 1) inArea++;
+    dot(x, y, 5, C.pub, k * .9, 6);
+  });
+  chip('보스 등장', 960, 260, C.red, { align: 'center', size: 18, alpha: clamp(kb) });
+  txt('보스 주변 인원', 160, 720, { size: 24, weight: 700, alpha: k });
+  txt(fmt(inArea) + '명', 420, 726, { size: 44, weight: 800, mono: true, color: inArea > 100 ? C.red : C.pub, alpha: k });
+  noteRow([['평소엔 맵 전체에 흩어져 있다', '서로 안 보이니까 주고받을 것도 적다'], ['보스가 뜨면 한곳에 몰린다', '같은 존 · 같은 시야 안에 수십~수백 명']], u, 6, 820, C.pub);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  02 · broadcasting is N × (N − 1)
+// ═════════════════════════════════════════════════════════════
+const RING = (() => { const r = rng(5); return Array.from({ length: 40 }, () => { const a = r() * Math.PI * 2, d = .25 + Math.sqrt(r()) * .75; return [Math.cos(a) * d * 330, Math.sin(a) * d * 190]; }); })();
+function sNSquared(t) {
+  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6)), cx = 500, cy = 440, phaseAll = u >= 4.2;
+  panel(120, 215, 760, 450, { alpha: k, stroke: rgba(C.pub, .3) });
+  const n = phaseAll ? Math.round(lerp(12, 40, eio(p(u, 4.4, 2.5)))) : 12;
+  ctx.save(); ctx.globalAlpha *= k;
+  if (!phaseAll) {
+    const kk = eo(p(u, 1, 1));
+    for (let i = 1; i < n; i++) { ctx.strokeStyle = rgba(C.client, .7); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx + RING[0][0], cy + RING[0][1]); ctx.lineTo(lerp(cx + RING[0][0], cx + RING[i][0], kk), lerp(cy + RING[0][1], cy + RING[i][1], kk)); ctx.stroke(); }
+  } else {
+    ctx.strokeStyle = rgba(C.client, Math.max(.05, .3 - n * .006)); ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { ctx.moveTo(cx + RING[i][0], cy + RING[i][1]); ctx.lineTo(cx + RING[j][0], cy + RING[j][1]); }
+    ctx.stroke();
+  }
+  for (let i = 0; i < n; i++) dot(cx + RING[i][0], cy + RING[i][1], i === 0 && !phaseAll ? 10 : 7, i === 0 && !phaseAll ? C.client : C.pub, 1, 10);
+  ctx.restore();
+  txt(phaseAll ? 'N명 모두 움직이면' : '한 명이 움직이면', 150, 260, { size: 24, weight: 800, alpha: k });
+  txt(phaseAll ? 'N × (N − 1)' : '보는 사람 N − 1명에게 전송', 850, 260, { size: phaseAll ? 26 : 20, weight: 800, mono: phaseAll, color: C.client, align: 'right', alpha: k });
+  // table of numbers
+  const rows = [[10, 90], [50, 2450], [100, 9900], [200, 39800]];
+  panel(940, 215, 860, 450, { alpha: k });
+  txt('틱당 브로드캐스트 (이동만 계산)', 970, 260, { size: 22, weight: 700, alpha: k });
+  rows.forEach(([N, s], i) => {
+    const kr = eo(p(u, 2.2 + i * .5, .5)); if (kr <= 0) return;
+    const y = 330 + i * 80, w = 560 * Math.sqrt(s / 39800);
+    txt('N = ' + N, 970, y + 8, { size: 22, weight: 800, mono: true, color: C.pub, alpha: kr });
+    ctx.save(); ctx.globalAlpha *= kr; rr(1110, y - 18, w * kr, 34, 6); ctx.fillStyle = rgba(N >= 100 ? C.red : C.client, .55); ctx.fill(); ctx.restore();
+    txt(fmt(s), 1110 + w * kr + 14, y + 8, { size: 22, weight: 800, mono: true, color: N >= 100 ? C.red : C.client, alpha: kr });
+  });
+  txt('인원 10배 → 패킷 약 440배', 970, 640, { size: 20, weight: 700, color: C.red, alpha: eo(p(u, 4.6, .5)) });
+  const kc = eo(p(u, 6.4, .6));
+  let x = 120;
+  [['200명: 39,800 패킷/틱', C.client], ['× 20Hz = 796,000 패킷/초', C.client], ['× 50바이트 ≈ 40MB/s (≈320Mbps)', C.red], ['존 서버 하나에서', C.server]].forEach(([s, c], i) => { x += chip(s, x, 730, c, { size: 19, alpha: eo(p(u, 6.4 + i * .3, .4)) }) + 14; });
+  noteRow([['상태 하나 바뀔 때마다 보는 사람 수만큼 복제', '이동 · 공격 · 이펙트 · 버프 전부 해당'], ['그래서 인원의 제곱으로 늘어난다', '200명은 20명의 10배가 아니라 약 100배']], u, 7.8, 830, C.client);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  03 · a wide view radius makes it worse
+// ═════════════════════════════════════════════════════════════
+const FIELD = (() => { const r = rng(77); return Array.from({ length: 300 }, () => [r() * 740, r() * 410]); })();
+function sView(t) {
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  [[120, 85, '시야 반경 r', C.bot], [980, 170, '시야 반경 2r', C.red]].forEach(([px, r, lab, col], i) => {
+    const k = eo(p(u, .2 + i * .4, .6)); if (k <= 0) return;
+    panel(px, 215, 820, 470, { alpha: k, stroke: rgba(col, .4) });
+    const ox = px + 40, oy = 255, me = [370, 205];
+    const kr = eo(p(u, 1.2 + i * .6, .8)), rr2 = r * kr;
+    let cnt = 0;
+    ctx.save(); ctx.globalAlpha *= k; rr(ox - 10, oy - 10, 760, 430, 10); ctx.clip();
+    FIELD.forEach(([fx, fy]) => { const inside = Math.hypot(fx - me[0], fy - me[1]) <= rr2; if (inside) cnt++; dot(ox + fx, oy + fy, 4, inside ? C.pub : C.faint, inside ? 1 : .5, inside ? 6 : 0); });
+    ctx.beginPath(); ctx.arc(ox + me[0], oy + me[1], rr2, 0, 7); ctx.fillStyle = rgba(col, .08); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+    dot(ox + me[0], oy + me[1], 9, C.client, k, 16);
+    txt(lab, px + 30, 250, { size: 22, weight: 800, color: col, alpha: k });
+    txt('보이는 인원 ' + cnt + '명', px + 790, 250, { size: 24, weight: 800, mono: true, color: col, align: 'right', alpha: k * kr });
+  });
+  noteRow([['반경 2배 → 면적 4배 → 보이는 인원 최대 4배', '브로드캐스트 = N × 보이는 인원 → 4배'], ['주변 검색(AOI) 비용도 r²에 비례', '확인할 그리드 칸이 4배'],
+           ['클라도 4배 받고 4배 그린다', '다운링크 · CPU · GPU 모두 증가 → 클라 FPS 하락'], ['다 같이 한 시야에 몰리면 결국 N × (N − 1)', '보스 앞에서는 반경이 넓을수록 최악에 빨리 도달']], u, 3.6, 750, C.red);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  04 · what the boss fight adds
+// ═════════════════════════════════════════════════════════════
+function sBossAdds(t) {
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  let f = cardFrame(0, u, '광역기 판정', '한 번에 N명 히트 체크 · 데미지 계산 → 결과를 또 N명에게 알림', C.red);
+  if (f) { const { x, y, k, v } = f, cx = x + 300, cy = y + 240, cyc = v % 2.5;
+    bossIcon(cx, cy, 20, k);
+    const kr = clamp(cyc / .6); ctx.save(); ctx.globalAlpha *= k * (1 - clamp((cyc - .8) / .8)); ctx.beginPath(); ctx.ellipse(cx, cy, 30 + 150 * eo(kr), 16 + 72 * eo(kr), 0, 0, 7); ctx.fillStyle = rgba(C.red, .15); ctx.fill(); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 16; i++) { const an = i / 16 * Math.PI * 2, d = 70 + (i % 3) * 25, hit = cyc > .6 * d / 150; dot(cx + Math.cos(an) * d * 1.3, cy + Math.sin(an) * d * .6, 5, hit ? C.red : C.pub, k, hit ? 12 : 4); }
+    txt('16명 피격 × 보는 사람 200명', x + 520, cy - 10, { size: 19, weight: 700, alpha: k });
+    txt('= DamageNoti 3,200개', x + 520, cy + 24, { size: 21, weight: 800, mono: true, color: C.red, alpha: k }); }
+  f = cardFrame(1, u, '이펙트 · 버프 · 투사체', '상태 변화 하나하나가 전부 브로드캐스트 대상', C.pub);
+  if (f) { const { x, y, k, v } = f;
+    for (let i = 0; i < 26; i++) { const ph = (v * .8 + i * .137) % 1, px2 = x + 80 + (i * 97) % 680, py = y + 300 - ph * 140; dot(px2, py, 4 + (i % 3), [C.pub, C.client, C.server][i % 3], k * Math.sin(ph * Math.PI), 12); }
+    chip('버프 시작 · 종료 · 중첩', x + 36, y + 150, C.pub, { size: 15, alpha: k }); chip('투사체 생성 · 이동 · 소멸', x + 260, y + 150, C.client, { size: 15, alpha: k }); }
+  f = cardFrame(2, u, '어그로 · AI 계산', '위협 목록 N명 재계산, 타깃 선정, 경로 탐색', C.server);
+  if (f) { const { x, y, k, v } = f;
+    for (let i = 0; i < 8; i++) { const w = 120 + ((Math.sin(v * 2 + i * 1.7) + 1) / 2) * 520; ctx.save(); ctx.globalAlpha *= k; rr(x + 120, y + 150 + i * 22, w, 14, 4); ctx.fillStyle = rgba(i === 0 ? C.red : C.server, .55); ctx.fill(); ctx.restore(); txt('P' + (i + 1), x + 100, y + 162 + i * 22, { size: 13, color: C.dim, align: 'right', mono: true, alpha: k }); } }
+  f = cardFrame(3, u, '보스 HP · 페이즈 갱신', '모든 참가자에게 계속 갱신 · 페이즈 전환은 대량 이벤트', C.client);
+  if (f) { const { x, y, k, v } = f, hp = 1 - ((v * .07) % 1);
+    ctx.save(); ctx.globalAlpha *= k; rr(x + 60, y + 200, 710, 34, 8); ctx.fillStyle = 'rgba(148,163,184,0.12)'; ctx.fill(); rr(x + 60, y + 200, 710 * hp, 34, 8); ctx.fillStyle = rgba(C.red, .75); ctx.fill(); ctx.restore();
+    txt('보스 HP ' + Math.round(hp * 100) + '%', x + 770, y + 184, { size: 18, weight: 800, mono: true, align: 'right', alpha: k });
+    txt('HP 변화마다 × 참가자 200명', x + 60, y + 290, { size: 19, weight: 700, color: C.client, alpha: k }); }
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  05 · where it breaks
+// ═════════════════════════════════════════════════════════════
+function sBreak(t) {
+  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6)), N = Math.round(lerp(20, 200, eio(p(u, 1, 6)))), s = N * (N - 1);
+  txt('보스 주변 인원', 120, 262, { size: 22, weight: 700, alpha: k });
+  ctx.save(); ctx.globalAlpha *= k; rr(330, 244, 600, 20, 10); ctx.fillStyle = 'rgba(148,163,184,0.12)'; ctx.fill(); rr(330, 244, 600 * (N - 20) / 180, 20, 10); ctx.fillStyle = rgba(C.pub, .8); ctx.fill(); ctx.restore();
+  txt(N + '명', 950, 262, { size: 28, weight: 800, mono: true, color: N > 120 ? C.red : C.pub, alpha: k });
+  const G = [
+    ['존 로직 스레드 CPU', Math.min(100, 12 + s / 400), '%', 85, C.server, '한 코어만 100% — 코어를 늘려도 안 풀린다'],
+    ['틱 처리시간', 8 + s / 380, 'ms', 50, C.server, '예산 50ms 초과 → 존 전체 서버렉'],
+    ['아웃바운드', s * 20 * 50 * 8 / 1e6, 'Mbps', 200, C.proto, 'pps · 대역폭 급등, 송신 큐 적체'],
+    ['클라 다운링크', N * 20 * 50 / 1000 * 2.2, 'KB/s', 300, C.client, '느린 회선부터 밀림 · 끊김'],
+    ['클라 FPS', Math.max(14, 60 - N * .22), 'fps', -40, C.pub, '수백 캐릭터 · 이펙트 렌더 → 클라렉'],
+  ];
+  G.forEach(([lab, v, unit, warn, col, note], i) => {
+    const kk = eo(p(u, .4 + i * .3, .5)); if (kk <= 0) return;
+    const y = 340 + i * 112, bad = warn > 0 ? v > warn : v < -warn, max = unit === '%' ? 100 : unit === 'ms' ? 200 : unit === 'Mbps' ? 400 : unit === 'KB/s' ? 600 : 60;
+    txt(lab, 120, y + 8, { size: 22, weight: 800, color: col, alpha: kk });
+    ctx.save(); ctx.globalAlpha *= kk; rr(420, y - 14, 700, 28, 8); ctx.fillStyle = 'rgba(148,163,184,0.1)'; ctx.fill(); rr(420, y - 14, 700 * Math.min(1, v / max), 28, 8); ctx.fillStyle = rgba(bad ? C.red : col, .65); ctx.fill(); ctx.restore();
+    txt((unit === 'Mbps' || unit === 'KB/s' ? fmt(v) : Math.round(v)) + ' ' + unit, 1140, y + 9, { size: 22, weight: 800, mono: true, color: bad ? C.red : C.text, alpha: kk });
+    txt(note, 1330, y + 8, { size: 19, color: bad ? C.red : C.dim, weight: bad ? 700 : 500, alpha: kk });
+  });
+  txt('인프라에서 보이는 것: 보스 시간대에 특정 존 서버만 아웃바운드 pps · 대역폭 급등, 한 코어 100%, 연결 끊김 증가', 120, 945, { size: 21, weight: 700, color: C.dim, alpha: eo(p(u, 7, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  06 · how games reduce it
+// ═════════════════════════════════════════════════════════════
+function sMitigate(t) {
+  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  // distance-based update frequency visual
+  const k = eo(p(u, .1, .6)), cx = 400, cy = 440;
+  panel(120, 215, 560, 420, { alpha: k, stroke: rgba(C.bot, .35) });
+  [[150, 2, C.faint], [100, 5, C.client], [50, 20, C.bot]].forEach(([r, hz, col]) => {
+    ctx.save(); ctx.globalAlpha *= k; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = rgba(col, .07); ctx.fill(); ctx.strokeStyle = rgba(col, .6); ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    txt(hz + 'Hz', cx + r - 6, cy - 6, { size: 15, weight: 800, mono: true, color: col, align: 'right', alpha: k });
+  });
+  dot(cx, cy, 9, C.client, k, 16);
+  txt('거리별 갱신 빈도', 150, 258, { size: 22, weight: 800, color: C.bot, alpha: k });
+  txt('가까울수록 자주, 멀수록 드물게', 150, 610, { size: 18, color: C.dim, alpha: k });
+  noteRow([['거리별 갱신 빈도 (LOD)', '가까우면 20Hz, 멀면 2~5Hz'], ['시야 인원 상한', '가까운 K명만 상세 동기화, 나머지는 요약'], ['혼잡하면 시야 반경 자동 축소', '인원이 몰린 곳만 반경을 줄인다'],
+           ['묶어 보내기 · 델타 압축', '클라마다 틱당 패킷 1개, 바뀐 값만'], ['채널 · 인스턴스 분리', '보스 전용 스레드 · 서버로 인원 자체를 나눈다'], ['클라 그래픽 LOD · 이펙트 컬링', '멀리 있는 캐릭터 · 남의 이펙트는 간략히']], u, .8, 290, C.bot, 2, 740, 1060);
+  txt('보스전 렉 대응 = 보내는 양(N², r²)을 줄이거나, 한곳에 모이는 N을 나눈다', W / 2, 800, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 4.5, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  OUTRO — summary strip + tagline (last ~5.5s)
+// ═════════════════════════════════════════════════════════════
+const OUTRO = {
+  nodes: [[C.pub, '보스 등장', '인원 집중'], [C.client, 'N × (N − 1)', '브로드캐스트'], [C.red, '시야 r²', '보이는 인원'], [C.server, '틱 · 아웃바운드', '서버 · 망'], [C.proto, '수신 · 렌더', '클라']],
+  tagline: ['모이는', '인원은', 'N,', '비용은', 'N².'], taglineColors: [null, null, C.pub, null, C.red],
+  footer: 'Crowd → N² broadcast → View radius r² → Tick · Outbound · Client',
+};
+function sOutro(t) {
+  const S = DURATION - 5.5; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
+  const v = t - S, n = OUTRO.nodes.length;
+  ctx.save(); ctx.globalAlpha = a;
+  const xs = OUTRO.nodes.map((_, i) => lerp(260, 1660, i / (n - 1))), y = 440, kl = eio(p(v, .3, 1.6));
+  ctx.strokeStyle = 'rgba(148,163,184,0.3)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(lerp(xs[0], xs[n - 1], kl), y); ctx.stroke();
+  OUTRO.nodes.forEach(([col, lab, sub], i) => {
+    const k = eback(p(v, .3 + i * .3, .6)); if (k <= 0) return;
+    ctx.save(); ctx.translate(xs[i], y); ctx.scale(k, k); ctx.shadowColor = rgba(col, .6); ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.arc(0, 0, 72, 0, 7); ctx.fillStyle = C.panel; ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+    txt(String(i + 1), 0, 14, { size: 40, weight: 800, color: col, align: 'center', mono: true });
+    ctx.restore();
+    const kt = eo(p(v, .5 + i * .3, .5));
+    txt(lab, xs[i], y + 132, { size: 30, weight: 800, color: col, align: 'center', alpha: kt });
+    txt(sub, xs[i], y + 172, { size: 22, color: C.dim, align: 'center', alpha: kt });
+  });
+  words(OUTRO.tagline, W / 2, 820, t, S + 1.8, { size: 64, stagger: .1, colors: OUTRO.taglineColors });
+  txt(OUTRO.footer, W / 2, 890, { size: 22, color: C.faint, align: 'center', mono: true, alpha: eo(p(v, 2.6, .8)) });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t);
+  sTitle(t); sConverge(t); sNSquared(t); sView(t); sBossAdds(t); sBreak(t); sMitigate(t); sOutro(t);
+  headers(t); progress(t);
+  // final fade to black
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [DURATION - 5.5, '', '정리']];
+  const POSTER = 3.6;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
