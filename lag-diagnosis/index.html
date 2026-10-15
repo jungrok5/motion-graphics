@@ -5,12 +5,12 @@
   /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
   :root {
     --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
-    --accent: #a78bfa; --live: #34d399;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
     --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
     --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
     color-scheme: dark;
   }
-  html, body { height: 100%; }
+  html, body { min-height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -45,10 +45,29 @@
   .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
   .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
   @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
   /* #poster: embed mode for gallery thumbnails — canvas only, loops */
   body.poster { padding: 0; }
   body.poster .player { width: 100%; }
-  body.poster .bar, body.poster .chapters, body.poster .big { display: none; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
   body.poster .stage { border: 0; border-radius: 0; }
 </style>
 
@@ -63,10 +82,15 @@
       <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
     </div>
     <div class="time" id="time">0:00 / 1:13</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
     <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
   <div class="chapters" id="chapters"></div>
 </div>
+<section class="notes" id="notes" hidden>
+<h2>내용 정리</h2>
+<!-- NOTES -->
+</section>
 <script>
 // ─────────────────────────────────────────────────────────────
 //  렉 판별 — 클라렉 · 네트워크렉 · 서버렉을 어떻게 가르나
@@ -246,7 +270,7 @@ function background(t) {
 const HEAD = [
   [5.0, 14.0, '01', '렉의 세 구간', '한 번의 반응 = 클라 + 네트워크 + 서버'],
   [14.0, 25.0, '02', '클라렉', '내 컴퓨터가 제때 프레임을 못 그리는 경우'],
-  [25.0, 36.0, '03', '네트워크렉', '패킷이 오가는 길이 막히는 경우'],
+  [25.0, 36.0, '03', '네트워크렉', '패킷이 늦게 오가거나 사라지는 경우'],
   [36.0, 47.5, '04', '서버렉', '서버가 틱 안에 일을 못 끝내는 경우'],
   [47.5, 58.0, '05', '핑 두 개로 가르기', '전송 핑은 소켓에서, 앱 핑은 게임 로직을 거쳐 돌아온다'],
   [58.0, 68.0, '06', '판별 순서', '세 가지만 보면 어디가 문제인지 나온다'],
@@ -270,11 +294,16 @@ function progress(t) {
   const g = ctx.createLinearGradient(x0, 0, x1, 0);
   g.addColorStop(0, C.proto); g.addColorStop(.5, C.bot); g.addColorStop(1, C.pub);
   ctx.fillStyle = g; ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
-  for (const h of HEAD) {
+  HEAD.forEach((h, i) => {
     const x = x0 + (x1 - x0) * h[0] / DURATION;
+    const nx = i + 1 < HEAD.length ? x0 + (x1 - x0) * HEAD[i + 1][0] / DURATION : x1;
     ctx.fillStyle = t >= h[0] ? C.text : C.faint; ctx.fillRect(x, y - 4, 2, 11);
-    txt(h[2] + ' ' + h[3], x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
-  }
+    // label only as long as the gap to the next tick allows
+    let lab = h[2] + ' ' + h[3];
+    while (lab.length > 2 && tw(lab, 16, 600) > nx - x - 18) lab = lab.slice(0, -1);
+    if (lab !== h[2] + ' ' + h[3]) lab = lab.length > 4 ? lab.slice(0, -1).trimEnd() + '…' : h[2];
+    txt(lab, x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
+  });
   ctx.restore();
 }
 
@@ -586,7 +615,7 @@ function sTwoPings(t) {
     txt(sub, x + 28, y + 76, { size: 17, color: C.dim, alpha: kr });
     txt(val + 'ms', x + 400, y + 118, { size: 40, weight: 800, mono: true, align: 'right', color: val > 150 ? C.red : C.bot, alpha: kr });
   });
-  const verdict = { '정상': '둘 다 낮음 → 정상', '네트워크렉': '둘 다 높음 → 길(네트워크)이 문제', '서버렉': '전송 핑은 정상인데 앱 핑만 높음 → 서버가 문제' }[ph.name];
+  const verdict = { '정상': '둘 다 낮음 → 정상', '네트워크렉': '둘 다 높음 → 네트워크 구간이 문제', '서버렉': '전송 핑은 정상인데 앱 핑만 높음 → 서버가 문제' }[ph.name];
   txt(verdict, 1080, 690, { size: 30, weight: 800, color: ph.col, alpha: eo(p(u, ph.t0 + 1.4, .5)) });
   txt('클라렉일 때도 앱 핑이 오를 수 있음 (받은 패킷을 늦게 처리) → 프레임타임을 먼저 확인', 140, 860, { size: 24, color: C.dim, alpha: eo(p(u, 8.6, .5)) });
   ctx.restore();
@@ -644,7 +673,7 @@ function sDecide(t) {
 // ═════════════════════════════════════════════════════════════
 const OUTRO = {
   nodes: [[C.client, '프레임타임', '튀면 클라렉'], [C.proto, '전송 핑', '튀면 네트워크렉'], [C.server, '앱 핑', '혼자 튀면 서버렉'], [C.pub, '영향 범위', '나만 / 같은 망 / 채널 전체'], [C.bot, '판별', '구간별로 쪼개기']],
-  tagline: ['어디서', '늦어졌는지', '재면,', '누구', '탓인지', '보인다.'], taglineColors: [null, null, null, C.bot, null, null],
+  tagline: ['구간별', '시간을', '재면', '원인', '구간이', '보인다.'], taglineColors: [null, null, null, C.bot, null, null],
   footer: 'Frame time → Transport RTT → App RTT → Blast radius',
 };
 function sOutro(t) {
@@ -732,13 +761,23 @@ if (!location.search.includes('render')) {
 
   function frame(now) {
     if (playing) {
-      t += (now - last) / 1000; last = now;
+      t += (now - last) / 1000 * rate; last = now;
       if (t >= DURATION) { t = DURATION; playing = false; }
       draw(); ui();
     }
     requestAnimationFrame(frame);
   }
 
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
   $('stage').addEventListener('click', toggle);
   $('play').addEventListener('click', toggle);
   $('fs').addEventListener('click', () => {
@@ -757,10 +796,25 @@ if (!location.search.includes('render')) {
     else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
     else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
   });
 
   const posterMode = location.hash === '#poster';
   if (posterMode) document.body.classList.add('poster');
+  // notes: give each chapter article its title and a jump button
+  const notes = $('notes');
+  if (notes && notes.querySelector('article') && !posterMode) {
+    notes.hidden = false;
+    notes.querySelectorAll('article[data-ch]').forEach(el => {
+      const h = HEAD.find(r => r[2] === el.dataset.ch); if (!h) return;
+      const h3 = document.createElement('h3'), n = document.createElement('span'), b = document.createElement('button');
+      n.className = 'n'; n.textContent = h[2];
+      b.textContent = '▶ 이 장면'; b.setAttribute('aria-label', `${h[2]} ${h[3]} 장면 재생`);
+      b.addEventListener('click', () => { seek(h[0] + .01); play(); $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+      h3.append(n, h[3], b); el.prepend(h3);
+    });
+  }
   ui();
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
