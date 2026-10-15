@@ -77,6 +77,9 @@
     { path: 'slow-client/', title: '클라가 느리면 서버도 느려질까?', length: '1:32',
       desc: '느린 회선 · 기기가 수신 버퍼 → Zero Window → 서버 송신 버퍼 → 앱 송신 큐로 압력을 거꾸로 전달하는 과정, 서버가 느려지는 네 경로, 격리 설계와 인프라 확인법.',
       tags: ['backpressure', 'zero window', 'send queue', 'slow consumer'] },
+    { path: 'one-byte/', title: '이동 패킷 1바이트를 줄이면 무슨 일이?', length: '1:25',
+      desc: '1바이트 × 보는 사람 × 10Hz × 동접 × 시간 = 월 6.5TB. 브로드캐스트 비중, 병목별로 정직하게 달라지는 용량(+4% / N²은 +2%), MTU 문턱, 24B → 12B로 줄였을 때의 비용 · 용량.',
+      tags: ['bandwidth', 'broadcast', 'MTU', 'cost'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {
