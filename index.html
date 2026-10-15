@@ -53,6 +53,9 @@
     { path: 'proto-bot-pipeline/', title: '패킷 정의 하나로, 개발부터 라이브까지', length: '1:04',
       desc: '프로토버퍼로 패킷을 정의하고 클라·서버·봇 코드를 생성해, 서버 선개발 컨텐츠 테스트와 퍼블리셔 부하 테스트까지 잇는 과정.',
       tags: ['protobuf', 'codegen', 'bot client', 'load test'] },
+    { path: 'rubber-banding/', title: '앞으로 달렸는데, 왜 뒤로 끌려갈까?', length: '1:07',
+      desc: 'MMO 러버밴딩이 생기는 구조(클라 예측 · 서버 판정)와 원인(네트워크 지연·손실, 속도 검증, 충돌, 상태이상, 서버 틱), 그리고 재조정·스무딩으로 줄이는 방법.',
+      tags: ['client prediction', 'server authority', 'reconciliation', 'netcode'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {

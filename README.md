@@ -63,6 +63,20 @@
 - 각 챕터 중간 프레임을 스틸로 뽑아 겹침·잘림을 확인하고 고친 뒤 보여줘.
 ````
 
+## rubber-banding (67s)
+
+"앞으로 달렸는데, 왜 뒤로 끌려갈까?" — MMO 러버밴딩의 구조, 원인, 줄이는 방법. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 러버밴딩이란 | 클라 화면의 위치와 서버가 인정한 위치가 벌어졌다가 서버 쪽으로 되돌려지는 현상 |
+| 02 예측과 판정 | 클라는 입력 즉시 이동(예측), 서버가 Move #n을 검증해 Ack · 어긋나면 Correction |
+| 03 원인 ① 네트워크 | 지연 스파이크 · 패킷 손실 · TCP 재전송 대기(HOL) → 서버 캐릭터는 제자리 → 되돌림 |
+| 04 원인 ② 판정 불일치 | 속도 검증(버프 만료) · 충돌/지형 · 상태이상 선적용 · 서버 틱 지연 |
+| 05 줄이는 방법 | 시퀀스 번호 + Ack, 재조정, 오차 허용치, 보정 보간, 이동은 UDP, 서버 틱 여유 |
+
+- 플레이어: [`rubber-banding/`](https://jungrok5.github.io/motion-graphics/rubber-banding/)
+
 ## 새 영상 만들기 (Claude Code 스킬)
 
 이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고
