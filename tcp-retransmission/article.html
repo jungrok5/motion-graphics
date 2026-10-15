@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>사라진 패킷 하나가 전부를 멈춘다 — 글</title>
+<meta name="description" content="TCP 재전송이 왜 · 언제 생기는지(Fast Retransmit vs RTO, HOL 블로킹), 클라 · 서버 · 인프라에 나타나는 현상과 메트릭, 확인 명령과 완화법.">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<span class="eyebrow">글로 읽기 · 1:21</span>
+<h1>사라진 패킷 하나가 전부를 멈춘다</h1>
+<div class="tags"><span>TCP</span><span>retransmission</span><span>RTO</span><span>metrics</span></div>
+<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
+<p class="lede">TCP가 잃어버린 세그먼트를 다시 보내는 두 가지 방식(Fast Retransmit, RTO)과, 재전송 하나가 같은 연결의 뒤따르는 데이터까지 멈추게 하는 Head-of-Line 블로킹을 보여준다. 작은 패킷이 띄엄띄엄 오가는 게임 트래픽은 RTO로 빠지기 쉬워 수백 ms 정지가 생긴다. 같은 사건이 클라, 서버, 인프라에서 각각 어떤 지표로 보이는지와 확인 명령, 완화 방법까지 정리한다.</p>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">잃으면 다시 보낸다</a></li><li><a href="#ch02">언제 생기나</a></li><li><a href="#ch03">두 가지 재전송</a></li><li><a href="#ch04">Head-of-Line 블로킹</a></li><li><a href="#ch05">클라 · 서버 · 인프라에 보이는 것</a></li><li><a href="#ch06">확인하고 줄이기</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<section id="ch01">
+<h2><span class="n">01</span>잃으면 다시 보낸다</h2>
+<p class="sub">TCP는 모든 바이트가 순서대로, 반드시 도착해야 다음으로 넘어간다 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
+<p>위쪽 선이 송신측(서버), 아래쪽 선이 수신측(클라)이다. <code>Seq 1</code>, <code>Seq 2</code>는 정상 도착하고 각각 <code>ACK 2</code>, <code>ACK 3</code>이 돌아간다. <code>Seq 3</code>은 중간에서 사라진다.</p>
+<p>이후 <code>Seq 4</code>, <code>5</code>, <code>6</code>이 도착해도 수신측은 3번을 아직 못 받았으므로 계속 "3번이 필요하다"는 ACK를 반복해서 보낸다. 이것이 Dup ACK다. 송신측은 같은 ACK가 3번 중복되면 타이머를 기다리지 않고 <code>Seq 3</code>을 바로 다시 보낸다(Fast Retransmit). 재전송이 도착하면 수신측은 4~6번까지 한 번에 확인하고 <code>ACK 7</code>을 보낸다.</p>
+<p>TCP는 모든 바이트가 순서대로, 반드시 도착해야 다음으로 넘어간다. 재전송은 이 보장을 지키기 위한 동작이다.</p>
+</section>
+<section id="ch02">
+<h2><span class="n">02</span>언제 생기나</h2>
+<p class="sub">원인은 달라도 결과는 같다: ACK가 안 오면 다시 보낸다 · <a class="scene" href="index.html#ch02">▶ 이 장면 보기</a></p>
+<p>손실 원인은 달라도 결과는 같다. ACK가 오지 않으면 송신측은 다시 보낸다. 화면에는 네 가지 원인이 나온다.</p>
+<ul>
+<li>혼잡, 라우터 큐 넘침: 트래픽이 몰려 장비 큐가 가득 차면 뒤에 온 패킷을 버린다(<code>tail drop</code>).</li>
+<li>무선, 모바일 구간: 와이파이 간섭이나 기지국 핸드오버 순간에 패킷이 사라진다.</li>
+<li>버퍼, NIC 오버플로: 커널이 NIC 수신 링 버퍼를 제때 비우지 못하면 넘친 패킷이 버려지고 <code>rx_dropped</code>가 증가한다.</li>
+<li>ACK 유실, MTU 블랙홀: 데이터는 도착했는데 ACK가 중간에 사라지거나, 경로 MTU 문제로 큰 패킷만 버려진다.</li>
+</ul>
+</section>
+<section id="ch03">
+<h2><span class="n">03</span>두 가지 재전송</h2>
+<p class="sub">Fast Retransmit은 짧고, RTO 타임아웃은 길다 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
+<p>위 줄은 패킷이 20ms 간격으로 촘촘하게 나가는 경우다. 100ms 지점의 패킷이 손실되면 바로 뒤 패킷들이 Dup ACK 3개를 만들고, 송신측이 즉시 재전송한다. 정지는 약 100ms, 대략 1 RTT 수준이다.</p>
+<p>아래 줄은 패킷이 띄엄띄엄 나가는 경우다. 손실 뒤 다음 패킷이 늦게 오므로 Dup ACK가 1개뿐이고 Fast Retransmit 조건이 채워지지 않는다. 송신측은 RTO 타이머를 기다린다. 첫 재전송은 <code>RTO 200ms</code> 뒤에 나가지만 이것도 손실되고, 타이머가 2배로 늘어 <code>RTO 400ms</code> 뒤에야 재전송이 성공한다. 이 예에서 정지는 620ms다.</p>
+<p>게임 트래픽은 작고 간격이 넓어서 Dup ACK 3개가 잘 모이지 않고 RTO로 빠지기 쉽다. 리눅스에서 RTO 최솟값은 200ms이고 실패할 때마다 200, 400, 800, 1600ms로 두 배씩 늘어난다.</p>
+<p>재전송 뒤에는 혼잡 윈도우(cwnd)도 줄어든다. 영상은 Fast Retransmit이면 줄이고(Reno는 절반, 리눅스 기본 CUBIC은 0.7배), RTO면 1부터 Slow Start로 다시 시작한다고 설명하며, 그만큼 처리량이 급감한다.</p>
+</section>
+<section id="ch04">
+<h2><span class="n">04</span>Head-of-Line 블로킹</h2>
+<p class="sub">하나가 빠지면 뒤에 도착한 것까지 전부 기다린다 · <a class="scene" href="index.html#ch04">▶ 이 장면 보기</a></p>
+<p>클라 커널 수신 버퍼에 <code>Seq 4</code>~<code>Seq 8</code>은 이미 도착해 있지만 <code>Seq 3</code> 칸은 비어 있다. 앱은 3번부터 순서대로만 읽을 수 있으므로, 뒤 데이터는 도착하고도 버퍼에서 기다린다. 재전송된 3번이 들어오는 순간 쌓인 데이터가 한꺼번에 게임 앱의 <code>recv()</code>로 넘어간다.</p>
+<p>아래 타임라인은 앱 입장에서 본 메시지 도착이다. 일정 간격으로 오던 메시지가 한동안 하나도 오지 않다가, 재전송 시점에 여러 개가 몰려 들어온다.</p>
+<ul>
+<li>멈췄다가 한꺼번에 처리된다.</li>
+<li>러버밴딩, 순간이동처럼 보인다.</li>
+<li>이동, 스킬, 채팅이 같은 연결에 있으면 모두 같이 멈춘다.</li>
+<li>몰아서 도착한 이동 패킷 때문에 속도핵 탐지가 오탐할 수 있다.</li>
+</ul>
+<p>TCP 연결 하나는 한 줄로 선 대기열과 같아서, 앞의 하나가 빠지면 같은 줄의 메시지는 전부 기다린다.</p>
+</section>
+<section id="ch05">
+<h2><span class="n">05</span>클라 · 서버 · 인프라에 보이는 것</h2>
+<p class="sub">같은 사건, 세 곳의 다른 증상과 지표 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
+<p>같은 손실 사건이 세 곳에서 다른 모습으로 보인다. 각 열 위의 그래프는 사건 동안 대표 지표가 튀는 모양을 그린 것이다.</p>
+<ul>
+<li>클라: 표시 핑이 40ms에서 600ms 가까이 급등한다. 화면이 멈칫한 뒤 몰아치고, 러버밴딩과 스킬, 채팅 지연이 동시에 나타난다. RTO가 반복되면 타임아웃으로 연결이 끊긴다.</li>
+<li>서버: 세션 송신 큐가 수 KB에서 380KB대까지 쌓인다. 소켓 송신 버퍼(<code>SO_SNDBUF</code>)가 가득 차고, 앱 송신 큐와 세션당 메모리가 늘어난다. 복구 순간에는 수신이 몰리고, 느린 세션 정리(킥)가 늘어난다.</li>
+<li>인프라: 재전송률이 0.2%에서 6% 가까이 오른다. <code>TcpRetransSegs</code>, <code>TCPTimeouts</code>가 증가하고, SRTT와 RTTVAR는 오르며 cwnd는 줄어 처리량이 떨어진다. 인터페이스 drop, discard가 늘고 LB 헬스체크 플랩이나 연결 리셋이 생긴다.</li>
+</ul>
+</section>
+<section id="ch06">
+<h2><span class="n">06</span>확인하고 줄이기</h2>
+<p class="sub">지표로 확인하고, 구조로 피한다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
+<p>왼쪽은 확인 방법이다.</p>
+<ul>
+<li><code>ss -ti dst :7777</code>: 소켓별 <code>rtt</code>, <code>rto</code>, <code>cwnd</code>, <code>retrans</code>를 본다. 화면의 예시 출력은 <code>rtt:182/90 rto:1200 cwnd:4 retrans:0/37</code>이다.</li>
+<li><code>nstat -az TcpRetransSegs TcpExtTCPTimeouts</code>: 호스트 전체의 재전송 세그먼트 수와 RTO 타임아웃 횟수를 본다.</li>
+<li>Prometheus(node_exporter): <code>rate(node_netstat_Tcp_RetransSegs[1m]) / rate(node_netstat_Tcp_OutSegs[1m])</code>로 재전송률을 구한다.</li>
+<li>Wireshark: <code>tcp.analysis.retransmission</code> 필터로 재전송 패킷만 골라 본다.</li>
+</ul>
+<p>재전송률 기준은 예시로 0.5% 미만이면 정상, 2%를 넘으면 조사 대상으로 제시된다.</p>
+<p>오른쪽은 줄이는 방법이다.</p>
+<ul>
+<li>이동, 위치는 UDP로 보낸다. 최신 상태만 의미 있는 데이터는 다시 보낼 필요가 없다.</li>
+<li><code>TCP_NODELAY</code>로 Nagle을 끄고, <code>tcp_thin_linear_timeouts</code>로 thin-stream의 RTO 백오프를 완화한다.</li>
+<li>세션 송신 큐에 상한을 두고, 넘으면 오래된 상태 패킷을 버리거나 느린 세션을 정리한다.</li>
+<li><code>TCP_USER_TIMEOUT</code>, keepalive 설정으로 죽은 연결을 빨리 정리한다.</li>
+<li>장비 큐, MTU, 무선 구간 drop을 구간별로 점검한다.</li>
+</ul>
+</section>
+<section id="terms">
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>Seq / ACK</dt><dd>Seq는 세그먼트의 순번, ACK는 수신측이 "여기까지 받았고 다음은 이 번호가 필요하다"고 알려 주는 응답이다.</dd>
+<dt>Dup ACK</dt><dd>같은 번호의 ACK가 반복되는 것이다. 중간 세그먼트가 빠졌는데 뒤 세그먼트가 계속 도착할 때 생긴다.</dd>
+<dt>Fast Retransmit</dt><dd>Dup ACK 3개를 받으면 타이머를 기다리지 않고 바로 재전송하는 방식이다. 지연은 대략 1 RTT 수준이다.</dd>
+<dt>RTO (Retransmission Timeout)</dt><dd>ACK를 기다리는 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값은 200ms이고 실패할 때마다 두 배로 늘어난다.</dd>
+<dt>RTT / SRTT / RTTVAR</dt><dd>RTT는 패킷이 갔다가 응답이 돌아오는 왕복 시간이다. SRTT는 커널이 평활화한 RTT 평균, RTTVAR는 그 변동폭이며 RTO 계산에 쓰인다.</dd>
+<dt>cwnd (혼잡 윈도우)</dt><dd>ACK 없이 한 번에 보낼 수 있는 데이터 양의 상한이다. 손실이 감지되면 줄어들고 처리량도 같이 떨어진다.</dd>
+<dt>Slow Start</dt><dd>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.</dd>
+<dt>Head-of-Line 블로킹</dt><dd>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.</dd>
+<dt>tail drop</dt><dd>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.</dd>
+<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.</dd>
+<dt>MTU 블랙홀</dt><dd>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.</dd>
+<dt>재전송률</dt><dd>전체 송신 세그먼트 중 재전송된 비율이다. <code>TcpRetransSegs / OutSegs</code>로 계산한다.</dd>
+<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.</dd>
+<dt>TCP_USER_TIMEOUT</dt><dd>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.</dd>
+</dl>
+</section>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+</main>
+</body>
+</html>

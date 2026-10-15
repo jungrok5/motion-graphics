@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>이동 패킷, 바이트를 줄이면 무슨 일이? — 글</title>
+<meta name="description" content="같은 이동 정보가 프로토버퍼 34B · 커스텀 24B · 비트 패킹 19B · 극단 양자화 8B. 1바이트 = 월 6.5TB가 되는 곱하기, 크기별 송신 트래픽 · 비용 · 서버 대수 · 보스존 수용, 패킷 하나에 담기는 인원, 그리고 프로토버퍼는 이동만 bytes로.">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<span class="eyebrow">글로 읽기 · 1:37</span>
+<h1>이동 패킷, 바이트를 줄이면 무슨 일이?</h1>
+<div class="tags"><span>bandwidth</span><span>quantization</span><span>protobuf</span><span>cost</span></div>
+<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
+<p class="lede">MMO 서버에서 캐릭터 이동 패킷 하나의 크기를 34B에서 8B까지 줄였을 때 트래픽, 비용, 서버 대수, 패킷 수가 어떻게 달라지는지 계산한 영상이다. 이동 정보는 보는 사람 수, 갱신 빈도, 동접만큼 곱해져서 나가기 때문에 1바이트 차이도 월 단위로는 테라바이트가 된다. 모든 수치는 동접 5,000, 보는 사람 50명, 이동 갱신 10Hz, 이동이 송신의 60%(24B 기준)라는 예시 가정에서 나온 값이다.</p>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">같은 이동 정보, 네 가지 크기</a></li><li><a href="#ch02">1바이트에 붙는 곱하기</a></li><li><a href="#ch03">왜 브로드캐스트가 대부분인가</a></li><li><a href="#ch04">크기별 총량</a></li><li><a href="#ch05">서버와 수용 인원</a></li><li><a href="#ch06">패킷 하나에 몇 명</a></li><li><a href="#ch07">그럼 프로토버퍼는?</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<section id="ch01">
+<h2><span class="n">01</span>같은 이동 정보, 네 가지 크기</h2>
+<p class="sub">프로토버퍼 34B · 커스텀 24B · 비트 패킹 19B · 극단 양자화 8B · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
+<p>같은 이동 정보(캐릭터 ID, x/y/z 좌표, 방향, 상태, 시각)를 네 가지 방식으로 인코딩해 바이트 칸으로 나란히 보여준다. 프로토버퍼 기본은 <code>34B</code>, 커스텀 기본은 <code>24B</code>, 커스텀 비트 패킹은 <code>19B</code>, 이동 전용 극단 양자화는 <code>8B</code>다.</p>
+<p>프로토버퍼 행의 빨간 칸은 필드 태그와 길이다. 프로토버퍼는 필드마다 "몇 번 필드인지"를 적는 태그 바이트가 붙고, 메시지를 감싸는 래퍼에도 2바이트가 든다. 커스텀 형식은 필드 순서를 양쪽이 미리 알고 있으니 이 칸이 없다. 비트 패킹은 방향, 상태, 시각 차이(Δt)처럼 범위가 작은 값을 1~2바이트로 줄인 것이다.</p>
+<p>8B 행은 64비트를 슬롯 12b, x 14b, y 14b, z 8b, 방향 6b, 상태 4b, Δt 6b로 나눈다. 캐릭터 ID 대신 AOI 슬롯 번호를 쓰고, 좌표는 셀 기준 상대 좌표로 양자화하고, 방향은 64단계로 줄였다. 영상은 이것을 "이동만 극단적으로 다듬은 예"라고 표시한다. 34B와 8B의 차이는 76%다.</p>
+</section>
+<section id="ch02">
+<h2><span class="n">02</span>1바이트에 붙는 곱하기</h2>
+<p class="sub">보는 사람 × 갱신 빈도 × 동접 × 시간 · <a class="scene" href="index.html#ch02">▶ 이 장면 보기</a></p>
+<p>1바이트를 줄였을 때 서버 송신량이 얼마나 변하는지 곱셈을 한 줄씩 쌓아 보여준다.</p>
+<ul>
+<li><code>1 바이트</code> × 50 (한 명의 이동을 보는 사람 수) = 50B</li>
+<li>× 10 (초당 이동 갱신 10Hz) = 500B/s</li>
+<li>× 5,000 (동시접속) = 2.5MB/s, 즉 <code>20 Mbps</code></li>
+<li>× 86,400 (하루의 초) = 216GB/일</li>
+<li>× 30 (한 달) = 6.5TB/월</li>
+</ul>
+<p>한 사람의 이동은 그 사람을 볼 수 있는 50명에게 각각 따로 나가므로 바이트 하나가 50번 복제된다. 여기에 갱신 빈도와 동접이 곱해진다. 영상은 이 결과를 "이 규모 예시"로 표시한다.</p>
+</section>
+<section id="ch03">
+<h2><span class="n">03</span>왜 브로드캐스트가 대부분인가</h2>
+<p class="sub">서버는 1을 받고 50을 내보낸다 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
+<p>왼쪽은 플레이어 한 명 기준의 이동 트래픽이다. 24B 패킷을 10Hz로 보내면 내가 보내는 양은 <code>240 B/s</code>이고, 주변에 보이는 50명의 이동을 받는 양은 <code>12.0 KB/s</code>다. 서버 입장에서는 1을 받고 50을 내보낸다. 그래서 서버 트래픽은 수신보다 송신이 훨씬 크고, 송신 대부분이 브로드캐스트가 된다.</p>
+<p>오른쪽은 서버 송신 구성 예시다. 이동 브로드캐스트 60%, 전투·이펙트 25%, 채팅·기타 15%로 둔다. 24B 이동 패킷에서 1바이트는 이동 몫의 1/24이므로 전체 송신의 약 2.5%가 된다.</p>
+<p>브로드캐스트는 보는 사람 수만큼 복제되므로 줄인 바이트도 같은 배수로 줄어든다. 하나만 보면 작지만, 여러 바이트를 줄이면 그만큼 쌓인다.</p>
+</section>
+<section id="ch04">
+<h2><span class="n">04</span>크기별 총량</h2>
+<p class="sub">송신 트래픽 · 비용 · 유저 데이터 · <a class="scene" href="index.html#ch04">▶ 이 장면 보기</a></p>
+<p>네 가지 크기별로 서버 전체 월 송신량과 송신 비용을 막대로 비교한다. 이동 외 송신(전투, 채팅 등)은 고정으로 두고 계산했다.</p>
+<ul>
+<li><code>34B</code>: 324TB, $16.2k~29.2k/월</li>
+<li><code>24B</code>: 259TB, $13.0k~23.3k/월</li>
+<li><code>19B</code>: 227TB, $11.3k~20.4k/월</li>
+<li><code>8B</code>: 156TB, $7.8k~14.0k/월</li>
+</ul>
+<p>비용은 송신 단가 $0.05~0.09/GB 예시로 계산했다. 34B에서 8B로 가면 송신 트래픽은 월 −168TB(−52%), 송신 비용은 월 −$8.4k~15.2k다. 플레이어 한 명이 받는 이동 데이터는 <code>17.0 KB/s</code>에서 <code>4.0 KB/s</code>로, 모바일 데이터 사용량은 시간당 61.2MB에서 14.4MB로 준다.</p>
+</section>
+<section id="ch05">
+<h2><span class="n">05</span>서버와 수용 인원</h2>
+<p class="sub">대역폭이 병목일 때 · 일반 필드는 선형, 보스존은 제곱근 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
+<p>서버 대수가 대역폭으로 정해진다고 가정하고 34B에서 25대가 필요하다고 두면, 24B는 20대, 19B는 17대, 8B는 12대가 된다. 34B에서 8B로 가면 13대가 줄고, 대당 월 $700 예시로 월 $9.1k다.</p>
+<p>같은 장비로 더 받을 수 있는 인원도 보여준다. 일반 필드는 트래픽이 동접에 비례하므로 송신 총량 비율 그대로 늘어난다(24B ×1.25, 19B ×1.43, 8B ×2.08). 보스존은 모두가 모두를 보기 때문에 트래픽이 인원의 제곱(N²)에 비례한다. 그래서 수용 인원은 바이트 비율의 제곱근만큼 늘어난다(24B ×1.19, 19B ×1.34, 8B ×2.06). 바이트가 약 1/4이 되면 수용 인원은 약 2배다.</p>
+<p>이 계산은 대역폭이 병목일 때만 맞다. 서버가 CPU에서 먼저 막히면 패킷 크기를 줄여도 대수 효과는 작다고 영상에서 따로 표시한다.</p>
+</section>
+<section id="ch06">
+<h2><span class="n">06</span>패킷 하나에 몇 명</h2>
+<p class="sub">작을수록 한 패킷에 더 많이 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
+<p>패킷 하나의 페이로드를 최대 1,460B(예시)로 두고, 캐릭터 이동 정보가 몇 명분 들어가는지 보여준다. 34B는 42명, 24B는 60명, 19B는 76명, 8B는 182명이다.</p>
+<p>혼잡 지역에서 60명이 보이는 경우를 예로 들어, 34B는 패킷 2개(60 × 34 = 2,040B), 24B · 19B · 8B는 1개로 충분하다(24B면 1,440B). 패킷 수가 줄면 패킷마다 붙는 헤더, 초당 패킷 수(pps), 커널의 패킷 처리 비용도 같이 준다. 바이트 총량과 별개로 패킷 개수 자체가 서버 부하가 된다.</p>
+</section>
+<section id="ch07">
+<h2><span class="n">07</span>그럼 프로토버퍼는?</h2>
+<p class="sub">형식보다 바이트 수가 비용을 정한다 · <a class="scene" href="index.html#ch07">▶ 이 장면 보기</a></p>
+<p>프로토버퍼와 커스텀을 같은 수준끼리 비교한다. 기본끼리는 커스텀 24B 대 프로토 34B로 서버 송신이 +25%, 튜닝끼리는 커스텀 19B 대 프로토 26B로 +20%다. 이 퍼센트는 이동 외 송신까지 포함한 전체 송신 기준이다. 필드 태그와 길이 접두는 프로토버퍼 구조상 튜닝해도 남는다.</p>
+<p>대안으로 이동만 프로토버퍼의 <code>bytes</code> 필드 하나에 담는 방식을 보여준다. 태그·길이 3B 뒤에 8B × 50명 = 400B를 넣으면 캐릭터당 약 8.06B로 커스텀과 같은 크기가 된다.</p>
+<ul>
+<li>나머지 메시지는 프로토버퍼를 그대로 쓴다. 스키마 진화, 클라·서버·봇 코드 생성, 디버깅 편의를 유지할 수 있다.</li>
+<li>바이트는 트래픽 대부분을 차지하는 이동·전투 브로드캐스트 같은 뜨거운 경로에서만 깎는다.</li>
+<li>비용을 정하는 것은 형식 이름보다 실제로 보내는 바이트 수다.</li>
+</ul>
+</section>
+<section id="terms">
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>프로토버퍼 (Protocol Buffers)</dt><dd>스키마 파일로 메시지를 정의하고 여러 언어용 직렬화 코드를 생성해 주는 형식이다. 필드마다 번호 태그를 붙여 보내므로 필드 추가·삭제에 강하지만 그만큼 바이트가 붙는다.</dd>
+<dt>필드 태그 · 길이 접두</dt><dd>프로토버퍼가 각 필드 앞에 붙이는 "필드 번호와 타입" 바이트, 그리고 중첩 메시지나 bytes 앞에 붙는 길이 값이다. 영상의 빨간 칸이 이것이다.</dd>
+<dt>커스텀 직렬화</dt><dd>클라와 서버가 필드 순서와 크기를 미리 약속하고 값만 이어 붙이는 방식이다. 태그가 없어 작지만 형식이 바뀌면 양쪽을 같이 고쳐야 한다.</dd>
+<dt>비트 패킹</dt><dd>값의 범위에 맞게 바이트나 비트 단위로 필드 크기를 줄여 빈틈없이 채우는 것이다. 상태 값처럼 몇 가지뿐인 값에 4바이트를 쓰지 않는 식이다.</dd>
+<dt>양자화</dt><dd>연속된 실수 값을 정해진 단계 수로 반올림해 정수로 저장하는 것이다. 방향을 64단계(6비트)로, 좌표를 셀 기준 14비트로 줄이는 것이 그 예이며 정밀도를 일부 포기한다.</dd>
+<dt>AOI (Area of Interest)</dt><dd>한 플레이어가 볼 수 있는 주변 범위다. 서버는 AOI 안의 대상에게만 이동을 보내며, 8B 예시는 캐릭터 ID 대신 AOI 안의 슬롯 번호를 쓴다.</dd>
+<dt>브로드캐스트</dt><dd>한 캐릭터의 상태 변화를 그 캐릭터를 보는 모든 클라에게 각각 보내는 것이다. 보는 사람이 50명이면 같은 내용이 50번 나가므로 서버 송신의 대부분을 차지한다.</dd>
+<dt>동접 (CCU)</dt><dd>같은 시점에 접속해 있는 유저 수다. 영상의 예시는 5,000명이다.</dd>
+<dt>갱신 빈도 (Hz)</dt><dd>1초에 몇 번 상태를 보내는지다. 이동 10Hz는 100ms마다 한 번 위치를 보낸다는 뜻이다.</dd>
+<dt>Δt</dt><dd>기준 시각과의 시간 차이다. 절대 시각 대신 작은 차이 값만 보내 바이트를 줄인다.</dd>
+<dt>대역폭 병목</dt><dd>서버 대수가 CPU나 메모리보다 네트워크 송신량 한도에서 먼저 정해지는 상황이다. 이때만 바이트 절감이 서버 대수 절감으로 바로 이어진다.</dd>
+<dt>N² 트래픽 (보스존)</dt><dd>N명이 한곳에 모여 서로를 모두 보면 각자 N명에게 받고 N명에게 보내져 전체 트래픽이 N²에 비례한다. 그래서 바이트를 줄인 효과가 수용 인원에는 제곱근으로 나타난다.</dd>
+<dt>MSS</dt><dd>패킷 하나에 실을 수 있는 최대 페이로드 크기다. 일반적인 이더넷 환경의 TCP에서 1,460B가 흔한 값이며, 영상은 이를 예시로 쓴다.</dd>
+<dt>pps (packets per second)</dt><dd>초당 처리하는 패킷 수다. 같은 바이트라도 패킷 수가 많으면 헤더와 커널·NIC 처리 비용이 늘어난다.</dd>
+<dt>스키마 진화</dt><dd>이미 배포된 클라와 서버가 섞여 있어도 메시지에 필드를 추가하거나 빼면서 호환을 유지하는 것이다. 프로토버퍼를 쓰는 주된 이유다.</dd>
+</dl>
+</section>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+</main>
+</body>
+</html>

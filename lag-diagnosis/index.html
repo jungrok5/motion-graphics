@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">이 영상은 "렉"이라는 하나의 증상을 클라렉, 네트워크렉, 서버렉으로 나누는 방법을 보여 준다. 체감 지연은 클라, 네트워크, 서버 구간 지연의 합이므로 어느 구간이 늘었는지 재면 원인이 갈린다. 실제로 볼 지표는 프레임타임, 전송 핑, 앱 핑 세 가지와 영향 범위다.</p>
 
 <article data-ch="01">
@@ -911,8 +912,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);

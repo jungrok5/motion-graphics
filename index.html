@@ -33,6 +33,10 @@
   .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
   .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
   .tags .len { color: var(--live); border-color: var(--live); }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .links a, .head-links a { font: 600 14px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 9px 13px; background: var(--surface); }
+  .links a:hover, .head-links a:hover { border-color: var(--accent); }
+  .head-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
   footer { color: var(--dim); font-size: 13px; }
   footer a { color: var(--fg); }
 </style>
@@ -42,7 +46,8 @@
   <header>
     <span class="eyebrow">Code-driven motion graphics</span>
     <h1>코드로 그리는 기술 설명 영상</h1>
-    <p>모든 프레임을 코드로 그립니다. 브라우저에서 바로 재생되고, 같은 페이지를 프레임별로 구워 MP4도 만듭니다.</p>
+    <p>모든 프레임을 코드로 그립니다. 브라우저에서 바로 재생되고, 영상마다 글로 읽는 페이지와 용어 정리가 함께 있습니다.</p>
+    <div class="head-links"><a href="glossary.html">전체 용어집</a></div>
   </header>
   <ul id="list"></ul>
   <footer>Source: <a href="https://github.com/jungrok5/motion-graphics">github.com/jungrok5/motion-graphics</a></footer>
@@ -90,6 +95,9 @@
     li.innerHTML = `<a class="card" href="${v.path}">
       <div class="poster"><iframe src="${v.path}#poster" title="${v.title}" loading="lazy" tabindex="-1"></iframe></div>
       <div class="meta"><h2></h2><p></p><div class="tags"><span class="len">${v.length}</span>${v.tags.map(t => `<span>${t}</span>`).join('')}</div></div></a>`;
+    const links = document.createElement('div'); links.className = 'links';
+    links.innerHTML = `<a href="${v.path}">▶ 영상 보기</a><a href="${v.path}article.html">글로 읽기</a>`;
+    li.appendChild(links);
     li.querySelector('h2').textContent = v.title;
     li.querySelector('p').textContent = v.desc;
     list.appendChild(li);

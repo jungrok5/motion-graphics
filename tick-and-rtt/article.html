@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>50ms와 RTT, 렉은 어디서 생길까? — 글</title>
+<meta name="description" content="서버 틱 처리시간이 50ms를 넘으면 왜 문제인지(응답 · 끊김 · 시간 왜곡), RTT가 느리면 무엇이 달라지는지(결과 지연 · 과거의 나 · 판정 불일치 · 지터).">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<span class="eyebrow">글로 읽기 · 1:23</span>
+<h1>50ms와 RTT, 렉은 어디서 생길까?</h1>
+<div class="tags"><span>tick budget</span><span>RTT</span><span>jitter</span><span>lag compensation</span></div>
+<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
+<p class="lede">게임 서버가 느릴 때와 네트워크 왕복 시간(RTT)이 길 때 플레이어가 겪는 지연이 어떻게 다른지 설명하는 영상이다. 서버의 틱 처리시간이 틱 간격(20Hz 기준 50ms)을 넘으면 같은 존의 모든 플레이어가 함께 늦어지고, RTT가 길면 그 플레이어와 그 플레이어를 보는 사람이 늦어진다. 체감 지연은 RTT, 틱 대기, 틱 처리, 보간, 프레임 시간을 더한 값으로 정리한다.</p>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">틱은 서버 세계의 시계</a></li><li><a href="#ch02">50ms를 넘으면</a></li><li><a href="#ch03">끊김과 왜곡</a></li><li><a href="#ch04">RTT란</a></li><li><a href="#ch05">RTT가 느리면</a></li><li><a href="#ch06">정리</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<section id="ch01">
+<h2><span class="n">01</span>틱은 서버 세계의 시계</h2>
+<p class="sub">세계는 틱마다 한 칸씩 움직인다 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
+<p>게임 서버는 요청이 올 때마다 바로 처리하지 않고, 정해진 간격마다 세계 전체를 한 번씩 갱신한다. 이 한 번의 갱신을 틱이라고 한다. 화면의 T1, T2 … 칸이 틱이고, 20Hz 서버라면 50ms마다 한 칸씩 진행된다.</p>
+<p>예시 막대에서 한 틱의 처리에 30ms가 걸리고 남은 20ms는 여유로 표시된다. 서버가 정상적으로 돌아가는 조건은 하나, 한 틱의 처리시간이 틱 간격보다 짧아야 한다는 것이다.</p>
+<p>틱 간격은 틱레이트로 정해진다. <code>10Hz = 100ms</code>, <code>20Hz = 50ms</code>, <code>30Hz = 33ms</code>, <code>60Hz = 16.7ms</code>이다. 영상은 MMO가 보통 10~20Hz, 빠른 액션 게임과 FPS는 20~128Hz로 게임마다 다르다고 소개한다.</p>
+</section>
+<section id="ch02">
+<h2><span class="n">02</span>50ms를 넘으면</h2>
+<p class="sub">다음 틱이 밀리고, 기다림과 처리가 함께 늘어난다 · <a class="scene" href="index.html#ch02">▶ 이 장면 보기</a></p>
+<p>위 레인은 정상 상태로 처리 30ms, 20Hz를 유지한다. 아래 레인은 과부하 상태로 한 틱 처리에 120ms가 걸린다. 처리가 끝나야 다음 틱을 시작할 수 있으니 틱 시작이 계속 뒤로 밀리고, 실제 틱레이트는 약 8Hz로 떨어진다.</p>
+<p>플레이어 입력은 도착하자마자 처리되지 않는다. 다음 틱이 시작될 때까지 기다렸다가 그 틱에서 처리되고, 처리가 끝나야 응답이 나간다. 그래서 응답 시간은 틱 대기와 처리시간의 합이고, 과부하에서는 두 값이 함께 커진다. 화면의 첫 입력은 정상일 때 응답 70ms, 과부하일 때 180ms가 걸린다.</p>
+<ul>
+<li>같은 존에 있는 플레이어 전원이 동시에 느려진다. 각자의 핑은 그대로인데 반응만 늦다.</li>
+<li>50ms는 20Hz일 때의 예산이다. 30Hz라면 33ms, 10Hz라면 100ms가 예산이다.</li>
+<li>여유가 0에 가까우면 작은 스파이크도 바로 렉이 된다. 영상은 p99 처리시간을 예산의 70~80% 안쪽으로 두어야 안전하다고 하며, 이 수치는 예시로 표시되어 있다.</li>
+</ul>
+</section>
+<section id="ch03">
+<h2><span class="n">03</span>끊김과 왜곡</h2>
+<p class="sub">느려지는 건 반응만이 아니다 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
+<p>왼쪽은 상대 캐릭터가 내 화면에서 움직이는 모습이다. 정상일 때는 서버 스냅샷이 50ms마다 고르게 도착하고, 과부하일 때는 120ms 이상 간격으로 불규칙하게 도착한다. 아래쪽 점이 스냅샷이 도착한 시점이다. 클라이언트는 받은 스냅샷 사이를 보간해서 부드럽게 그리는데, 스냅샷 간격이 벌어지면 그릴 재료가 떨어진다.</p>
+<ul>
+<li>보간 버퍼가 바닥난다. 다음 스냅샷이 오지 않아 캐릭터가 멈칫했다가 순간이동한다.</li>
+<li>쿨다운, 버프, 도트(지속 피해)가 늦게 끝난다. 틱 단위로 처리되는 시간이 늘어지기 때문이다.</li>
+<li>서버가 밀린 틱을 몰아서 실행하면 CPU가 급등하고, 그 때문에 다시 지연되는 악순환이 생긴다.</li>
+<li>틱 사이 경과 시간인 dt가 커진다. 한 번에 이동하는 거리가 길어져 충돌 판정을 놓치거나 이동 검증이 정상 이동을 핵으로 오탐할 수 있다.</li>
+</ul>
+<p>틱이 늦어지면 반응 속도만 떨어지는 데서 끝나지 않고, 화면 속 세상의 움직임 자체가 끊긴다.</p>
+</section>
+<section id="ch04">
+<h2><span class="n">04</span>RTT란</h2>
+<p class="sub">내 패킷이 서버까지 갔다 돌아오는 시간 · <a class="scene" href="index.html#ch04">▶ 이 장면 보기</a></p>
+<p>RTT는 내 패킷이 서버까지 갔다가 돌아오는 시간이다. 업링크와 다운링크가 각각 대략 RTT의 절반이다. 게임에 표시되는 핑 숫자는 보통 이 왕복 시간이며, 서버의 틱 대기는 빠져 있는 경우가 많다.</p>
+<p>아래 두 레인은 같은 서버에서 RTT만 다른 경우다. 내 행동의 결과가 돌아오기까지 업링크, 틱 대기, 처리, 다운링크를 차례로 거친다. 영상에서는 틱 대기 25ms, 처리 10ms로 고정했고, RTT 30ms면 65ms 후, RTT 200ms면 235ms 후에 결과가 도착한다.</p>
+<p>서버 성능이 같아도 RTT가 크면 결과는 그만큼 늦게 돌아온다.</p>
+</section>
+<section id="ch05">
+<h2><span class="n">05</span>RTT가 느리면</h2>
+<p class="sub">나의 결과도, 남이 보는 나도 늦어진다 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
+<p>RTT가 길 때 생기는 일을 네 장의 카드로 보여준다.</p>
+<ul>
+<li>결과 확인이 늦다. 클라이언트 예측 덕분에 내 화면의 캐릭터는 바로 움직이지만, 데미지나 아이템 획득 같은 확정은 RTT와 틱을 거친 뒤에 온다. 카드에서는 시전 후 235ms 동안 확인 대기 상태였다가 -1,240 데미지가 확정된다.</li>
+<li>남들이 보는 나는 과거의 나다. 상대 화면에 보이는 내 위치는 내 RTT/2, 상대 RTT/2, 보간 지연이 더해진 만큼 늦은 위치이고, 합치면 수백 ms 전이 된다.</li>
+<li>판정이 어긋나고 엄폐물 뒤에서 맞는다. 내 화면의 적은 과거 위치에 있으므로, 서버는 시간을 되감아 내가 쏜 시점 기준으로 판정한다(랙 보상). 그 결과 상대는 이미 벽 뒤로 들어간 뒤에 맞는다.</li>
+<li>예측 오차와 러버밴딩이 커진다. 서버의 보정이 늦게 올수록 클라이언트는 더 멀리 갔다가 더 크게 되돌아온다. RTT 30ms와 200ms 레인을 비교하면 200ms 쪽의 되돌림 폭이 크다.</li>
+</ul>
+<p>마지막 줄은 지터를 다룬다. 도착 간격이 들쭉날쭉하면 보간 버퍼를 키워야 하고, 버퍼가 커지면 그만큼 남들의 움직임이 늦게 보인다.</p>
+</section>
+<section id="ch06">
+<h2><span class="n">06</span>정리</h2>
+<p class="sub">틱 처리시간 · RTT · 지터는 서로 다른 시간이다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
+<p>세 지표를 표로 비교한다.</p>
+<ul>
+<li><code>틱 처리시간</code>: 서버가 세계를 한 번 갱신하는 시간이다. 커지면 응답 지연, 이동 끊김, 시간 왜곡이 생기고 같은 존 전원이 느낀다.</li>
+<li><code>RTT</code>: 내 패킷이 서버까지 갔다 오는 시간이다. 커지면 결과 확인 지연, 판정 불일치, 보정 폭 증가가 생기고 나와 나를 보는 사람이 느낀다.</li>
+<li><code>지터</code>: RTT의 흔들림이다. 커지면 보간 버퍼가 부족해 끊기고, 버퍼를 키우면 전체 지연이 늘어난다. 표에서는 느끼는 사람을 나로 적었다.</li>
+</ul>
+<p>체감 지연은 <code>RTT + 틱 대기 + 틱 처리 + 보간 + 프레임</code>으로 근사한다. 서버가 느리면 모두가 늦고, RTT가 느리면 나와 나를 보는 사람이 늦는다.</p>
+</section>
+<section id="terms">
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>틱 (tick)</dt><dd>서버가 게임 세계 전체를 한 번 갱신하는 주기적인 처리 단위다. 입력 처리, 이동, 전투 판정, 상태 전송이 한 틱 안에서 이루어진다.</dd>
+<dt>틱레이트 (Hz)</dt><dd>1초에 틱을 몇 번 도는지를 나타낸다. 20Hz면 틱 간격이 50ms이고, 이 간격이 한 틱의 처리시간 예산이 된다.</dd>
+<dt>틱 처리시간</dt><dd>한 틱을 실제로 처리하는 데 걸린 시간이다. 틱 간격보다 길어지면 다음 틱이 밀려 실제 틱레이트가 떨어진다.</dd>
+<dt>틱 대기</dt><dd>입력이 서버에 도착한 뒤 다음 틱이 시작될 때까지 기다리는 시간이다. 평균적으로 틱 간격의 절반 정도이고, 핑 숫자에는 보통 포함되지 않는다.</dd>
+<dt>p99</dt><dd>측정값을 작은 순서로 늘어놓았을 때 99% 위치의 값이다. 평균보다 스파이크를 잘 드러내므로 틱 처리시간 감시에 쓴다.</dd>
+<dt>RTT (Round-Trip Time)</dt><dd>패킷이 상대에게 갔다가 응답이 돌아오기까지의 왕복 시간이다. 게임의 핑 표시는 대개 이 값이다.</dd>
+<dt>지터 (jitter)</dt><dd>RTT나 패킷 도착 간격이 일정하지 않고 흔들리는 정도다. 지터가 크면 보간 버퍼를 키워야 해서 지연이 늘어난다.</dd>
+<dt>스냅샷</dt><dd>서버가 틱마다 클라이언트에게 보내는 주변 세계의 상태다. 다른 캐릭터의 위치 등이 들어 있다.</dd>
+<dt>보간 (interpolation)</dt><dd>클라이언트가 받은 스냅샷 두 개 사이의 위치를 계산해 부드럽게 그리는 방식이다. 이를 위해 스냅샷 몇 개를 버퍼에 쌓아 두고 약간 과거를 그린다.</dd>
+<dt>클라이언트 예측</dt><dd>서버 응답을 기다리지 않고 내 캐릭터를 먼저 움직이는 방식이다. 서버 결과가 예측과 다르면 나중에 보정한다.</dd>
+<dt>러버밴딩</dt><dd>예측한 위치와 서버의 위치가 달라 캐릭터가 뒤로 끌려가듯 되돌아가는 현상이다. 보정이 늦게 올수록 폭이 커진다.</dd>
+<dt>랙 보상 (lag compensation)</dt><dd>서버가 시간을 되감아, 공격한 플레이어의 화면 기준 위치로 명중을 판정하는 방식이다. 공격자에게는 공정하지만 맞는 쪽은 엄폐 후에 맞는 경험을 한다.</dd>
+<dt>dt</dt><dd>직전 틱부터 이번 틱까지 흐른 시간이다. 틱이 밀려 dt가 커지면 한 번에 움직이는 거리가 길어져 충돌 판정 누락이나 이동 검증 오탐이 생긴다.</dd>
+<dt>존 (zone)</dt><dd>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 그 존의 틱이 느려지면 존 안의 플레이어 전원이 영향을 받는다.</dd>
+</dl>
+</section>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+</main>
+</body>
+</html>

@@ -2,9 +2,11 @@
 
 코드로 만드는 기술 설명 모션그래픽. 각 영상은 `renderAt(t)` 하나로 모든 프레임을 그리는 캔버스 페이지이고,
 브라우저에서 바로 재생됩니다. 플레이어는 재생 속도(1× · 0.75× · 0.5×)를 바꿀 수 있고,
-영상 아래에는 챕터별 글 설명과 용어 정리가 붙습니다. MP4가 필요하면 같은 페이지를 Playwright로 프레임별로 찍어 ffmpeg로 굽습니다.
+영상 아래에는 챕터별 글 설명과 용어 정리가 붙고, 같은 내용을 글로만 읽는 페이지(`<영상>/article.html`)와
+전체 용어집(`glossary.html`)도 함께 생성됩니다. MP4가 필요하면 같은 페이지를 Playwright로 프레임별로 찍어 ffmpeg로 굽습니다.
 
 - **웹에서 보기 (GitHub Pages):** https://jungrok5.github.io/motion-graphics/
+- **전체 용어집:** https://jungrok5.github.io/motion-graphics/glossary.html
 - **Claude 아티팩트 플레이어:** https://claude.ai/artifact/FMEYiR2uH4gr3HRMzaugwH
 
 ## proto-bot-pipeline (64s)
@@ -61,6 +63,7 @@
 - 단일 HTML 캔버스. 모든 프레임은 renderAt(t)의 순수 함수(랜덤은 시드 고정).
 - 페이지에 플레이어: 재생/일시정지, 드래그 가능한 탐색바(챕터 눈금), 챕터 버튼, 재생 속도(1× · 0.75× · 0.5×), 전체 화면, 키보드(스페이스 재생, ←/→ 5초, `,` `.` 속도).
 - 플레이어 아래에 챕터별 글 설명과 용어 정리. 인프라팀이 읽는다고 보고 화면에 나온 수치와 똑같이 쓴다.
+  같은 내용으로 글만 읽는 페이지와 전체 용어집도 만든다(챕터마다 그 장면으로 가는 링크).
 - Playwright + ffmpeg로 같은 페이지를 30fps MP4로 굽는 스크립트도 함께.
 - 각 챕터 중간 프레임을 스틸로 뽑아 겹침·잘림을 확인하고 고친 뒤 보여줘.
 - 문구는 짧은 평서문. "~의 길", "~하는 곳" 같은 비유나 대구로 끝나는 표어는 쓰지 말고 요점을 그대로 쓴다. 예시 수치는 예시라고 표기.
@@ -238,6 +241,8 @@ node scripts/render.mjs proto-bot-pipeline/index.html out/proto-bot-pipeline.mp4
 node scripts/render.mjs proto-bot-pipeline/index.html out/stills --stills 3,20,45
 # 플레이어 헤드리스 점검 (에러, 재생, 챕터 이동, 재생 속도, 글 설명, 모바일 폭)
 node scripts/check-player.mjs proto-bot-pipeline/index.html
+# 글 페이지(<영상>/article.html)와 전체 용어집(glossary.html) 생성 — 영상 페이지의 글 설명이 원본
+node scripts/build-articles.mjs
 ```
 
 필요: Node 18+, Playwright(Chromium), ffmpeg.

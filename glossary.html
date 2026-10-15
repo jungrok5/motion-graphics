@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>용어집</title>
+<meta name="description" content="모든 기술 설명 영상에 나오는 용어 모음">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<span class="eyebrow">Glossary</span>
+<h1>용어집</h1>
+<p class="lede">모든 영상에 나오는 용어를 한곳에 모았다. 같은 용어도 영상마다 설명하는 맥락이 달라, 영상별 설명을 함께 둔다.</p>
+<div class="actions"><a href="./">전체 영상 목록</a></div>
+<input type="search" id="q" placeholder="용어 찾기 (예: RTT, 틱, Zero Window)" aria-label="용어 찾기">
+<dl class="terms" id="list">
+<dt><code>.proto</code> 파일</dt><dd><div>메시지 이름, 필드 이름, 타입, 번호를 선언하는 스키마 파일이다. 영상에서는 <code>game_packet.proto</code>가 모든 패킷의 원본이다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>갱신 빈도 (Hz)</dt><dd><div>1초에 몇 번 상태를 보내는지다. 이동 10Hz는 100ms마다 한 번 위치를 보낸다는 뜻이다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>게임 스레드</dt><dd><div>언리얼에서 입력 처리, 게임 로직 틱, 패킷 적용을 하는 메인 스레드다. 액터를 바꿀 수 있는 유일한 스레드라 여기가 느려지면 모든 것이 느려진다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>공유 브로드캐스트 버퍼</dt><dd><div>같은 패킷을 여러 세션에 보낼 때 복사 대신 함께 참조하는 버퍼다. 참조하는 세션이 모두 보내야 해제되므로 느린 세션 하나가 메모리를 붙잡는다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>광역기</dt><dd><div>한 번에 여러 대상을 맞히는 범위 공격이다. 피격 판정과 결과 알림이 피격 인원과 관전 인원의 곱만큼 생긴다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>논블로킹 send</dt><dd><div>버퍼가 차도 기다리지 않고 바로 반환하는 전송 방식이다. 로직 스레드가 느린 클라이언트 때문에 멈추지 않게 해 준다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>다운링크</dt><dd><div>클라이언트가 서버로부터 받는 방향의 회선이다. 수신량이 회선 속도를 넘으면 느린 회선부터 밀리고 끊긴다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>대역폭 병목</dt><dd><div>서버 대수가 CPU나 메모리보다 네트워크 송신량 한도에서 먼저 정해지는 상황이다. 이때만 바이트 절감이 서버 대수 절감으로 바로 이어진다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>델타 압축</dt><dd><div>이전에 보낸 상태와 비교해 바뀐 값만 보내는 방식이다. 패킷 크기를 줄인다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>동기 로딩</dt><dd><div>에셋을 디스크에서 읽는 동안 게임 스레드가 기다리는 로딩 방식이다. 비동기 로딩은 백그라운드에서 읽어 멈춤을 피한다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>동접 (CCU)</dt><dd><div>같은 시점에 접속해 있는 사용자 수다. 서버 대수를 정할 때 기준이 되는 값이다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div><div>같은 시점에 접속해 있는 유저 수다. 영상의 예시는 5,000명이다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>락 경합</dt><dd><div>여러 스레드가 같은 자원을 잡으려고 서로 기다리는 상태다. 서버 틱 처리시간을 늘리는 흔한 원인이다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>여러 스레드가 같은 공용 자원의 락을 잡으려고 기다리는 상황이다. 경매장, 길드처럼 존 사이에 공유되는 데이터에서 생긴다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>랙 보상 (lag compensation)</dt><dd><div>서버가 시간을 되감아, 공격한 플레이어의 화면 기준 위치로 명중을 판정하는 방식이다. 공격자에게는 공정하지만 맞는 쪽은 엄폐 후에 맞는 경험을 한다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>러버밴딩</dt><dd><div>클라 화면의 캐릭터가 서버가 인정한 위치로 끌려 되돌아가는 현상이다. 고무줄에 당겨지듯 보여서 붙은 이름이다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>예측한 위치와 서버의 위치가 달라 캐릭터가 뒤로 끌려가듯 되돌아가는 현상이다. 보정이 늦게 올수록 폭이 커진다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div><div>화면 속 캐릭터가 멈췄다가 실제 위치로 끌려가듯 튀거나 빨리 움직이는 현상이다. 밀린 이동을 한꺼번에 적용할 때 생긴다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>렉</dt><dd><div>입력한 뒤 결과가 화면에 나타나기까지 늦어지는 체감 지연을 통틀어 부르는 말이다. 원인은 클라, 네트워크, 서버 어디에도 있을 수 있다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>렌더 스레드</dt><dd><div>게임 스레드가 넘긴 장면 정보를 받아 그리기 명령을 만드는 스레드다. 게임 스레드보다 한 프레임 뒤에서 돈다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>로직 스레드</dt><dd><div>존 하나의 게임 상태를 처리하는 스레드로 존당 1개다. 한 스레드만 상태를 바꾸므로 존 내부에는 락이 없다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>리시브 스레드 · 센드 스레드</dt><dd><div>소켓 입출력만 맡도록 게임 스레드와 따로 둔 스레드다. 게임 스레드가 <code>recv()</code>·<code>send()</code>에서 블록되지 않게 해준다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>메시지 큐</dt><dd><div>I/O 스레드가 해석한 요청을 로직 스레드가 꺼내 가기 전까지 쌓아 두는 대기열이다. 깊이를 처리량으로 나누면 대기 시간이 나온다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>메인 스레드</dt><dd><div>클라이언트의 게임 로직과 렌더를 돌리는 스레드다. 프레임마다 수신 큐에서 정해진 개수만큼 패킷을 꺼내 처리한다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>메인 스레드 블로킹</dt><dd><div>게임 루프를 돌리는 스레드가 파일 읽기나 긴 연산에 묶여 다음 프레임을 처리하지 못하는 상태다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>백프레셔 (backpressure)</dt><dd><div>받는 쪽이 느릴 때 그 압력이 보내는 쪽으로 거슬러 전달되는 현상이다. 이 영상에서는 클라이언트 수신 큐에서 시작해 서버 앱 송신 큐까지 전달된다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>보간 (interpolation)</dt><dd><div>클라이언트가 받은 스냅샷 두 개 사이의 위치를 계산해 부드럽게 그리는 방식이다. 이를 위해 스냅샷 몇 개를 버퍼에 쌓아 두고 약간 과거를 그린다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>보간 버퍼</dt><dd><div>상대 클라가 서버 스냅샷을 일정 시간 모아 두고, 그 사이를 부드럽게 이어 그리기 위해 일부러 과거 상태를 보여주는 버퍼다. 영상 예시는 약 100ms다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>받은 위치를 잠깐 모아두고 타임스탬프에 맞춰 사이 값을 채워 재생하는 버퍼다. 패킷 간격이 고르지 않아도 움직임이 매끄럽게 보인다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>보정 보간 (Smoothing)</dt><dd><div>보정된 위치로 순간이동하지 않고 짧은 시간(영상에서는 100~200ms)에 걸쳐 옮겨 가는 처리다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>봇 클라이언트</dt><dd><div>사람 대신 프로그램이 실제 클라처럼 서버에 접속해 패킷을 보내는 테스트용 클라이언트다. 화면이나 리소스 없이 패킷 흐름만 재현한다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>부하 테스트</dt><dd><div>많은 봇을 동시에 접속시켜 서버와 인프라가 어디까지 버티는지 재는 테스트다. 영상에서는 CPU 70%를 임계로 잡는다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>브로드캐스트</dt><dd><div>한 플레이어의 상태 변화를 AOI 안의 다른 플레이어들에게 전송하는 일이다. 인원이 N명이면 틱당 <code>N × (N − 1)</code>개까지 늘어난다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>판정 결과를 AOI 안의 여러 플레이어에게 전송하는 일이다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>한 플레이어의 상태 변화를 그 플레이어를 볼 수 있는 다른 플레이어 모두에게 복제해서 보내는 것이다. 인원이 N이면 한 명의 변화가 N − 1개의 패킷이 된다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div><div>한 캐릭터의 상태 변화를 그 캐릭터를 보는 모든 클라에게 각각 보내는 것이다. 보는 사람이 50명이면 같은 내용이 50번 나가므로 서버 송신의 대부분을 차지한다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>비트 패킹</dt><dd><div>값의 범위에 맞게 바이트나 비트 단위로 필드 크기를 줄여 빈틈없이 채우는 것이다. 상태 값처럼 몇 가지뿐인 값에 4바이트를 쓰지 않는 식이다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>서버 권한 (Server Authority)</dt><dd><div>위치, 체력 같은 게임 상태의 최종 결정권을 서버가 갖는 구조다. 클라 조작을 그대로 믿지 않아 치트를 막을 수 있다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>송신 큐</dt><dd><div>클라이언트로 보낼 패킷이 실제 전송 전에 대기하는 버퍼다. 느린 클라이언트의 송신 큐가 차면 메모리가 늘고 연결이 끊긴다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>수신 스레드</dt><dd><div>클라이언트에서 소켓 읽기만 전담하는 스레드다. 렌더가 느려도 커널 수신 버퍼를 계속 비워 서버 쪽으로 압력이 가지 않게 한다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>수신 큐</dt><dd><div>수신 스레드가 받은 패킷을 메인 스레드가 꺼내 갈 때까지 담아 두는 앱 메모리 안의 큐다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>수신 큐 · 송신 큐</dt><dd><div>네트워크 스레드와 게임 스레드 사이에 패킷을 넘기는 대기열이다. 수신 큐 길이가 늘어난다는 것은 게임 스레드가 받는 속도를 못 따라간다는 신호다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>스냅샷</dt><dd><div>서버가 틱마다 클라이언트에게 보내는 주변 세계의 상태다. 다른 캐릭터의 위치 등이 들어 있다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>스키마 진화</dt><dd><div>이미 배포된 클라와 서버가 섞여 있어도 메시지에 필드를 추가하거나 빼면서 호환을 유지하는 것이다. 프로토버퍼를 쓰는 주된 이유다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>시야 반경</dt><dd><div>AOI의 크기를 정하는 거리다. 반경이 2배면 면적과 보이는 인원이 최대 4배가 된다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>아웃바운드</dt><dd><div>서버에서 클라이언트 방향으로 나가는 트래픽이다. 브로드캐스트가 늘면 인바운드보다 훨씬 크게 증가한다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>액터 (UObject)</dt><dd><div>언리얼에서 캐릭터, 몬스터, 이펙트처럼 월드에 놓이는 객체다. <code>UObject</code>는 그 기반 클래스이며 게임 스레드에서만 안전하게 다룰 수 있다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>앱 송신 큐 (세션 송신 큐)</dt><dd><div>서버가 세션별로 두는, 커널에 아직 넘기지 못한 데이터의 대기열이다. 느린 클라이언트일수록 커지고, 상한에 닿으면 연결을 끊는 경우가 많다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>앱 핑</dt><dd><div>서버의 게임 로직 큐와 틱을 거친 뒤 응답하는 핑이다. 전송 핑과의 차이가 서버 내부 대기 시간이다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>양자화</dt><dd><div>연속된 실수 값을 정해진 단계 수로 반올림해 정수로 저장하는 것이다. 방향을 64단계(6비트)로, 좌표를 셀 기준 14비트로 줄이는 것이 그 예이며 정밀도를 일부 포기한다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>어그로</dt><dd><div>몬스터가 누구를 공격할지 정하는 위협 수치다. 보스는 참가자 N명의 위협 목록을 계속 다시 계산한다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>영향 범위</dt><dd><div>같은 증상을 겪는 사람이 나 혼자인지, 같은 망인지, 채널 전체인지를 뜻한다. 원인 구간을 가르는 마지막 단서다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>예측 실행 (Client-side Prediction)</dt><dd><div>클라이언트가 서버 승인을 기다리지 않고 입력 결과를 먼저 화면에 보여주는 기법이다. 내 화면이 즉시 반응하는 이유다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>예측 이동</dt><dd><div>서버 응답을 기다리지 않고 클라가 입력을 바로 자기 캐릭터에 반영하는 것이다. 서버 결과가 오면 차이를 보정한다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>오차 허용치</dt><dd><div>서버와 클라 위치 차이가 이 값보다 작으면 보정하지 않는 기준이다. 사소한 떨림을 줄인다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>인스턴스 · 채널 분리</dt><dd><div>같은 지역을 여러 사본(채널)으로 나누거나 보스전을 별도 서버, 스레드로 떼어 한곳에 모이는 인원을 줄이는 방식이다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>재전송률</dt><dd><div>전체 송신 세그먼트 중 재전송된 비율이다. <code>TcpRetransSegs / OutSegs</code>로 계산한다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>재조정 (Reconciliation)</dt><dd><div>보정을 받으면 그 위치에서 아직 Ack를 못 받은 입력을 다시 적용해 현재 위치를 다시 계산하는 기법이다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>전송 핑</dt><dd><div>서버의 소켓, 네트워크 계층에서 바로 응답하는 핑이다. 게임 로직을 거치지 않으므로 순수한 네트워크 왕복 시간에 가깝다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>존 (Zone)</dt><dd><div>서버가 월드를 나눠 관리하는 단위다. 존마다 메시지 큐와 로직 스레드가 하나씩 붙는다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 그 존의 틱이 느려지면 존 안의 플레이어 전원이 영향을 받는다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div><div>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 보스가 있는 존에 인원이 몰리면 그 존 서버만 부하가 튄다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>존 메시지 큐</dt><dd><div>존별로 들어온 요청을 로직 스레드가 다음 틱에 꺼내 처리하도록 쌓아 두는 대기열이다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>죽음의 나선</dt><dd><div>처리가 늦어져 일이 더 쌓이고, 쌓인 일 때문에 처리가 더 늦어지는 악순환이다. 방치하면 서버 다운으로 이어진다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>지연 스파이크</dt><dd><div>평소 낮던 RTT가 짧은 시간 동안 크게 튀는 현상이다. 영상의 RTT 그래프에서 60ms 안팎이던 값이 800ms대로 오른다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>지터 (jitter)</dt><dd><div>RTT가 일정하지 않고 들쭉날쭉한 정도다. 평균 핑이 낮아도 지터가 크면 움직임이 끊겨 보인다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>패킷 도착 간격이 고르지 않게 흔들리는 정도다. 와이파이 구간에서 크게 나타나며, 크면 보간 버퍼를 늘려야 한다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>RTT나 패킷 도착 간격이 일정하지 않고 흔들리는 정도다. 지터가 크면 보간 버퍼를 키워야 해서 지연이 늘어난다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>직렬화</dt><dd><div>메모리 안의 구조체를 네트워크로 보낼 바이트 열로 바꾸는 일이다. 영상에서는 protobuf를 쓴다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>커스텀 직렬화</dt><dd><div>클라와 서버가 필드 순서와 크기를 미리 약속하고 값만 이어 붙이는 방식이다. 태그가 없어 작지만 형식이 바뀌면 양쪽을 같이 고쳐야 한다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>코드 생성(codegen)</dt><dd><div>스키마에서 소스 코드를 자동으로 만들어 내는 과정이다. 사람이 직접 짜지 않으니 클라, 서버, 봇의 패킷 구조가 같게 유지된다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>클라이언트 예측 (Prediction)</dt><dd><div>서버 응답을 기다리지 않고 입력 즉시 결과를 화면에 반영하는 방식이다. 조작감은 좋아지지만 서버 판정과 어긋날 수 있다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>서버 응답을 기다리지 않고 내 캐릭터를 먼저 움직이는 방식이다. 서버 결과가 예측과 다르면 나중에 보정한다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>틱 (Tick)</dt><dd><div>서버가 게임 월드를 한 번 갱신하는 주기다. 이 영상에서는 50ms마다 메시지 처리부터 브로드캐스트까지 한 바퀴를 돈다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>서버가 게임 세계 전체를 한 번 갱신하는 주기적인 처리 단위다. 입력 처리, 이동, 전투 판정, 상태 전송이 한 틱 안에서 이루어진다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div><div>서버가 게임 세계를 한 번 갱신하는 주기다. 20Hz면 50ms마다 한 번이고, 이 시간이 한 틱의 처리 예산이다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div><div>게임 로직을 한 번 갱신하는 단위다. 서버는 고정 간격(예: 20Hz, 50ms)으로 돌고, 이 영상에서 클라의 틱은 게임 스레드의 한 프레임이다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>틱 / 틱레이트</dt><dd><div>서버가 게임 상태를 한 번 갱신하는 주기가 틱이고, 초당 틱 수가 틱레이트다. <code>20Hz</code>는 50ms마다 한 번 판정한다는 뜻이다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>서버가 게임 상태를 한 번 갱신하는 주기가 틱이고, 초당 틱 수가 틱레이트다. <code>20Hz</code>면 한 틱 예산이 50ms다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>틱은 서버가 월드를 한 번 갱신하는 주기, 틱레이트는 초당 틱 횟수다. 20Hz면 틱 간격이 50ms다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>틱 대기</dt><dd><div>요청이 존 메시지 큐에 들어가 다음 틱이 시작될 때까지 기다리는 시간이다. 0~50ms 사이로, 평균은 틱 간격의 절반이다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>입력이 서버에 도착한 뒤 다음 틱이 시작될 때까지 기다리는 시간이다. 평균적으로 틱 간격의 절반 정도이고, 핑 숫자에는 보통 포함되지 않는다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>틱 예산</dt><dd><div>한 틱 안에 처리를 끝내야 하는 시간 한도다. 처리시간이 이를 넘기면 다음 틱이 밀리고 틱레이트가 떨어진다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>틱 하나에 허용된 시간이다. 처리 시간이 예산을 넘으면 다음 틱이 늦게 시작한다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>틱 처리시간</dt><dd><div>한 틱을 실제로 처리하는 데 걸린 시간이다. 틱 간격보다 길어지면 다음 틱이 밀려 실제 틱레이트가 떨어진다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>틱레이트 (Hz)</dt><dd><div>초당 틱 횟수로 Hz 단위로 쓴다. <code>20Hz</code>면 틱당 50ms 예산이고, 틱이 길어지면 실제 Hz가 떨어진다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>1초에 틱을 몇 번 도는지를 나타낸다. 20Hz면 틱 간격이 50ms이고, 이 간격이 한 틱의 처리시간 예산이 된다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>패킷</dt><dd><div>클라이언트와 서버가 주고받는 메시지 한 단위다. 영상에서는 <code>.proto</code>의 <code>message</code> 하나가 패킷 하나에 해당한다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>패킷 손실</dt><dd><div>전송 중에 패킷이 사라져 상대에게 도착하지 않는 것이다. TCP에서는 재전송으로 복구되지만 그만큼 늦어진다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>전송 중 패킷이 사라지는 비율이다. 영상의 네트워크렉 구간에서 0%에서 12%로 오른다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>패킷 플로우</dt><dd><div>로그인부터 던전 클리어까지 클라가 서버와 주고받는 패킷의 순서다. 봇은 이 순서를 그대로 따라 한다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>퍼블리셔</dt><dd><div>게임을 서비스하고 운영하는 회사 또는 조직이다. 영상에서는 QA와 인프라팀이 봇을 받아 부하 테스트를 한다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>프레임 · FPS</dt><dd><div>화면 한 장을 만드는 한 바퀴와, 1초에 그 바퀴를 몇 번 도는지다. 1프레임 시간은 1000 ÷ FPS ms로, 60fps는 16.7ms, 15fps는 67ms다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>프레임당 처리 예산</dt><dd><div>한 프레임에 처리할 패킷 수의 한도다. 프레임 시간이 길어지는 것을 막는 대신 남은 패킷은 다음 프레임으로 넘어간다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>프레임타임</dt><dd><div>클라가 화면 한 장(프레임)을 만드는 데 걸린 시간이다. 60fps를 유지하려면 프레임당 16.7ms 안에 끝나야 한다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>프로토버퍼 (Protocol Buffers)</dt><dd><div>스키마 파일로 메시지를 정의하고 여러 언어용 직렬화 코드를 생성해 주는 형식이다. 필드마다 번호 태그를 붙여 보내므로 필드 추가·삭제에 강하지만 그만큼 바이트가 붙는다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>필드 번호(tag)</dt><dd><div>각 필드 뒤의 <code>= 1</code>, <code>= 2</code> 같은 숫자다. 직렬화된 바이트에서는 이름 대신 이 번호로 필드를 구분하므로 한 번 정하면 바꾸지 않는다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>필드 태그 · 길이 접두</dt><dd><div>프로토버퍼가 각 필드 앞에 붙이는 "필드 번호와 타입" 바이트, 그리고 중첩 메시지나 bytes 앞에 붙는 길이 값이다. 영상의 빨간 칸이 이것이다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>핸들러</dt><dd><div>패킷 종류별로 실행되는 처리 함수다. 이동 패킷이면 액터 위치를 바꾸고, 스폰 패킷이면 액터를 만든다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>히치 (Hitch)</dt><dd><div>평소 정상이던 프레임 중 하나가 갑자기 수백 ms 걸려 화면이 순간 멈추는 현상이다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>평소보다 훨씬 긴 프레임 하나가 튀는 현상이다. GC, 동기 로딩, 대량 스폰이 흔한 원인이다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>Ack</dt><dd><div>서버가 특정 입력을 받아 처리했다고 알려 주는 응답이다. 영상에서는 <code>Ack #n</code>이 <code>Move #n</code>에 대한 확인이다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>AOI (Area of Interest)</dt><dd><div>각 플레이어가 보는 범위, 즉 시야다. 서버는 이 범위 안의 플레이어에게만 변경 사항을 보낸다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>각 플레이어가 보는 범위, 즉 시야다. 서버는 이 범위 안의 플레이어에게만 스킬 시전 사실을 보낸다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>플레이어 주변에서 서버가 정보를 보내 줄 범위다. 보통 시야 반경으로 정하고, 그리드로 나눠 주변 대상을 찾는다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div><div>한 플레이어가 볼 수 있는 주변 범위다. 서버는 AOI 안의 대상에게만 이동을 보내며, 8B 예시는 캐릭터 ID 대신 AOI 안의 슬롯 번호를 쓴다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>Correction (보정 패킷)</dt><dd><div>서버 판정이 클라 예측과 다를 때 서버가 보내는 올바른 위치다. 클라는 이 값으로 자기 위치를 덮어쓴다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>cwnd (혼잡 윈도우)</dt><dd><div>ACK 없이 한 번에 보낼 수 있는 데이터 양의 상한이다. 손실이 감지되면 줄어들고 처리량도 같이 떨어진다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>dt</dt><dd><div>직전 틱부터 이번 틱까지 흐른 시간이다. 틱이 밀려 dt가 커지면 한 번에 움직이는 거리가 길어져 충돌 판정 누락이나 이동 검증 오탐이 생긴다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>Dup ACK</dt><dd><div>같은 번호의 ACK가 반복되는 것이다. 중간 세그먼트가 빠졌는데 뒤 세그먼트가 계속 도착할 때 생긴다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>EAGAIN</dt><dd><div>논블로킹 소켓에서 커널 송신 버퍼가 가득 차 <code>send()</code>가 지금은 쓸 수 없다고 돌려주는 오류 코드다. 앱은 데이터를 자기 큐에 두고 나중에 다시 보내야 한다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>Fast Retransmit</dt><dd><div>Dup ACK 3개를 받으면 타이머를 기다리지 않고 바로 재전송하는 방식이다. 지연은 대략 1 RTT 수준이다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>FPS</dt><dd><div>초당 그리는 프레임 수다. 프레임타임의 역수이며 영상에서는 정상 60, 히치 중 4로 표시된다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>초당 프레임 수다. 메인 스레드가 프레임마다 패킷을 꺼내므로 FPS가 떨어지면 초당 처리량도 같이 떨어진다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>GC (가비지 컬렉션)</dt><dd><div>쓰지 않는 객체 메모리를 회수하는 작업이다. 언리얼 GC는 게임 스레드를 잠시 멈추므로 객체가 많을수록 멈춤이 길다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt>GC 스파이크</dt><dd><div>가비지 컬렉터가 메모리를 정리하느라 실행을 잠시 멈추는 구간이다. 클라에서는 히치, 서버에서는 틱 지연으로 나타난다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div></dd>
+<dt>GC 정지</dt><dd><div>가비지 컬렉터가 메모리를 정리하는 동안 스레드가 멈추는 현상이다. 수신 경로에서 할당이 많으면 자주 일어난다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>GC Stop-the-world</dt><dd><div>가비지 컬렉터가 메모리를 정리하는 동안 프로세스의 스레드를 멈추는 구간이다. 이 동안에는 모든 존의 틱이 같이 멈춘다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>Head-of-Line (HOL) 블로킹</dt><dd><div>순서를 보장하는 TCP에서 앞 패킷 하나가 재전송을 기다리는 동안 뒤 패킷들도 전달되지 못하고 막히는 현상이다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>I/O 스레드</dt><dd><div>소켓 수신·송신, 암호화와 복호화, 직렬화를 맡는 스레드다. 게임 로직은 돌리지 않는다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div></dd>
+<dt>IOCP</dt><dd><div>Windows의 비동기 I/O 완료 통지 방식이다. 전송 요청을 걸어 두면 대기 중인 바이트가 쌓이므로 여기에도 상한이 필요하다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>LOD (Level of Detail)</dt><dd><div>거리나 중요도에 따라 상세도를 낮추는 기법이다. 서버는 갱신 빈도를, 클라이언트는 그래픽 품질을 낮춘다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>MSS</dt><dd><div>패킷 하나에 실을 수 있는 최대 페이로드 크기다. 일반적인 이더넷 환경의 TCP에서 1,460B가 흔한 값이며, 영상은 이를 예시로 쓴다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>MTU 블랙홀</dt><dd><div>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>N × (N − 1)</dt><dd><div>N명이 모두 서로를 볼 때 한 틱에 필요한 전송 수다. 인원의 제곱에 비례해서 늘어난다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div></dd>
+<dt>N² 트래픽 (보스존)</dt><dd><div>N명이 한곳에 모여 서로를 모두 보면 각자 N명에게 받고 N명에게 보내져 전체 트래픽이 N²에 비례한다. 그래서 바이트를 줄인 효과가 수용 인원에는 제곱근으로 나타난다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>NIC 링 버퍼</dt><dd><div>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>p99</dt><dd><div>측정값을 정렬했을 때 상위 1% 경계 값이다. 틱 p99는 가끔 튀는 느린 틱을 잡아낸다.<span class="src"><a href="server-tick/article.html#terms">서버 안의 50ms, 무슨 일이 일어날까?</a></span></div><div>측정값을 작은 순서로 늘어놓았을 때 99% 위치의 값이다. 평균보다 스파이크를 잘 드러내므로 틱 처리시간 감시에 쓴다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt><code>p99</code> 지연</dt><dd><div>요청의 99%가 이 시간 안에 끝난다는 뜻의 응답 시간 지표다. 평균에 묻히는 느린 요청을 드러낸다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>pps (packets per second)</dt><dd><div>초당 패킷 수다. 작은 패킷이 많을 때는 대역폭보다 pps가 먼저 NIC나 커널 처리 한계에 걸리기도 한다.<span class="src"><a href="boss-lag/article.html#terms">보스가 뜨면 왜 렉이 걸릴까?</a></span></div><div>초당 처리하는 패킷 수다. 같은 바이트라도 패킷 수가 많으면 헤더와 커널·NIC 처리 비용이 늘어난다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+<dt>Protobuf (프로토콜 버퍼)</dt><dd><div>Google이 만든 직렬화 형식이다. 스키마를 <code>.proto</code> 파일에 적고, 여기서 각 언어용 직렬화 코드를 생성해 쓴다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt><code>protoc</code></dt><dd><div>Protobuf 컴파일러다. <code>.proto</code>를 읽어 C#, C++ 등 지정한 언어의 클래스 코드를 만든다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>RHI · GPU</dt><dd><div>RHI(Rendering Hardware Interface)는 그리기 명령을 DirectX, Vulkan 같은 그래픽 API로 넘기는 층이고, GPU가 실제로 그린다. 영상에서는 렌더 스레드보다 또 한 프레임 뒤에 처리된다.<span class="src"><a href="ue-client-threads/article.html#terms">언리얼 클라의 스레드와 렉</a></span></div></dd>
+<dt><code>RPS</code> / <code>DB QPS</code></dt><dd><div>초당 요청 수와 DB의 초당 쿼리 수다. 동접이 늘 때 서버와 DB가 받는 부하를 나타낸다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>RTO (Retransmission Timeout)</dt><dd><div>ACK를 기다리는 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값은 200ms이고 실패할 때마다 두 배로 늘어난다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div><div>TCP가 ACK를 기다리다 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값이 200ms라 손실 한 번이 큰 정지로 이어진다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>RTT (Round-Trip Time)</dt><dd><div>패킷이 클라에서 서버로 갔다가 응답이 돌아오기까지의 왕복 시간이다. 흔히 핑이라고 부른다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div><div>패킷이 클라에서 서버까지 갔다가 응답이 돌아오는 왕복 시간이다.<span class="src"><a href="lag-diagnosis/article.html#terms">렉 걸렸다. 서버 탓일까, 내 탓일까?</a></span></div><div>패킷이 상대에게 갔다가 응답이 돌아오는 왕복 시간이다. 편도 지연은 대략 RTT의 절반으로 본다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div><div>패킷이 상대에게 갔다가 응답이 돌아오기까지의 왕복 시간이다. 게임의 핑 표시는 대개 이 값이다.<span class="src"><a href="tick-and-rtt/article.html#terms">50ms와 RTT, 렉은 어디서 생길까?</a></span></div></dd>
+<dt>RTT / SRTT / RTTVAR</dt><dd><div>RTT는 패킷이 갔다가 응답이 돌아오는 왕복 시간이다. SRTT는 커널이 평활화한 RTT 평균, RTTVAR는 그 변동폭이며 RTO 계산에 쓰인다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>Send-Q</dt><dd><div><code>ss</code> 출력에서 연결별로 커널 송신 버퍼에 남아 상대의 ACK를 기다리는 바이트 수다. 특정 연결만 크면 그 클라이언트가 느리게 받아가고 있다는 신호다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>Seq / ACK</dt><dd><div>Seq는 세그먼트의 순번, ACK는 수신측이 "여기까지 받았고 다음은 이 번호가 필요하다"고 알려 주는 응답이다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>Single Source of Truth</dt><dd><div>같은 정보의 원본을 한 곳에만 두는 원칙이다. 여기서는 패킷 정의가 <code>.proto</code> 한 파일에만 있다.<span class="src"><a href="proto-bot-pipeline/article.html#terms">패킷 정의 하나로, 개발부터 라이브까지</a></span></div></dd>
+<dt>Slow Start</dt><dd><div>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>SO_RCVBUF / SO_SNDBUF</dt><dd><div>소켓의 커널 수신 버퍼와 송신 버퍼 크기 옵션이다. 앱이 읽지 않으면 수신 버퍼가, 상대가 받지 않으면 송신 버퍼가 찬다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>tail drop</dt><dd><div>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>TCP_USER_TIMEOUT</dt><dd><div>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>thin-stream</dt><dd><div>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.<span class="src"><a href="tcp-retransmission/article.html#terms">사라진 패킷 하나가 전부를 멈춘다</a></span></div></dd>
+<dt>UDP · 비신뢰 채널</dt><dd><div>재전송과 순서 보장이 없는 전송 방식이다. 이동처럼 최신 값만 중요한 데이터는 늦게 오는 옛 값을 기다릴 필요가 없어 이쪽을 쓴다.<span class="src"><a href="rubber-banding/article.html#terms">앞으로 달렸는데, 왜 뒤로 끌려갈까?</a></span></div></dd>
+<dt>UseSkillReq / SkillCastNoti</dt><dd><div>클라가 서버에 스킬 사용을 요청하는 패킷과, 서버가 주변 플레이어에게 스킬 시전을 알리는 패킷이다. 영상에서 쓰는 예시 메시지 이름이다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>vsync</dt><dd><div>모니터 갱신 주기에 맞춰 프레임을 출력하는 방식이다. 60Hz 화면이면 최대 약 16ms를 더 기다릴 수 있다.<span class="src"><a href="skill-journey/article.html#terms">내 스킬 하나가 상대 화면에 뜨기까지</a></span></div></dd>
+<dt>Zero Window</dt><dd><div>TCP 수신 측이 ACK에 수신 윈도우 0을 알려 더 받을 수 없다고 알리는 상태다. 송신 측 커널은 윈도우가 다시 열릴 때까지 전송을 멈춘다.<span class="src"><a href="slow-client/article.html#terms">클라가 느리면 서버도 느려진다</a></span></div></dd>
+<dt>Δt</dt><dd><div>기준 시각과의 시간 차이다. 절대 시각 대신 작은 차이 값만 보내 바이트를 줄인다.<span class="src"><a href="one-byte/article.html#terms">이동 패킷, 바이트를 줄이면 무슨 일이?</a></span></div></dd>
+</dl>
+<footer>123개 용어 · <a href="./">전체 영상 목록</a></footer>
+<script>
+  const q = document.getElementById('q'), dts = [...document.querySelectorAll('#list dt')];
+  q.addEventListener('input', () => { const s = q.value.trim().toLowerCase();
+    dts.forEach(dt => { const show = !s || (dt.textContent + dt.nextElementSibling.textContent).toLowerCase().includes(s); dt.hidden = dt.nextElementSibling.hidden = !show; }); });
+</script>
+</main>
+</body>
+</html>

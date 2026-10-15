@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">플레이어가 스킬 버튼을 누른 순간부터 다른 플레이어 화면에 그 스킬이 보이기까지 패킷이 지나는 단계를 내 클라, 네트워크, 서버, 네트워크, 상대 클라 순서로 보여준다. 예시 조건(20Hz, RTT 50ms)에서 전체 합계는 약 221ms이고, 내 화면에서는 즉시 보이는 스킬이 상대 화면에는 200ms 넘게 걸려 나타난다. 가장 큰 몫은 상대 클라의 보간 버퍼, 네트워크 왕복, 서버 틱 대기다.</p>
 <article data-ch="01">
 <p>화면에는 다섯 개 구간이 나란히 놓인다.</p>
@@ -757,8 +758,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);

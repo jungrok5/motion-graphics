@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">게임 서버가 느릴 때와 네트워크 왕복 시간(RTT)이 길 때 플레이어가 겪는 지연이 어떻게 다른지 설명하는 영상이다. 서버의 틱 처리시간이 틱 간격(20Hz 기준 50ms)을 넘으면 같은 존의 모든 플레이어가 함께 늦어지고, RTT가 길면 그 플레이어와 그 플레이어를 보는 사람이 늦어진다. 체감 지연은 RTT, 틱 대기, 틱 처리, 보간, 프레임 시간을 더한 값으로 정리한다.</p>
 
 <article data-ch="01">
@@ -816,8 +817,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);

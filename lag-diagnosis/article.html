@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>렉 걸렸다. 서버 탓일까, 내 탓일까? — 글</title>
+<meta name="description" content="클라렉 · 네트워크렉 · 서버렉의 증상과 원인, 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 판별하는 순서.">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<span class="eyebrow">글로 읽기 · 1:13</span>
+<h1>렉 걸렸다. 서버 탓일까, 내 탓일까?</h1>
+<div class="tags"><span>frame time</span><span>RTT</span><span>server tick</span><span>diagnosis</span></div>
+<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
+<p class="lede">이 영상은 "렉"이라는 하나의 증상을 클라렉, 네트워크렉, 서버렉으로 나누는 방법을 보여 준다. 체감 지연은 클라, 네트워크, 서버 구간 지연의 합이므로 어느 구간이 늘었는지 재면 원인이 갈린다. 실제로 볼 지표는 프레임타임, 전송 핑, 앱 핑 세 가지와 영향 범위다.</p>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">렉의 세 구간</a></li><li><a href="#ch02">클라렉</a></li><li><a href="#ch03">네트워크렉</a></li><li><a href="#ch04">서버렉</a></li><li><a href="#ch05">핑 두 개로 가르기</a></li><li><a href="#ch06">판별 순서</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<section id="ch01">
+<h2><span class="n">01</span>렉의 세 구간</h2>
+<p class="sub">한 번의 반응 = 클라 + 네트워크 + 서버 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
+<p>화면 위쪽에 Client와 Server 박스가 있고 그 사이 Network 구간으로 패킷이 오간다. 아래에는 "키 입력 → 결과가 보이기까지" 걸리는 시간을 구간별로 쌓은 막대가 나온다.</p>
+<ul>
+<li>입력 처리 <code>8ms</code> (클라)</li>
+<li>업링크 <code>25ms</code> (네트워크)</li>
+<li>서버 큐 + 틱 <code>30ms</code> (서버)</li>
+<li>다운링크 <code>25ms</code> (네트워크)</li>
+<li>렌더링 <code>16ms</code> (클라)</li>
+</ul>
+<p>합계는 <code>104ms</code>다. 입력 처리와 렌더링은 클라, 업링크와 다운링크는 네트워크, 서버 큐 + 틱은 서버로 묶인다. 화면 문구는 "체감 렉 = 이 구간들의 합. 어느 구간이 늘었는지 찾는 게 판별입니다."다. 사용자는 합계만 느끼기 때문에 증상만으로는 어느 구간 문제인지 알 수 없고, 구간별 지표를 따로 봐야 한다.</p>
+</section>
+<section id="ch02">
+<h2><span class="n">02</span>클라렉</h2>
+<p class="sub">내 컴퓨터가 제때 프레임을 못 그리는 경우 · <a class="scene" href="index.html#ch02">▶ 이 장면 보기</a></p>
+<p>왼쪽 "내 화면" 미니뷰에서 캐릭터와 몬스터가 움직이다가 갑자기 전부 멈추고, 상태 칩이 <code>FPS 60</code>에서 <code>FPS 4</code>로 바뀌며 "화면 · UI · 입력 전부 멈칫"이 뜬다. 오른쪽 프레임타임 막대그래프에는 <code>60fps = 16.7ms</code> 예산선이 있고, 멈춘 구간에서 막대가 200ms대로 솟는다. 같은 순간에도 <code>Ping 45ms · 정상</code> 칩은 그대로다.</p>
+<p>클라렉의 신호는 네 가지로 정리된다.</p>
+<ul>
+<li>FPS · 프레임타임 급등: 한 프레임이 수백 ms 걸린다(히치).</li>
+<li>화면 · UI · 입력이 전부 멈칫: 내 캐릭터, 몬스터, 버튼까지 같이 멈춘다.</li>
+<li>핑은 정상: 네트워크 지표는 평소와 같다.</li>
+<li>나만 그럼: 같은 파티원 화면은 멀쩡하다.</li>
+</ul>
+<p>흔한 원인으로는 GC 스파이크, 리소스 로딩, 렌더링 과부하, 메인 스레드 블로킹, 저사양 · 발열이 제시된다. 클라 메인 스레드가 한 프레임 안에 일을 끝내지 못하면 화면 갱신과 입력 처리가 함께 멈추므로, UI까지 굳는 것이 클라렉의 특징이다.</p>
+</section>
+<section id="ch03">
+<h2><span class="n">03</span>네트워크렉</h2>
+<p class="sub">패킷이 늦게 오가거나 사라지는 경우 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
+<p>미니뷰에서 내 캐릭터는 부드럽게 움직이고 <code>FPS 60</code>, "UI 즉시 반응" 상태다. "공격" 버튼도 바로 눌린다. 그런데 "다른 플레이어"가 잠시 멈췄다가 다른 위치로 튀고 "순간이동 · 러버밴딩" 칩이 뜬다. 오른쪽 <code>RTT (ms)</code> 그래프는 평소 45ms 안팎에서 800ms 근처까지 솟고, 그동안 손실 칩이 <code>패킷 손실 0%</code>에서 <code>패킷 손실 12%</code>로 바뀐다.</p>
+<p>네트워크렉의 신호는 다음과 같다.</p>
+<ul>
+<li>핑 · 손실 · 지터 급등: RTT 그래프가 튀고 손실률이 오른다.</li>
+<li>FPS · UI는 정상: 내 화면은 부드럽고 버튼도 바로 반응한다.</li>
+<li>다른 캐릭터가 멈췄다 순간이동: 스킬 결과와 피격이 늦게 도착한다.</li>
+<li>나 또는 같은 망만: 같은 와이파이, 지역, 통신사 사용자에게만 나타난다.</li>
+</ul>
+<p>흔한 원인은 와이파이 간섭, 모바일 망 전환, ISP 경로 문제, 대역폭 포화(다운로드 중)다. 클라는 정상적으로 그리고 있지만 서버에서 오는 상태 갱신이 늦거나 빠지니, 다른 캐릭터의 위치처럼 서버가 알려 줘야 하는 정보만 끊긴다.</p>
+</section>
+<section id="ch04">
+<h2><span class="n">04</span>서버렉</h2>
+<p class="sub">서버가 틱 안에 일을 못 끝내는 경우 · <a class="scene" href="index.html#ch04">▶ 이 장면 보기</a></p>
+<p>왼쪽 "서버 틱 처리시간 (ms)" 막대그래프에는 <code>20Hz 예산 = 50ms</code> 선이 있다. 처음에는 막대가 20~30ms대로 예산 안에 있다가, 어느 순간 100ms를 훌쩍 넘기고 칩이 <code>Tick 20Hz</code>에서 <code>Tick 20Hz → 8Hz</code>로 바뀐다. 오른쪽 "채널 3 · 24명" 그리드에서는 24명 전원의 점이 거의 동시에 빨갛게 바뀌고 "전원 동시에 반응 지연"이 뜬다. 이때도 <code>FPS 60</code>과 <code>전송 핑 42ms</code>는 정상 표시다.</p>
+<p>서버렉의 신호는 다음과 같다.</p>
+<ul>
+<li>같은 채널 · 존이 동시에: 나만이 아니라 주변 모두가 같이 느리다.</li>
+<li>FPS · 전송 핑은 정상: 화면은 부드럽고 핑 숫자도 평소와 같다.</li>
+<li>스킬 · 아이템 반응만 늦음: 채팅(별도 서버)은 멀쩡할 때도 많다.</li>
+<li>서버 틱 시간 &gt; 예산: 틱레이트가 떨어지고 작업 큐가 쌓인다.</li>
+</ul>
+<p>흔한 원인은 대규모 전투 · 공성, 몬스터 대량 스폰, DB 응답 대기, 서버 GC, 락 경합이다. 한 채널은 같은 프로세스나 같은 틱 루프에서 처리되는 경우가 많아서, 틱 하나가 늦어지면 그 채널의 모든 플레이어가 똑같이 영향을 받는다.</p>
+</section>
+<section id="ch05">
+<h2><span class="n">05</span>핑 두 개로 가르기</h2>
+<p class="sub">전송 핑은 소켓에서, 앱 핑은 게임 로직을 거쳐 돌아온다 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
+<p>Client에서 Server로 선이 두 개 이어진다. 위쪽 "전송 핑"은 서버의 소켓(네트워크 계층)에서 바로 되돌아오고, 아래쪽 "앱 핑"은 소켓을 지나 "게임 로직 큐 → 틱"을 거친 뒤 돌아온다. 같은 왕복이라도 앱 핑에는 서버 내부 대기 시간이 더해진다.</p>
+<p>화면은 세 상황을 차례로 보여 준다.</p>
+<ul>
+<li><strong>정상</strong>: 전송 핑 <code>41ms</code>, 앱 핑 <code>46ms</code>. "둘 다 낮음 → 정상".</li>
+<li><strong>네트워크렉</strong>: 전송 핑 <code>420ms</code>, 앱 핑 <code>428ms</code>. "둘 다 높음 → 길(네트워크)이 문제".</li>
+<li><strong>서버렉</strong>: 전송 핑 <code>42ms</code>, 앱 핑 <code>380ms</code>. 큐에 작업이 쌓이고 앱 핑 패킷이 그 뒤에서 기다린다. "전송 핑은 정상인데 앱 핑만 높음 → 서버가 문제".</li>
+</ul>
+<p>두 값의 차이가 곧 서버 안에서 기다린 시간이다. 마지막 문구는 "클라렉일 때도 앱 핑이 오를 수 있음 (받은 패킷을 늦게 처리) → 프레임타임을 먼저 확인"이다. 클라가 멈춰 있으면 응답을 늦게 꺼내 읽으니 앱 핑이 높게 찍힐 수 있다.</p>
+</section>
+<section id="ch06">
+<h2><span class="n">06</span>판별 순서</h2>
+<p class="sub">세 가지만 보면 어디가 문제인지 나온다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
+<p>왼쪽은 세 단계 질문이다. 앞 질문에 "예"면 그 자리에서 결론을 내고, "아니오"면 다음 질문으로 내려간다.</p>
+<ul>
+<li>Q1. FPS · 프레임타임이 튀었다? 예 → 클라렉</li>
+<li>Q2. 전송 핑 · 손실이 튀었다? 예 → 네트워크렉</li>
+<li>Q3. 앱 핑만 높고, 같은 채널이 동시에? 예 → 서버렉</li>
+</ul>
+<p>셋 다 아니면 "복합 원인 · 타임스탬프로 구간을 쪼개서 확인"한다. 오른쪽 비교표는 앞 챕터 내용을 한 장으로 모은 것이다.</p>
+<ul>
+<li>클라렉: 프레임타임 튐, 전송 핑 정상, 앱 핑은 오를 수 있음, 범위는 나만.</li>
+<li>네트워크렉: 프레임타임 정상, 전송 핑 튐, 앱 핑 튐, 범위는 나 · 같은 망.</li>
+<li>서버렉: 프레임타임 정상, 전송 핑 정상, 앱 핑 튐, 범위는 채널 전체.</li>
+</ul>
+<p>보는 순서는 "프레임타임 → 전송 핑 → 앱 핑 · 영향 범위"다. 클라 문제는 앱 핑까지 끌어올릴 수 있으므로 프레임타임을 가장 먼저 봐야 뒤 단계의 판단이 흔들리지 않는다.</p>
+</section>
+<section id="terms">
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>렉</dt><dd>입력한 뒤 결과가 화면에 나타나기까지 늦어지는 체감 지연을 통틀어 부르는 말이다. 원인은 클라, 네트워크, 서버 어디에도 있을 수 있다.</dd>
+<dt>프레임타임</dt><dd>클라가 화면 한 장(프레임)을 만드는 데 걸린 시간이다. 60fps를 유지하려면 프레임당 16.7ms 안에 끝나야 한다.</dd>
+<dt>FPS</dt><dd>초당 그리는 프레임 수다. 프레임타임의 역수이며 영상에서는 정상 60, 히치 중 4로 표시된다.</dd>
+<dt>히치</dt><dd>평소 정상이던 프레임 중 하나가 갑자기 수백 ms 걸려 화면이 순간 멈추는 현상이다.</dd>
+<dt>GC 스파이크</dt><dd>가비지 컬렉터가 메모리를 정리하느라 실행을 잠시 멈추는 구간이다. 클라에서는 히치, 서버에서는 틱 지연으로 나타난다.</dd>
+<dt>메인 스레드 블로킹</dt><dd>게임 루프를 돌리는 스레드가 파일 읽기나 긴 연산에 묶여 다음 프레임을 처리하지 못하는 상태다.</dd>
+<dt>RTT (핑)</dt><dd>패킷이 클라에서 서버까지 갔다가 응답이 돌아오는 왕복 시간이다.</dd>
+<dt>패킷 손실</dt><dd>전송 중 패킷이 사라지는 비율이다. 영상의 네트워크렉 구간에서 0%에서 12%로 오른다.</dd>
+<dt>지터</dt><dd>RTT가 일정하지 않고 들쭉날쭉한 정도다. 평균 핑이 낮아도 지터가 크면 움직임이 끊겨 보인다.</dd>
+<dt>전송 핑</dt><dd>서버의 소켓, 네트워크 계층에서 바로 응답하는 핑이다. 게임 로직을 거치지 않으므로 순수한 네트워크 왕복 시간에 가깝다.</dd>
+<dt>앱 핑</dt><dd>서버의 게임 로직 큐와 틱을 거친 뒤 응답하는 핑이다. 전송 핑과의 차이가 서버 내부 대기 시간이다.</dd>
+<dt>틱 / 틱레이트</dt><dd>서버가 게임 상태를 한 번 갱신하는 주기가 틱이고, 초당 틱 수가 틱레이트다. <code>20Hz</code>면 한 틱 예산이 50ms다.</dd>
+<dt>틱 예산</dt><dd>한 틱 안에 처리를 끝내야 하는 시간 한도다. 처리시간이 이를 넘기면 다음 틱이 밀리고 틱레이트가 떨어진다.</dd>
+<dt>락 경합</dt><dd>여러 스레드가 같은 자원을 잡으려고 서로 기다리는 상태다. 서버 틱 처리시간을 늘리는 흔한 원인이다.</dd>
+<dt>영향 범위</dt><dd>같은 증상을 겪는 사람이 나 혼자인지, 같은 망인지, 채널 전체인지를 뜻한다. 원인 구간을 가르는 마지막 단서다.</dd>
+</dl>
+</section>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+</main>
+</body>
+</html>

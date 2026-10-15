@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">이 영상은 MMO에서 캐릭터가 앞으로 달리다 뒤로 끌려가는 러버밴딩이 왜 생기는지 보여 준다. 클라이언트는 입력 즉시 캐릭터를 움직이고 서버가 나중에 그 이동을 판정하는데, 둘의 결과가 어긋나면 서버 쪽 위치로 되돌려진다. 원인은 네트워크 지연과 서버·클라 상태 불일치 두 갈래이고, 완전히 없앨 수는 없지만 덜 생기고 덜 보이게 만들 수 있다.</p>
 
 <article data-ch="01">
@@ -851,8 +852,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);

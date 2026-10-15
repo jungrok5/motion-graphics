@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">보스전처럼 받을 데이터가 몰리는 순간 클라이언트가 이를 제때 처리하지 못하면, 밀린 데이터가 TCP 흐름 제어를 타고 서버의 송신 버퍼와 앱 송신 큐까지 쌓이는 과정을 보여주는 영상이다. 느린 클라이언트 몇 명은 티가 나지 않지만, 보스전처럼 한꺼번에 몰리면 서버 메모리와 처리량에 영향을 주고, 구조에 따라서는 한 명이 존 전체를 멈추게 할 수도 있다. 대응은 양쪽 모두에서 한다. 클라이언트는 소켓을 빨리 비우고, 서버는 클라이언트당 보내는 양을 묶어 송신 큐 상한에 닿지 않게 한다.</p>
 
 <article data-ch="01">
@@ -917,8 +918,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);

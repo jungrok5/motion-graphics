@@ -13,7 +13,8 @@ explanation and glossary under the player. The same page is baked to MP4 by
 Files:
 - `template.html` (this folder) — engine + player + 4 example scenes (intro, code panel, node flow, outro).
 - `scripts/render.mjs` — stills (`--stills 3,20`) or full MP4.
-- `scripts/check-player.mjs` — headless check: page errors, play, chapter jump, phone-width overflow.
+- `scripts/check-player.mjs` — headless check: page errors, play, chapter jump, speed button, notes, phone-width overflow.
+- `scripts/build-articles.mjs` — builds `<slug>/article.html` and `glossary.html` from the notes in every video page.
 - `assets/fonts/` — Pretendard (Korean/Latin UI) and JetBrains Mono (code). Loaded from `../assets/fonts/`.
 
 ## Workflow
@@ -64,6 +65,10 @@ Each chapter = one idea and one visual device. Pick from the device catalog belo
    ```
    The page inserts each chapter title and a "▶ 이 장면" jump button from `HEAD`, so chapter renames need no notes edit.
    Each chapter: 2–4 short paragraphs (or a `<ul>`) that say what is on screen and why. Numbers must match the canvas exactly.
+5. Add the gallery entry (step 5), then generate the reading pages from those notes:
+   `node scripts/build-articles.mjs` → `<slug>/article.html` (글로 읽기: lede, table of contents, chapters with
+   "▶ 이 장면 보기" links to `index.html#chNN`, glossary) and the site-wide `glossary.html` (all terms, merged, searchable).
+   Never edit these generated files by hand; edit the notes in `<slug>/index.html` and rerun.
 
 ### 4. Verify (mandatory, before showing the user)
 ```bash
@@ -75,10 +80,11 @@ Then re-read every on-screen claim and the notes as a skeptical reviewer: is it 
 is any number or effect exaggerated, is an example number labeled `예시`? Fix before delivering.
 
 ### 5. Deliver
-- Publish the page as an Artifact. Use `files` so the fonts ship with it:
-  `{"assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
+- Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
+  `{"article.html": "<slug>/article.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
   The page tries `assets/fonts/` first, then `../assets/fonts/`.
-- Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a `## <slug> (Ns)` chapter table in `README.md`. Commit and push.
+- Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a `## <slug> (Ns)` chapter table in `README.md`.
+  Run `node scripts/build-articles.mjs` again if anything changed, then commit and push (the generated pages are committed).
 - MP4 only if asked: `node scripts/render.mjs <slug>/index.html out/<slug>.mp4` (~3.5 min per minute of video).
 
 ## Rules

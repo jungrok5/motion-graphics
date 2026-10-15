@@ -50,6 +50,7 @@
   .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
   .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
   .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
   .notes .lede { font-size: 18px; color: var(--fg); }
   .notes p, .notes li { color: var(--text2); }
   .notes ul { padding-left: 1.2em; }
@@ -88,7 +89,7 @@
   <div class="chapters" id="chapters"></div>
 </div>
 <section class="notes" id="notes" hidden>
-<h2>내용 정리</h2>
+<h2>내용 정리 <a class="more" href="article.html">글 페이지 · 용어 정리 →</a></h2>
 <p class="lede">MMO 게임서버가 패킷을 받아 처리하고 다시 내보내는 스레드 구조와, 로직 스레드가 50ms마다 반복하는 틱 루프를 보여준다. 큐 적체, 인원 밀집, DB·락·GC 대기가 각각 어떻게 틱을 늦추는지 설명하고, 구간마다 어떤 지표를 봐야 하는지 정리한다. 틱 하나의 길이는 가장 느린 구간이 정한다.</p>
 <article data-ch="01">
 <p>화면 왼쪽의 클라이언트에서 들어온 패킷은 <strong>I/O 스레드</strong>(<code>IO #1</code>~<code>IO #4</code>)가 받아 수신, 복호화, 역직렬화를 한다. 해석된 메시지는 존마다 하나씩 있는 <strong>메시지 큐</strong>에 쌓이고, 존당 1개인 <strong>로직 스레드</strong>(<code>Zone A</code>, <code>Zone B</code>, <code>Zone C</code>)가 틱 루프 안에서 이를 꺼내 처리한다. 처리 결과는 <strong>송신 큐</strong>에서 직렬화되고 묶인 뒤, I/O 송신 단계에서 암호화되어 오른쪽 클라이언트로 나간다.</p>
@@ -843,8 +844,11 @@ if (!location.search.includes('render')) {
     });
   }
   ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
   window.ready.then(() => {
     draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
     if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
   });
   renderAt(POSTER);
