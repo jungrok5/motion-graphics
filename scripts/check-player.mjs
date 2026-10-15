@@ -1,5 +1,5 @@
 // Headless check of a player page: no page errors, play advances time, chapter jump works,
-// no horizontal overflow at phone width.  Usage: node scripts/check-player.mjs <page.html>
+// speed button cycles, notes render (count of chapter headings), no horizontal overflow at phone width.  Usage: node scripts/check-player.mjs <page.html>
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import http from 'node:http';
@@ -37,6 +37,11 @@ const chapters = await desk.$$('#chapters button');
 await chapters[Math.min(2, chapters.length - 1)].click();
 await desk.waitForTimeout(400);
 const afterJump = await desk.textContent('#time');
+await desk.click('#rate');
+const rateAfterClick = await desk.textContent('#rate');
+await desk.click('#rate'); await desk.click('#rate');
+const notesShown = await desk.isVisible('#notes');
+const notesChapters = await desk.$$eval('#notes article h3', els => els.length);
 
 const phone = await browser.newPage({ viewport: { width: 400, height: 800 } });
 phone.on('pageerror', e => errors.push(String(e)));
@@ -44,8 +49,8 @@ await phone.goto(url);
 await phone.evaluate(() => window.ready);
 const overflow = await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
-console.log({ afterPlay, bigHidden, afterJump, phoneOverflow: overflow, errors });
+console.log({ afterPlay, bigHidden, afterJump, rateAfterClick, notesShown, notesChapters, phoneOverflow: overflow, errors });
 await browser.close();
 server.close();
-const ok = !errors.length && bigHidden && !overflow && afterPlay !== '0:00' && afterJump !== afterPlay;
+const ok = !errors.length && bigHidden && !overflow && afterPlay !== '0:00' && afterJump !== afterPlay && rateAfterClick === '0.75×';
 process.exit(ok ? 0 : 1);
