@@ -59,10 +59,10 @@
   </div>
   <div class="bar">
     <button class="btn" id="play" aria-label="재생"></button>
-    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="101" aria-valuenow="0">
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="113" aria-valuenow="0">
       <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
     </div>
-    <div class="time" id="time">0:00 / 1:40</div>
+    <div class="time" id="time">0:00 / 1:52</div>
     <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
   <div class="chapters" id="chapters"></div>
@@ -72,7 +72,7 @@
 //  언리얼 클라의 스레드와 렉 — 게임 · 렌더 · 리시브 · 센드 스레드
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
-const W = 1920, H = 1080, DURATION = 100.5;
+const W = 1920, H = 1080, DURATION = 112.5;
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 
@@ -245,12 +245,13 @@ function background(t) {
 // [start, end, number, title, subtitle] — one row per chapter. Chapters own the top-left header zone (y < 190).
 const HEAD = [
   [5.0, 18.0, '01', '언리얼 클라의 스레드', '게임 · 렌더 · GPU, 그리고 따로 둔 리시브 · 센드 스레드'],
-  [18.0, 31.0, '02', '받는 길', '리시브 스레드 → 수신 큐 → 게임 스레드 틱'],
-  [31.0, 44.0, '03', '보내는 길', '입력 → 게임 스레드 틱 → 송신 큐 → 센드 스레드'],
-  [44.0, 57.0, '04', '도착에서 화면까지', '다음 틱까지 기다리고, 렌더 · GPU를 거친다'],
-  [57.0, 70.0, '05', '보스전: 게임 스레드도 기다린다', 'GPU가 밀리면 렌더 스레드가, 렌더가 밀리면 게임 스레드가'],
-  [70.0, 83.0, '06', '히치: GC · 동기 로딩', '게임 스레드가 멈춘 동안 쌓이고, 풀리면 몰아서'],
-  [83.0, 95.0, '07', '줄이는 방법', '적용은 빠르게, 밀려도 최신 상태로, 멈춤은 짧게'],
+  [18.0, 30.0, '02', '프레임과 FPS', '클라의 한 프레임 = 게임 스레드의 한 틱'],
+  [30.0, 43.0, '03', '받는 길', '리시브 스레드 → 수신 큐 → 게임 스레드 틱'],
+  [43.0, 56.0, '04', '보내는 길', '입력 → 게임 스레드 틱 → 송신 큐 → 센드 스레드'],
+  [56.0, 69.0, '05', '도착에서 화면까지', '다음 틱까지 기다리고, 렌더 · GPU를 거친다'],
+  [69.0, 82.0, '06', '보스전: 게임 스레드도 기다린다', 'GPU가 밀리면 렌더 스레드가, 렌더가 밀리면 게임 스레드가'],
+  [82.0, 95.0, '07', '히치: GC · 동기 로딩', '게임 스레드가 멈춘 동안 쌓이고, 풀리면 몰아서'],
+  [95.0, 107.0, '08', '줄이는 방법', '적용은 빠르게, 밀려도 최신 상태로, 멈춤은 짧게'],
 ];
 function headers(t) {
   for (const [s, e, n, title, sub] of HEAD) {
@@ -417,9 +418,51 @@ function sThreads(t) {
     dot(x, 282, 6, C.proto, 1, 10);
     if (Math.ceil(f) < rv) { ctx.save(); ctx.globalAlpha *= .45; ctx.strokeStyle = C.proto; ctx.setLineDash([4, 5]); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, 290); ctx.lineTo(nx + 4, 362); ctx.stroke(); ctx.restore(); }
   });
-  txt('한 칸 = 1프레임 (60fps면 16.7ms)', 1790, 800, { size: 16, color: C.dim, align: 'right', alpha: eo(p(u, 2, .5)) });
+  txt('한 칸 = 1프레임 = 게임 스레드 한 틱', 1790, 800, { size: 16, color: C.dim, align: 'right', alpha: eo(p(u, 2, .5)) });
   txt('패킷이 액터를 움직이는 곳은 게임 스레드 하나뿐', W / 2, 880, { size: 32, weight: 800, align: 'center', alpha: eo(p(u, 7.2, .6)) });
   txt('액터(UObject)는 게임 스레드에서만 만질 수 있다 — 받은 패킷은 다음 틱을 기다린다', W / 2, 934, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 8, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  02 · frame and FPS — the client's tick
+// ═════════════════════════════════════════════════════════════
+const CF = [16.7, 16.7, 16.7, 33.3, 66.7, 33.3, 16.7]; // client frame times (ms), boss effects in the middle
+function sFrames(t) {
+  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const cur = clamp((u - 1.2) / 5) * 200, PX = 3.6;
+  // server: fixed interval, reports processing time
+  const k1 = eo(p(u, .2, .5));
+  panel(120, 215, 820, 400, { alpha: k1, stroke: rgba(C.proto, .45) });
+  txt('서버 — "한 틱 처리에 몇 ms"', 150, 262, { size: 24, weight: 800, color: C.proto, alpha: k1 });
+  txt('20Hz 고정: 50ms마다 한 틱, 일이 끝나면 다음 틱까지 쉰다', 150, 298, { size: 18, color: C.dim, alpha: k1 });
+  const SX = 160;
+  for (let i = 0; i < 4; i++) {
+    const s = i * 50; if (s >= cur) break;
+    blk(SX + s * PX, Math.min(18, cur - s) * PX, 380, C.proto, '18ms', k1, { h: 50 });
+    if (cur > s + 18) blk(SX + (s + 18) * PX, Math.min(32, cur - s - 18) * PX, 380, C.faint, '', k1 * .6, { h: 50 });
+    ctx.save(); ctx.globalAlpha *= k1 * .6; ctx.strokeStyle = 'rgba(148,163,184,0.4)'; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(SX + s * PX, 360); ctx.lineTo(SX + s * PX, 450); ctx.stroke(); ctx.restore();
+  }
+  if (cur > 30) txt('쉼', SX + 34 * PX, 413, { size: 16, color: C.dim, align: 'center', alpha: k1 });
+  txt('틱 처리 시간 18ms / 예산 50ms', 150, 520, { size: 24, weight: 800, mono: true, alpha: k1 * clamp(cur / 60) });
+  txt('→ 50ms를 넘기면 서버 렉', 150, 565, { size: 19, color: C.red, weight: 700, alpha: k1 * clamp(cur / 60) });
+  // client: back-to-back frames, reports FPS
+  const k2 = eo(p(u, .6, .5));
+  panel(980, 215, 820, 400, { alpha: k2, stroke: rgba(C.server, .45) });
+  txt('클라 — "1초에 몇 프레임(FPS)"', 1010, 262, { size: 24, weight: 800, color: C.server, alpha: k2 });
+  txt('프레임 = 게임 스레드 한 바퀴: 입력 → 틱 → 패킷 적용 → 렌더에 넘기기', 1010, 298, { size: 18, color: C.dim, alpha: k2 });
+  let s = 0, nowDur = CF[0];
+  CF.forEach(d => { if (s < cur) { blk(1020 + s * PX, Math.min(d, cur - s) * PX, 380, d > 30 ? C.red : C.server, d > 20 ? Math.round(d) + 'ms' : '', k2, { h: 50 }); nowDur = d; } s += d; });
+  const fps = Math.round(1000 / nowDur);
+  txt('지금 프레임 ' + (nowDur < 20 ? nowDur.toFixed(1) : Math.round(nowDur)) + 'ms = ' + fps + 'fps', 1010, 520, { size: 24, weight: 800, mono: true, color: fps < 30 ? C.red : C.text, alpha: k2 * clamp(cur / 20) });
+  txt('→ 상한(예: 60fps)까지는 끝나는 대로 다음 프레임, 무거우면 FPS가 떨어진다', 1010, 565, { size: 19, color: C.server, weight: 700, alpha: k2 * clamp(cur / 20) });
+  // conversion
+  const kc = eo(p(u, 6.4, .5));
+  txt('1프레임 시간 = 1000 ÷ FPS', 120, 690, { size: 26, weight: 800, mono: true, alpha: kc });
+  [['60fps', '16.7ms', C.bot], ['30fps', '33ms', C.server], ['15fps', '67ms', C.red]].forEach(([f, ms, c], i) => chip(f + ' = ' + ms, 720 + i * 300, 682, c, { size: 22, alpha: eo(p(u, 6.7 + i * .25, .4)) }));
+  txt('같은 개념, 다른 단위 — 서버는 정해진 간격을 지키고, 클라는 무거우면 간격 자체가 늘어난다', W / 2, 820, { size: 28, weight: 800, align: 'center', alpha: eo(p(u, 8, .6)) });
+  txt('이 영상에서 "틱"은 클라 게임 스레드의 한 프레임 — FPS가 떨어진다 = 클라 틱 하나가 길어진다', W / 2, 876, { size: 23, color: C.dim, align: 'center', alpha: eo(p(u, 8.8, .6)) });
   ctx.restore();
 }
 
@@ -433,7 +476,7 @@ function box(x, y, w, h, title, lines, col, k, hot = 0) {
   lines.forEach((l, i) => txt(l, x + w / 2, y + 92 + i * 34, { size: 18, color: C.dim, align: 'center', alpha: k }));
 }
 function sRecvPath(t) {
-  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const ph = (u * 1.2) % 1, tick = ph < .12 ? 1 - ph / .12 : 0, lvl = .1 + .55 * ph;
   box(120, 340, 230, 240, '소켓', ['커널 수신 버퍼'], C.proto, eo(p(u, .2, .5)));
@@ -461,7 +504,7 @@ function sRecvPath(t) {
 // ═════════════════════════════════════════════════════════════
 function sendTimes(fps) { const dt = 1000 / fps, out = []; let next = 100; for (let tt = dt; tt <= 600 + 1e-6; tt += dt) if (tt >= next - 1e-6) { out.push(tt); next = Math.floor(tt / 100 + 1e-6) * 100 + 100; } return out; }
 function sSendPath(t) {
-  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const N = [[120, 200, '입력', ['키 · 마우스'], C.text], [390, 360, '게임 스레드 틱', ['입력 샘플 · 예측 이동', '이동 패킷 생성'], C.server], [820, 200, '송신 큐', ['넣고 바로 리턴'], C.client], [1090, 260, '센드 스레드', ['send()'], C.bot], [1420, 200, '소켓', ['서버로'], C.proto]];
   N.forEach(([x, w, ti, ls, col], i) => {
@@ -492,7 +535,7 @@ function sSendPath(t) {
 //  04 · arrival to screen
 // ═════════════════════════════════════════════════════════════
 function sLatency(t) {
-  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const X0 = 360, PX = 6;
   const rows = [['60fps', 300, [30, 8.3, 16.7, 16.7], C.bot], ['15fps', 520, [30, 33.3, 66.7, 66.7], C.red]];
@@ -522,7 +565,7 @@ function sLatency(t) {
 //  05 · boss fight: the game thread waits too
 // ═════════════════════════════════════════════════════════════
 function sBossFrame(t) {
-  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const X0 = 420, PX = 6.6, FR = 66.7;
   const L = [[250, '게임 스레드', '일 12ms', C.server], [360, '렌더 스레드', '일 15ms', C.pub], [470, 'RHI · GPU', '보스 이펙트 64ms', GPU]];
@@ -556,7 +599,7 @@ function hitchQueue(tt) { // in: 8 per ms (boss fight) · out: 200 per tick at 6
   return Math.max(0, Math.round((HE - HS) * 8 - (tt - HE) * 4));
 }
 function sHitch(t) {
-  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[6]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const X0 = 420, PX = 2.27, cur = clamp((u - 1) / 6.5) * 600;
   laneLabel(240, '리시브 스레드', '계속 받는다', C.proto, eo(p(u, .2, .5)));
@@ -592,7 +635,7 @@ function sHitch(t) {
 //  07 · what reduces it
 // ═════════════════════════════════════════════════════════════
 function sFixes(t) {
-  const [S, E] = HEAD[6]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S, E] = HEAD[7]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   noteRow([['리시브 스레드에서 이동 합치기', '같은 대상의 이동은 최신 하나만 큐에 — 밀려도 최신 상태로'],
            ['처리 한도는 시간(ms)으로', '개수 대신 "틱당 2ms까지" — 무거운 패킷이 섞여도 일정'],
@@ -640,7 +683,7 @@ function sOutro(t) {
 function renderAt(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
   background(t);
-  sTitle(t); sThreads(t); sRecvPath(t); sSendPath(t); sLatency(t); sBossFrame(t); sHitch(t); sFixes(t); sOutro(t);
+  sTitle(t); sThreads(t); sFrames(t); sRecvPath(t); sSendPath(t); sLatency(t); sBossFrame(t); sHitch(t); sFixes(t); sOutro(t);
   headers(t); progress(t);
   // final fade to black
   const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }

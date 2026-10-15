@@ -80,8 +80,8 @@
     { path: 'one-byte/', title: '이동 패킷, 바이트를 줄이면 무슨 일이?', length: '1:37',
       desc: '같은 이동 정보가 프로토버퍼 34B · 커스텀 24B · 비트 패킹 19B · 극단 양자화 8B. 1바이트 = 월 6.5TB가 되는 곱하기, 크기별 송신 트래픽 · 비용 · 서버 대수 · 보스존 수용, 패킷 하나에 담기는 인원, 그리고 프로토버퍼는 이동만 bytes로.',
       tags: ['bandwidth', 'quantization', 'protobuf', 'cost'] },
-    { path: 'ue-client-threads/', title: '언리얼 클라의 스레드와 렉', length: '1:40',
-      desc: '게임 · 렌더 · GPU 스레드와 따로 둔 리시브 · 센드 스레드. 받은 패킷이 다음 틱까지 기다리는 이유, 내 FPS가 남들 화면의 내 움직임을 끊기게 하는 이유, FPS에 따른 화면 지연, 보스전 GPU 대기, GC · 동기 로딩 히치와 줄이는 방법.',
+    { path: 'ue-client-threads/', title: '언리얼 클라의 스레드와 렉', length: '1:52',
+      desc: '게임 · 렌더 · GPU 스레드와 따로 둔 리시브 · 센드 스레드, 클라의 프레임 = 게임 스레드 한 틱(FPS와 서버 틱 처리 시간의 관계). 받은 패킷이 다음 틱까지 기다리는 이유, 내 FPS가 남들 화면의 내 움직임을 끊기게 하는 이유, FPS에 따른 화면 지연, 보스전 GPU 대기, GC · 동기 로딩 히치와 줄이는 방법.',
       tags: ['unreal', 'game thread', 'recv thread', 'frame'] },
   ];
   const list = document.getElementById('list');
