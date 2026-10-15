@@ -246,7 +246,7 @@ function background(t) {
 const HEAD = [
   [5.0, 16.0, '01', '같은 정보, 다른 크기', '직접 만든 24B vs 프로토버퍼 기본 스키마 34B'],
   [16.0, 28.0, '02', '어디서 커지나', '필드 태그 · 고정 4B float · 큰 varint · 길이 접두'],
-  [28.0, 41.0, '03', '곱하기를 붙이면', '월 트래픽과 송신 비용 (예시 규모)'],
+  [28.0, 41.0, '03', '곱하기를 붙이면', '같은 수준끼리 비교: 기본 vs 기본, 튜닝 vs 튜닝'],
   [41.0, 55.0, '04', '서버 대수는?', '병목이 대역폭이냐 CPU냐에 따라'],
   [55.0, 66.0, '05', '그래도 쓰는 이유', '바이트로는 손해, 개발 · 운영으로는 이득'],
   [66.0, 79.0, '06', '섞어 쓴다', '뜨거운 소수의 메시지만 다듬는다'],
@@ -302,7 +302,7 @@ const TITLE = {
   line1: ['프로토버퍼', 'vs'], line1Colors: [C.proto, C.faint],
   line2: ['직접', '만든', '패킷'], line2Colors: [C.client, C.client, null],
   sub: '같은 이동 정보를 보낼 때 크기 차이, 대규모 MMO에서의 트래픽 · 서버 비용, 그리고 실무의 선택',
-  story: [['24B vs 34B', C.proto], ['× 규모', C.red], ['트래픽 · 비용', C.server], ['서버 대수', C.proto], ['섞어 쓰기', C.bot]],
+  story: [['24 · 19B vs 34 · 26B', C.proto], ['× 규모', C.red], ['트래픽 · 비용', C.server], ['서버 대수', C.proto], ['섞어 쓰기', C.bot]],
 };
 function sTitle(t) {
   const a = win(t, 0, 5.2, .6); if (a <= 0) return;
@@ -340,6 +340,7 @@ function noteRow(items, u, t0, y0, col, cols = 2, x0 = 120, span = 1700) {
 // groups: [label, tagBytes, valueBytes, color]
 const CUSTOM = [['ID', 0, 4, C.pub], ['x', 0, 4, C.client], ['y', 0, 4, C.client], ['z', 0, 4, C.client], ['방향', 0, 2, C.server], ['상태', 0, 2, C.proto], ['시각', 0, 4, C.faint]];
 const NAIVE = [['래퍼', 2, 0, C.red], ['ID', 1, 3, C.pub], ['x', 1, 4, C.client], ['y', 1, 4, C.client], ['z', 1, 4, C.client], ['방향', 1, 3, C.server], ['상태', 1, 1, C.proto], ['시각(ms)', 1, 6, C.faint]];
+const CUSTOM_BIT = [['ID', 0, 3, C.pub], ['x', 0, 4, C.client], ['y', 0, 4, C.client], ['z', 0, 4, C.client], ['방향', 0, 2, C.server], ['상태 · 플래그', 0, 1, C.proto], ['Δ시각', 0, 1, C.faint]];
 const TUNED = [['래퍼', 2, 0, C.red], ['ID', 1, 3, C.pub], ['x', 1, 4, C.client], ['y', 1, 4, C.client], ['z', 1, 4, C.client], ['방향', 1, 2, C.server], ['Δ시각', 1, 1, C.faint]];
 const sizeOf = g => g.reduce((s, [, t, v]) => s + t + v, 0);
 function protoRow(x, y, bw, h, groups, k, reveal = 1) {
@@ -373,6 +374,7 @@ function sSame(t) {
   });
   const kd = eo(p(u, 4.6, .5));
   chip('■ 빨간 칸 = 필드 태그 · 길이 (값이 아닌 메타데이터)', 160, 740, C.red, { size: 18, alpha: kd });
+  chip('비트 패킹은 커스텀에도 된다: 커스텀 19B vs 프로토 튜닝 26B', 1780, 740, C.client, { align: 'right', size: 18, alpha: eo(p(u, 7, .5)) });
   txt('같은 정보가 10바이트 더 크다 (+42%)', W / 2, 850, { size: 36, weight: 800, align: 'center', color: C.red, alpha: eo(p(u, 5.4, .6)) });
   txt('1바이트 = 월 6.5TB였던 그 규모에서', W / 2, 906, { size: 24, color: C.dim, align: 'center', alpha: eo(p(u, 6.2, .6)) });
   ctx.restore();
@@ -398,12 +400,12 @@ function sWhere(t) {
     txt(de, 520, y, { size: 18, color: C.dim, alpha: kk });
   });
   const OVER = [['필드마다 태그 1바이트', '필드 번호 · 타입 표시 → 7필드 = 7B', C.red], ['float는 항상 4B + 태그', '직접 만들면 4B, 프로토버퍼는 5B', C.client], ['큰 값은 varint가 더 크다', 'ms 단위 시각: 4B → 6B', C.faint], ['중첩 메시지 길이 접두', '리스트 안 메시지마다 2B', C.red]];
-  const WIN = [['0 · 기본값은 아예 안 보냄', 'proto3 기본 동작', C.bot], ['작은 정수는 1B', 'varint가 고정 4B보다 작다', C.bot]];
+  const WIN = [['기본값 생략', '프로토: 자동 · 커스텀: 플래그 비트로 똑같이', C.bot], ['작은 값 압축', '프로토: varint · 커스텀: 비트 패킹 · 양자화', C.bot]];
   txt('커지는 곳', 1000, 262, { size: 24, weight: 800, color: C.red, alpha: k });
   OVER.forEach(([ti, de, col], i) => { const kk = eo(p(u, 3.2 + i * .4, .5)); if (kk <= 0) return; const y = 320 + i * 86; dot(1010, y - 8, 7, col, kk, 10); txt(ti, 1032, y, { size: 22, weight: 800, alpha: kk }); txt(de, 1032, y + 32, { size: 18, color: C.dim, alpha: kk }); });
-  txt('줄어드는 곳', 1000, 690, { size: 24, weight: 800, color: C.bot, alpha: eo(p(u, 5, .5)) });
+  txt('줄이는 기법 — 커스텀도 똑같이 가능', 1000, 690, { size: 24, weight: 800, color: C.bot, alpha: eo(p(u, 5, .5)) });
   WIN.forEach(([ti, de], i) => { const kk = eo(p(u, 5.2 + i * .4, .5)); if (kk <= 0) return; const y = 740 + i * 70; dot(1010, y - 8, 7, C.bot, kk, 10); txt(ti, 1032, y, { size: 22, weight: 800, alpha: kk }); txt(de, 1032, y + 30, { size: 18, color: C.dim, alpha: kk }); });
-  txt('기본 스키마 그대로면 태그 · 고정 float · 큰 varint가 쌓여 +10B', 120, 900, { size: 26, weight: 800, alpha: eo(p(u, 7.4, .6)) });
+  txt('줄이는 기법은 양쪽 다 쓸 수 있다. 끝까지 남는 차이는 태그 · 길이 접두', 120, 900, { size: 26, weight: 800, alpha: eo(p(u, 7.4, .6)) });
   ctx.restore();
 }
 
@@ -414,28 +416,32 @@ function money(tb) { return '$' + (tb * 1000 * .05 / 1000).toFixed(1) + 'k~' + (
 function sMultiply(t) {
   const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  const k = eo(p(u, .2, .6)), cols = [160, 760, 1130, 1500];
-  const sizes = [24, 34, 26], other = 24 * TB_PER_BYTE / MOVE_SHARE * (1 - MOVE_SHARE);
+  const k = eo(p(u, .2, .6)), cols = [160, 600, 900, 1210, 1510];
+  const sizes = [24, 34, 19, 26], other = 24 * TB_PER_BYTE / MOVE_SHARE * (1 - MOVE_SHARE);
   const move = sizes.map(s => s * TB_PER_BYTE), total = move.map(m => m + other);
+  const d = (a, b) => '+' + Math.round(total[a] - total[b]) + 'TB · +' + Math.round((total[a] / total[b] - 1) * 100) + '%';
   panel(120, 215, 1680, 560, { alpha: k });
-  [['', C.dim], ['직접 만든 패킷', C.client], ['프로토버퍼 기본', C.proto], ['프로토버퍼 튜닝', C.bot]].forEach(([h, c], i) => txt(h, cols[i], 270, { size: 20, weight: 800, color: c, alpha: k }));
+  txt('기본끼리', (cols[1] + cols[2] + 180) / 2, 252, { size: 16, weight: 700, color: C.dim, align: 'center', alpha: k });
+  txt('튜닝끼리', (cols[3] + cols[4] + 180) / 2, 252, { size: 16, weight: 700, color: C.dim, align: 'center', alpha: k });
+  [['', C.dim], ['커스텀 기본', C.client], ['프로토 기본', C.proto], ['커스텀 비트 패킹', C.client], ['프로토 튜닝', C.proto]].forEach(([h, c], i) => txt(h, cols[i], 288, { size: 19, weight: 800, color: c, alpha: k }));
+  ctx.save(); ctx.globalAlpha *= k * .5; ctx.fillStyle = C.line; ctx.fillRect(cols[3] - 40, 240, 2, 520); ctx.restore();
   const rows = [
     ['이동 정보 크기', sizes.map(s => s + 'B')],
     ['이동 트래픽 / 월', move.map(m => Math.round(m) + 'TB')],
     ['전체 송신 / 월 (이동 60%)', total.map(m => Math.round(m) + 'TB')],
-    ['송신 비용 / 월 (GB당 $0.05~0.09)', total.map(money)],
-    ['직접 만든 패킷 대비', ['—', '+' + Math.round(total[1] - total[0]) + 'TB · +' + Math.round((total[1] / total[0] - 1) * 100) + '%', '+' + Math.round(total[2] - total[0]) + 'TB · +' + Math.round((total[2] / total[0] - 1) * 100) + '%']],
-    ['추가 비용 / 월', ['—', money(total[1] - total[0]), money(total[2] - total[0])]],
+    ['송신 비용 / 월', total.map(money)],
+    ['같은 수준 커스텀 대비', ['기준', d(1, 0), '기준', d(3, 2)]],
+    ['추가 비용 / 월', ['—', money(total[1] - total[0]), '—', money(total[3] - total[2])]],
   ];
   rows.forEach(([lab, vals], r) => {
     const kr = eo(p(u, .8 + r * .55, .5)); if (kr <= 0) return;
-    const y = 345 + r * 72, hot = r >= 4;
-    ctx.fillStyle = rgba('#94a3b8', .12 * kr); ctx.fillRect(150, y - 44, 1620, 1);
-    txt(lab, cols[0], y, { size: 21, weight: 700, alpha: kr });
-    vals.forEach((v, c) => txt(v, cols[c + 1], y, { size: hot ? 24 : 22, weight: 800, mono: true, color: hot ? (c === 1 ? C.red : c === 2 ? C.bot : C.dim) : C.text, alpha: kr }));
+    const y = 360 + r * 68, hot = r >= 4;
+    ctx.fillStyle = rgba('#94a3b8', .12 * kr); ctx.fillRect(150, y - 42, 1620, 1);
+    txt(lab, cols[0], y, { size: 20, weight: 700, alpha: kr });
+    vals.forEach((v, c) => txt(v, cols[c + 1], y, { size: hot ? 21 : 20, weight: 800, mono: true, color: hot ? (c % 2 ? C.red : C.dim) : C.text, alpha: kr }));
   });
-  txt('기본 스키마는 전체 송신의 약 1/4이 늘고, 튜닝하면 5% 안쪽', W / 2, 860, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 5.2, .6)) });
-  txt('예시 규모: 동접 5,000 · 보는 사람 50 · 10Hz · 이동이 송신의 60%', W / 2, 912, { size: 20, color: C.faint, align: 'center', alpha: eo(p(u, 5.8, .5)) });
+  txt('같은 수준으로 다듬어도 프로토버퍼는 송신 +20~25% — 태그 · 길이 접두는 구조적으로 남는다', W / 2, 860, { size: 28, weight: 800, align: 'center', alpha: eo(p(u, 5.2, .6)) });
+  txt('예시 규모: 동접 5,000 · 보는 사람 50 · 10Hz · 이동이 송신의 60% · GB당 $0.05~0.09', W / 2, 912, { size: 20, color: C.faint, align: 'center', alpha: eo(p(u, 5.8, .5)) });
   ctx.restore();
 }
 
@@ -449,7 +455,7 @@ function servers(x, y, n, base, col, k, label) {
 function sServers(t) {
   const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  [['대역폭이 병목일 때', '서버 수 ∝ 송신량', C.proto, [[20, '직접 만든 패킷 · 20대'], [25, '프로토버퍼 기본 · 25대 (+5)'], [21, '프로토버퍼 튜닝 · 21대 (+1)']]],
+  [['대역폭이 병목일 때', '서버 수 ∝ 송신량', C.proto, [[20, '커스텀 · 20대'], [25, '기본끼리: 프로토버퍼 25대 (+5)'], [24, '튜닝끼리: 프로토버퍼 24대 (+4)']]],
    ['CPU가 병목일 때', '엔티티당 1번 직렬화 → 보는 사람에게 복사', C.server, [[20, '직접 만든 패킷 · 20대'], [21, '프로토버퍼 · 20~21대 (CPU +2~5%)'], [26, '받는 사람마다 직렬화 · 26대+ (구현 문제)']]]].forEach(([title, sub, col, rows], ci) => {
     const k = eo(p(u, .3 + ci * .6, .6)); if (k <= 0) return;
     const x = 120 + ci * 850;
@@ -458,7 +464,7 @@ function sServers(t) {
     txt(sub, x + 30, 300, { size: 19, color: C.dim, alpha: k });
     rows.forEach(([n, lab], r) => { const kk = eo(p(u, 1.2 + ci * .6 + r * .6, .5)); if (kk <= 0) return; servers(x + 40, 380 + r * 150, n, 20, col, kk, lab); });
   });
-  txt('서버 1대 월 $700(예시) → 기본 스키마가 대역폭 병목이면 +5대 = 월 +$3.5k', W / 2, 890, { size: 26, weight: 800, align: 'center', alpha: eo(p(u, 5.6, .6)) });
+  txt('서버 1대 월 $700(예시) → 대역폭 병목이면 +4~5대 = 월 +$2.8k~3.5k', W / 2, 890, { size: 26, weight: 800, align: 'center', alpha: eo(p(u, 5.6, .6)) });
   txt('바이트 차이는 대역폭에, 직렬화 방식(1번 vs 받는 사람마다)은 CPU에 효과가 나타난다', W / 2, 940, { size: 21, color: C.dim, align: 'center', alpha: eo(p(u, 6.4, .6)) });
   ctx.restore();
 }
@@ -479,7 +485,7 @@ function sWhy(t) {
   ctx.restore();
   ctx.save(); ctx.globalAlpha *= k; ctx.fillStyle = C.dim; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - 30, cy + 220); ctx.lineTo(cx + 30, cy + 220); ctx.fill(); ctx.restore();
   txt('바이트 비용', cx - 300, cy - 20 - 300 * tilt, { size: 22, weight: 800, color: C.red, align: 'center', alpha: k });
-  txt('월 +$0.6k~9k', cx - 300, cy + 66 - 300 * tilt, { size: 18, weight: 700, mono: true, align: 'center', alpha: k });
+  txt('월 +$2.3k~9k', cx - 300, cy + 66 - 300 * tilt, { size: 18, weight: 700, mono: true, align: 'center', alpha: k });
   txt('개발 · 운영 이득', cx + 300, cy - 20 + 300 * tilt, { size: 22, weight: 800, color: C.pub, align: 'center', alpha: k });
   txt('버그 · 속도 · 동기화', cx + 300, cy + 80 + 300 * tilt, { size: 18, weight: 700, align: 'center', alpha: k });
   noteRow([['스키마 진화', '필드를 추가해도 구버전 클라 · 서버와 호환'], ['코드 생성', '클라 · 서버 · 봇이 같은 정의에서 → 패킷이 낡지 않는다'], ['다언어', 'C# · C++ · Go · 툴까지 같은 스키마'],
@@ -503,10 +509,10 @@ function sMix(t) {
     parts.forEach(([pct, col, l2], i) => { const kk = eo(p(u, .6 + r * .8 + i * .3, .5)), w = 700 * pct / 100; ctx.save(); ctx.globalAlpha *= k * kk; rr(x + 1, y, w - 2, 60, 6); ctx.fillStyle = rgba(col, .6); ctx.fill(); ctx.restore(); txt(l2, i === 0 ? x : x + w - 6, y + 92, { size: 17, weight: 700, align: i === 0 ? 'left' : 'right', color: col === C.faint ? C.dim : col, alpha: k * kk }); x += w; });
   });
   txt('소수의 뜨거운 메시지만 다듬으면 된다', 150, 650, { size: 22, weight: 800, color: C.bot, alpha: eo(p(u, 2.6, .5)) });
-  noteRow([['나머지는 프로토버퍼 그대로', '빈도가 낮아 총량에 거의 영향 없음'], ['이동 · 전투는 스키마 튜닝', '필드 번호 1~15 · 상대 시각 · 기본값 생략 · packed 배열 · 양자화(sint32)'],
-           ['또는 bytes 필드에 직접 패킹', '프로토버퍼 봉투 안에 손으로 만든 이동 blob'], ['직렬화는 엔티티당 1번', '만든 바이트를 보는 사람에게 복사'], ['묶어서 압축 (LZ4 · zstd)', 'CPU와 바꾸는 선택 — 태그 오버헤드도 상당 부분 흡수']], u, 1.5, 270, C.bot, 1, 960, 840);
+  noteRow([['나머지는 프로토버퍼 그대로', '빈도가 낮아 총량에 거의 영향 없음'], ['이동 · 전투는 스키마 튜닝', '필드 1~15 · 상대 시각 · packed 배열 · 양자화 — 그래도 태그는 남는다'],
+           ['또는 bytes 필드에 비트 패킹', '프로토버퍼 봉투 안에 커스텀 이동 blob → 크기는 커스텀과 같다'], ['직렬화는 엔티티당 1번', '만든 바이트를 보는 사람에게 복사'], ['묶어서 압축 (LZ4 · zstd)', 'CPU와 바꾸는 선택 — 태그 오버헤드도 상당 부분 흡수']], u, 1.5, 270, C.bot, 1, 960, 840);
   const ks = eo(p(u, 6.4, .5)); let x = 120;
-  [['프로토버퍼 기본: 송신 +25%', C.red], ['튜닝 · 혼합: +0~5%', C.bot], ['개발 이득은 그대로', C.pub]].forEach(([s, c], i) => { x += chip(s, x, 760, c, { size: 20, alpha: eo(p(u, 6.4 + i * .3, .4)) }) + 16; });
+  [['기본끼리 +25%', C.red], ['튜닝끼리 +20% (태그 · 길이)', C.red], ['bytes에 비트 패킹: ≈ 커스텀', C.bot], ['개발 이득은 그대로', C.pub]].forEach(([s, c], i) => { x += chip(s, x, 760, c, { size: 20, alpha: eo(p(u, 6.4 + i * .3, .4)) }) + 16; });
   txt('예시 규모의 숫자입니다. 실제 팀의 메시지 구성 · 병목 · 단가로 다시 계산하세요', W / 2, 900, { size: 21, color: C.faint, align: 'center', alpha: ks });
   ctx.restore();
 }
@@ -515,7 +521,7 @@ function sMix(t) {
 //  OUTRO — summary strip + tagline (last ~5.5s)
 // ═════════════════════════════════════════════════════════════
 const OUTRO = {
-  nodes: [[C.client, '직접 패킷', '24B'], [C.proto, '프로토버퍼 기본', '34B · 송신 +25%'], [C.bot, '튜닝 스키마', '26B · +5%'], [C.server, '서버 대수', '대역폭 병목일 때만'], [C.pub, '섞어 쓰기', '뜨거운 경로만']],
+  nodes: [[C.client, '직접 패킷', '24B'], [C.proto, '프로토버퍼 기본', '34B · 송신 +25%'], [C.bot, '튜닝끼리', '19B vs 26B · +20%'], [C.server, '서버 대수', '대역폭 병목일 때만'], [C.pub, '섞어 쓰기', '뜨거운 경로만']],
   tagline: ['편의는', '대부분에,', '최적화는', '뜨거운', '곳에.'], taglineColors: [C.proto, null, C.bot, C.red, null],
   footer: 'Protobuf for most messages · hand-tuned movement & combat · serialize once per entity',
 };
