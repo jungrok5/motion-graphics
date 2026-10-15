@@ -16,7 +16,8 @@ Playwright로 프레임을 뽑아 ffmpeg로 MP4를 만듭니다.
 | 05 퍼블리셔에게 | 같은 봇으로 대규모 부하 → 장비 스펙 산정 · 라이브 인프라 테스트 |
 
 - 결과물: `out/proto-bot-pipeline.mp4`
-- 미리보기: `npx serve .` 후 `/proto-bot-pipeline/` 열기 (클릭 = 일시정지, `?t=30` = 30초부터)
+- 플레이어: `proto-bot-pipeline/index.html`을 브라우저로 열면 재생/일시정지, 탐색바, 챕터 이동이 됩니다
+  (Space = 재생/일시정지, ←/→ = 5초 이동). MP4는 같은 페이지를 프레임별로 구운 것입니다.
 
 ## 렌더링
 
