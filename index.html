@@ -56,6 +56,9 @@
     { path: 'rubber-banding/', title: '앞으로 달렸는데, 왜 뒤로 끌려갈까?', length: '1:07',
       desc: 'MMO 러버밴딩이 생기는 구조(클라 예측 · 서버 판정)와 원인(네트워크 지연·손실, 속도 검증, 충돌, 상태이상, 서버 틱), 그리고 재조정·스무딩으로 줄이는 방법.',
       tags: ['client prediction', 'server authority', 'reconciliation', 'netcode'] },
+    { path: 'lag-diagnosis/', title: '렉 걸렸다. 서버 탓일까, 내 탓일까?', length: '1:13',
+      desc: '클라렉 · 네트워크렉 · 서버렉의 증상과 원인, 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 판별하는 순서.',
+      tags: ['frame time', 'RTT', 'server tick', 'diagnosis'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {

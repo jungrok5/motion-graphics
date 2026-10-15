@@ -77,6 +77,21 @@
 
 - 플레이어: [`rubber-banding/`](https://jungrok5.github.io/motion-graphics/rubber-banding/)
 
+## lag-diagnosis (73s)
+
+"렉 걸렸다. 서버 탓일까, 내 탓일까?" — 클라렉 · 네트워크렉 · 서버렉을 가르는 법. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 렉의 세 구간 | 한 번의 반응 = 입력 처리 + 업링크 + 서버 큐·틱 + 다운링크 + 렌더링 |
+| 02 클라렉 | 프레임타임 급등(히치), 화면·UI·입력 전부 멈칫, 핑은 정상, 나만 그럼 |
+| 03 네트워크렉 | RTT·손실 급등, FPS·UI는 정상, 다른 캐릭터 순간이동, 나 또는 같은 망만 |
+| 04 서버렉 | 틱 처리시간 > 예산, 같은 채널 전원이 동시에, FPS·전송 핑은 정상 |
+| 05 핑 두 개로 가르기 | 전송 핑(소켓에서 반사) vs 앱 핑(게임 로직 큐 경유) — 앱 핑만 높으면 서버 |
+| 06 판별 순서 | 프레임타임 → 전송 핑 → 앱 핑 · 영향 범위, 비교표 |
+
+- 플레이어: [`lag-diagnosis/`](https://jungrok5.github.io/motion-graphics/lag-diagnosis/)
+
 ## 새 영상 만들기 (Claude Code 스킬)
 
 이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고
