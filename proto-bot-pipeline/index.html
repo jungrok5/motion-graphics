@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proto Bot Pipeline</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #070a13; }
+  body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  canvas { width: 100vw; height: 56.25vw; max-height: 100vh; max-width: 177.78vh; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// ─────────────────────────────────────────────────────────────
+//  "패킷 정의 하나로, 개발부터 라이브까지"
+//  Protobuf → Codegen → Bot Client → Content Test → Publisher
+//  Every frame is a pure function of time: renderAt(t).
+// ─────────────────────────────────────────────────────────────
+const W = 1920, H = 1080, DURATION = 64;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+const C = {
+  bg: '#070a13', text: '#e8ecf4', dim: '#8b95a7', faint: '#4b5568',
+  proto: '#a78bfa', client: '#38bdf8', server: '#fbbf24', bot: '#34d399',
+  pub: '#f472b6', red: '#f87171', panel: '#0e1424', line: '#24304a',
+};
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+// fade in at s, fade out at e
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const R = rng(7);
+const PARTS = Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * H, vx: (R() - .5) * 14, vy: -4 - R() * 10, s: 1 + R() * 2, a: .05 + R() * .18 }));
+
+// ── drawing helpers ──────────────────────────────────────────
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = C.text, align = 'left', base = 'alphabetic', alpha = 1, mono = false, ls = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono);
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  if (ls) ctx.letterSpacing = ls + 'px';
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function panel(x, y, w, h, o = {}) {
+  const { r = 18, fill = C.panel, stroke = C.line, glow = null, glowA = 1, alpha = 1, lw = 1.5, dash = null } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  if (glow) { ctx.shadowColor = rgba(glow, .55 * glowA); ctx.shadowBlur = 50; }
+  rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+  if (dash) ctx.setLineDash(dash);
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function chip(label, x, y, color, o = {}) {
+  const { alpha = 1, size = 18, align = 'left', fillA = .14 } = o;
+  font(size, 700, true);
+  const w = ctx.measureText(label).width + size * 1.2, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  rr(X, y - h / 2, w, h, h / 2); ctx.fillStyle = rgba(color, fillA); ctx.fill();
+  ctx.strokeStyle = rgba(color, .7); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, X + w / 2, y + 1); ctx.restore();
+  return w;
+}
+function dot(x, y, r, color, a = 1, glow = 18) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = color; ctx.shadowBlur = glow;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function check(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .36, y); ctx.lineTo(x - s * .1, y + s * .26); ctx.lineTo(x + s * .38, y - s * .28); ctx.stroke(); ctx.restore();
+}
+function cross(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .3, y - s * .3); ctx.lineTo(x + s * .3, y + s * .3);
+  ctx.moveTo(x + s * .3, y - s * .3); ctx.lineTo(x - s * .3, y + s * .3); ctx.stroke(); ctx.restore();
+}
+function botIcon(x, y, s, color, a = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * .07);
+  rr(x - s / 2, y - s * .36, s, s * .72, s * .2); ctx.fillStyle = rgba(color, .15); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - s * .36); ctx.lineTo(x, y - s * .54); ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y - s * .6, s * .07, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - s * .16, y + s * .18); ctx.lineTo(x + s * .16, y + s * .18); ctx.stroke();
+  ctx.restore();
+}
+function bezPt(P, t) {
+  const [a, b, c, d] = P, u = 1 - t;
+  return [u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
+          u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]];
+}
+function bezLine(P, k, color, lw = 2, a = 1) {
+  if (k <= 0 || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+  for (let i = 0; i <= 48; i++) { const q = bezPt(P, k * i / 48); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ── tiny syntax highlighter ──────────────────────────────────
+const KW = new Set(['syntax', 'package', 'message', 'public', 'sealed', 'partial', 'class', 'final', 'var', 'new', 'const', 'get', 'set']);
+const TY = new Set(['string', 'int32', 'int64', 'int', 'int32_t', 'IMessage']);
+function tokens(line) {
+  const out = [], re = /(\/\/.*$|"[^"]*"|\s+|\d+|[A-Za-z_]\w*|.)/g; let m;
+  while ((m = re.exec(line))) {
+    const s = m[0]; let c = C.text;
+    if (s.startsWith('//')) c = C.faint;
+    else if (s[0] === '"') c = '#86efac';
+    else if (/^\d+$/.test(s)) c = C.server;
+    else if (KW.has(s)) c = C.proto;
+    else if (TY.has(s)) c = C.client;
+    else if (/^[^\w\s]$/.test(s)) c = C.dim;
+    out.push([s, c]);
+  }
+  return out;
+}
+// lines: array of strings. chars: how many characters are revealed (newline = 1).
+// insert: {idx, s, k, chars} — a line sliding in at idx (k: 0..1).
+function code(lines, x, y, o = {}) {
+  const { size = 24, lh = 36, chars = Infinity, alpha = 1, insert = null, hlW = 600 } = o;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, 500, true); ctx.textBaseline = 'alphabetic';
+  const cw = ctx.measureText('M').width; let left = chars, cursor = null;
+  const drawLine = (s, yy, limit) => {
+    let col = 0;
+    for (const [tok, c] of tokens(s)) {
+      if (limit <= 0) break;
+      const vis = tok.slice(0, limit); ctx.fillStyle = c;
+      ctx.fillText(vis, x + col * cw, yy); col += vis.length; limit -= vis.length;
+    }
+    return col;
+  };
+  let shift = 0;
+  const drawInsert = i => {
+    if (!insert || i !== insert.idx || insert.k <= 0) return;
+    {
+      const yy = y + i * lh; const k = insert.k;
+      ctx.save(); ctx.globalAlpha *= k;
+      ctx.fillStyle = rgba(C.bot, .16 * (insert.flash ?? 1)); ctx.fillRect(x - 18, yy - lh * .74, hlW, lh);
+      ctx.fillStyle = C.bot; ctx.fillRect(x - 18, yy - lh * .74, 4, lh);
+      drawLine(insert.s, yy, insert.chars ?? Infinity); ctx.restore();
+      shift = insert.k;
+    }
+  };
+  lines.forEach((ln, i) => {
+    drawInsert(i);
+    if (left <= 0) return;
+    const yy = y + (i + shift) * lh;
+    const col = drawLine(ln, yy, left);
+    cursor = [x + col * cw, yy]; left -= ln.length + 1;
+  });
+  drawInsert(lines.length);
+  ctx.restore();
+  return { cw, cursor };
+}
+
+// ── background, headers, progress ────────────────────────────
+function background(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const glow = (cx, cy, r, col) => { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+  glow(W * .18 + Math.sin(t * .2) * 80, H * .1, 900, 'rgba(167,139,250,0.10)');
+  glow(W * .86, H * .92 + Math.cos(t * .17) * 60, 900, 'rgba(56,189,248,0.08)');
+  ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
+  const off = (t * 10) % 60; ctx.beginPath();
+  for (let x = -60 + off; x < W; x += 60) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = -60 + off; y < H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  for (const q of PARTS) {
+    const x = ((q.x + t * q.vx) % W + W) % W, y = ((q.y + t * q.vy) % H + H) % H;
+    ctx.fillStyle = `rgba(200,210,255,${q.a})`; ctx.fillRect(x, y, q.s, q.s);
+  }
+}
+
+const HEAD = [
+  [5.0, 14.3, '01', '패킷 정의', '클라와 서버가 주고받는 모든 메시지를 .proto 한 파일에'],
+  [14.3, 23.8, '02', '코드 생성', 'protoc 한 번으로 클라 · 서버 · 봇 코드를 동시에'],
+  [23.8, 33.3, '03', '항상 동기화', '봇도 같은 생성 코드를 쓰니까, 패킷이 낡지 않습니다'],
+  [33.3, 46.5, '04', '서버가 먼저', '클라 연동 전, 봇이 클라의 패킷 플로우를 그대로 흉내 냅니다'],
+  [46.5, 58.5, '05', '퍼블리셔에게', '같은 봇을 수천 개 띄워 장비 스펙 산정 · 라이브 인프라 테스트'],
+];
+function headers(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a;
+    chip(n, 120 - (1 - k) * 30, 106, C.proto, { size: 22, alpha: k });
+    txt(title, 196 - (1 - k) * 30, 122, { size: 50, weight: 800, alpha: k });
+    txt(sub, 122, 174, { size: 27, weight: 500, color: C.dim, alpha: k2 });
+    ctx.restore();
+  }
+}
+function progress(t) {
+  const x0 = 120, x1 = 1800, y = 1040;
+  const a = clamp(Math.min(t - 4.6, 63.4 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(148,163,184,0.15)'; ctx.fillRect(x0, y, x1 - x0, 3);
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, C.proto); g.addColorStop(.5, C.bot); g.addColorStop(1, C.pub);
+  ctx.fillStyle = g; ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
+  for (const h of HEAD) {
+    const x = x0 + (x1 - x0) * h[0] / DURATION;
+    ctx.fillStyle = t >= h[0] ? C.text : C.faint; ctx.fillRect(x, y - 4, 2, 11);
+    txt(h[2] + ' ' + h[3], x + 8, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint });
+  }
+  ctx.restore();
+}
+
+// ── word-by-word title ───────────────────────────────────────
+function words(ws, cx, y, t, t0, o = {}) {
+  const { size = 96, weight = 800, stagger = .12, colors = [] } = o;
+  font(size, weight); const sp = size * .28;
+  const widths = ws.map(w => ctx.measureText(w).width);
+  let x = cx - (widths.reduce((a, b) => a + b, 0) + sp * (ws.length - 1)) / 2;
+  ws.forEach((w, i) => {
+    const k = eo(p(t, t0 + i * stagger, .8));
+    ctx.save(); ctx.globalAlpha *= k; font(size, weight); ctx.fillStyle = colors[i] || C.text;
+    if (colors[i]) { ctx.shadowColor = rgba(colors[i], .5); ctx.shadowBlur = 40; }
+    ctx.fillText(w, x, y + (1 - k) * 46); ctx.restore();
+    x += widths[i] + sp;
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 0 · Title (0 – 5.2)
+// ═════════════════════════════════════════════════════════════
+const STORY = [['.proto', C.proto], ['Codegen', C.client], ['Bot', C.bot], ['Content Test', C.server], ['Publisher', C.pub]];
+function sTitle(t) {
+  const a = win(t, 0, 5.2, .6); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt('PROTOBUF · CODEGEN · BOT CLIENT · LOAD TEST', W / 2, 330, { size: 22, weight: 600, color: C.dim, align: 'center', mono: true, ls: 5, alpha: eo(p(t, .2, .8)) });
+  words(['패킷', '정의', '하나로,'], W / 2, 470, t, .45, { size: 104, colors: [C.proto] });
+  words(['개발부터', '라이브까지'], W / 2, 600, t, .85, { size: 104, colors: [null, C.bot] });
+  txt('프로토버퍼로 만든 봇 클라이언트가 개발 · 테스트 · 라이브를 하나로 잇는 방법', W / 2, 690, { size: 30, color: C.dim, align: 'center', alpha: eo(p(t, 1.7, .8)) });
+  // story strip preview
+  const x0 = 520, x1 = 1400, y = 820, k = eio(p(t, 2.1, 1.6));
+  ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(lerp(x0, x1, k), y); ctx.stroke();
+  STORY.forEach(([lab, col], i) => {
+    const x = lerp(x0, x1, i / 4), kk = eback(p(t, 2.1 + i * .3, .6));
+    if (kk <= 0) return;
+    dot(x, y, 9 * kk, col, 1, 24);
+    txt(lab, x, y + 44, { size: 20, weight: 600, color: col, align: 'center', mono: true, alpha: clamp(kk) });
+  });
+  const tp = p(t, 2.4, 2.2); if (tp > 0 && tp < 1) dot(lerp(x0, x1, eio(tp)), y, 5, '#fff', 1, 30);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 1 · .proto (5 – 14.3)
+// ═════════════════════════════════════════════════════════════
+const PROTO = [
+  'syntax = "proto3";', 'package game;', '',
+  'message LoginReq {', '  string account_id = 1;', '  string token      = 2;', '}', '',
+  'message EnterDungeonReq {', '  int32 dungeon_id = 1;', '  int32 party_id   = 2;', '}', '',
+  'message SkillUseReq {', '  int32 skill_id  = 1;', '  int64 target_id = 2;', '}',
+];
+const PROTO_CHARS = PROTO.reduce((s, l) => s + l.length + 1, 0);
+const BULLETS = [
+  [C.proto, 'message = 패킷 하나', '필드 이름 · 타입 · 번호(tag)를 선언'],
+  [C.client, '언어 중립 스키마', 'C# · C++ · Go … 원하는 언어로 생성'],
+  [C.bot, 'Single Source of Truth', '패킷의 원본은 오직 이 파일 하나'],
+];
+function sProto(t) {
+  const a = win(t, 5, 14.3, .5); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(t, 5.2, .8));
+  const X = 120, Y = 225 + (1 - k) * 40, Wd = 860, Ht = 760;
+  const pulse = Math.max(0, Math.sin(p(t, 12, 2.3) * Math.PI));
+  panel(X, Y, Wd, Ht, { alpha: k, glow: C.proto, glowA: .25 + pulse * .9, stroke: rgba(C.proto, .35 + pulse * .5) });
+  // title bar
+  ctx.save(); ctx.globalAlpha *= k;
+  [C.red, C.server, C.bot].forEach((c, i) => dot(X + 32 + i * 24, Y + 32, 6, c, .8, 0));
+  txt('game_packet.proto', X + 120, Y + 40, { size: 20, weight: 600, color: C.dim, mono: true });
+  ctx.fillStyle = C.line; ctx.fillRect(X, Y + 62, Wd, 1);
+  const chars = PROTO_CHARS * p(t, 5.9, 5.4);
+  font(20, 500, true);
+  PROTO.forEach((_, i) => {
+    if (i * 2 > chars / 10 + 2 && chars < PROTO_CHARS) return;
+    txt(String(i + 1).padStart(2, ' '), X + 34, Y + 112 + i * 37, { size: 18, color: C.faint, mono: true });
+  });
+  const r = code(PROTO, X + 92, Y + 112, { size: 24, lh: 37, chars });
+  if (r.cursor && (chars < PROTO_CHARS || Math.floor(t * 2) % 2 === 0)) {
+    ctx.fillStyle = C.proto; ctx.fillRect(r.cursor[0] + 2, r.cursor[1] - 22, 12, 28);
+  }
+  ctx.restore();
+  // bullets
+  BULLETS.forEach(([col, title, desc], i) => {
+    const kb = eo(p(t, 7 + i * 1.6, .8)); if (kb <= 0) return;
+    const bx = 1060 + (1 - kb) * 50, by = 260 + i * 220;
+    panel(bx, by, 740, 180, { alpha: kb, stroke: rgba(col, .35) });
+    ctx.save(); ctx.globalAlpha *= kb;
+    dot(bx + 62, by + 90, 26, rgba(col, .18), 1, 0);
+    txt(String(i + 1), bx + 62, by + 100, { size: 28, weight: 800, color: col, align: 'center', mono: true });
+    txt(title, bx + 118, by + 80, { size: 34, weight: 800 });
+    txt(desc, bx + 118, by + 124, { size: 25, color: C.dim });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 2+3 · protoc codegen & sync (14.3 – 33.3)
+// ═════════════════════════════════════════════════════════════
+const MINI = ['message LoginReq { … }', 'message SkillUseReq { … }', '', 'message EnterDungeonReq {', '  int32 dungeon_id = 1;', '  int32 party_id   = 2;', '}'];
+const OUT = [
+  { name: 'Client', lang: 'Unity · C#', file: 'GamePacket.cs', col: C.client, y: 200,
+    lines: ['public sealed partial class EnterDungeonReq', '    : IMessage<EnterDungeonReq> {', '  public int DungeonId { get; set; }', '  public int PartyId { get; set; }'],
+    add: { idx: 4, s: '  public int Difficulty { get; set; }' } },
+  { name: 'Server', lang: 'C++', file: 'game_packet.pb.h', col: C.server, y: 470,
+    lines: ['class EnterDungeonReq final', '    : public ::google::protobuf::Message {', '  int32_t dungeon_id() const;', '  int32_t party_id() const;'],
+    add: { idx: 4, s: '  int32_t difficulty() const;' } },
+  { name: 'Bot Client', lang: 'C# (.NET)', file: 'GamePacket.cs', col: C.bot, y: 740,
+    lines: ['// 클라와 같은 생성 코드를 그대로 사용', 'var req = new EnterDungeonReq {', '  DungeonId = 101, PartyId = party.Id,', '};'],
+    add: { idx: 3, s: '  Difficulty = 3,' } },
+];
+const PC = [830, 590];  // protoc node
+function sCodegen(t) {
+  const a = win(t, 14.3, 33.3, .5); if (a <= 0) return;
+  const u = t - 14.3;
+  ctx.save(); ctx.globalAlpha = a;
+
+  // captions (left-top)
+  const c1 = Math.min(eo(p(u, 2.8, .7)), 1 - eo(p(u, 9.1, .5)));
+  txt('protoc 한 번 → 클라 · 서버 · 봇', 122, 280, { size: 36, weight: 800, alpha: c1 });
+  txt('같은 .proto에서 생성 → 구조가 100% 일치', 122, 328, { size: 25, color: C.dim, alpha: c1 });
+  const c2 = eo(p(u, 10, .7));
+  txt('필드를 추가해도 재생성 한 번이면 끝', 122, 280, { size: 36, weight: 800, alpha: c2 });
+  txt('봇 패킷이 클라 · 서버와 자동으로 같이 갱신', 122, 328, { size: 25, color: C.dim, alpha: c2 });
+
+  // phases
+  const insK = eo(p(u, 10.6, .6));                 // new field slides in
+  const pulseA = p(u, 11.5, .5);                    // proto → protoc
+  const pulseB = p(u, 12.0, .8);                    // protoc → outputs
+  const upd = i => eo(p(u, 12.75 + i * .12, .5));   // outputs updated
+
+  // proto card
+  const kp = eo(p(u, 0, .8));
+  const PX = 120, PY = 402, PW = 500, PH = 380;
+  panel(PX, PY + (1 - kp) * 30, PW, PH, { alpha: kp, glow: C.proto, glowA: .3 + insK * (1 - p(u, 12, 1)) * .8, stroke: rgba(C.proto, .5) });
+  ctx.save(); ctx.globalAlpha *= kp;
+  txt('game_packet.proto', PX + 28, PY + 42, { size: 20, weight: 600, color: C.dim, mono: true });
+  const vFlash = insK * (1 - p(u, 12.2, .6));
+  chip(insK > .5 ? 'v1.4' : 'v1.3', PX + PW - 24, PY + 35, insK > .5 ? C.bot : C.dim, { align: 'right', size: 17, fillA: .14 + vFlash * .3 });
+  ctx.fillStyle = C.line; ctx.fillRect(PX, PY + 64, PW, 1);
+  code(MINI, PX + 34, PY + 112, { size: 22, lh: 34, hlW: PW - 34,
+    insert: { idx: 6, s: '  int32 difficulty = 3;', k: insK, chars: Math.floor(23 * p(u, 10.8, .7)), flash: 1 - p(u, 14, 2) * .6 } });
+  ctx.restore();
+
+  // proto → protoc line
+  const L0 = [[PX + PW, PC[1]], [PX + PW + 40, PC[1]], [PC[0] - 130, PC[1]], [PC[0] - 92, PC[1]]];
+  bezLine(L0, eo(p(u, .6, .5)), rgba(C.proto, .55), 2.5);
+
+  // protoc node
+  const kn = eback(p(u, .7, .7));
+  if (kn > 0) {
+    const spin = u * 40 + eio(p(u, 11.5, 1.5)) * 260;
+    ctx.save(); ctx.globalAlpha *= clamp(kn);
+    ctx.translate(PC[0], PC[1]); ctx.scale(kn, kn);
+    ctx.shadowColor = rgba(C.proto, .6); ctx.shadowBlur = 40 + Math.sin(pulseA * Math.PI) * 60;
+    ctx.beginPath(); ctx.arc(0, 0, 74, 0, 7); ctx.fillStyle = C.panel; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 2.5; ctx.strokeStyle = C.proto; ctx.stroke();
+    ctx.setLineDash([10, 12]); ctx.lineDashOffset = -spin; ctx.lineWidth = 2; ctx.strokeStyle = rgba(C.proto, .5);
+    ctx.beginPath(); ctx.arc(0, 0, 92, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
+    txt('protoc', PC[0], PC[1] + 4, { size: 28, weight: 800, color: C.text, align: 'center', mono: true, alpha: clamp(kn) });
+    txt('codegen', PC[0], PC[1] + 32, { size: 16, weight: 600, color: C.proto, align: 'center', mono: true, alpha: clamp(kn) });
+  }
+  // pulse proto → protoc
+  if (pulseA > 0 && pulseA < 1) { const q = bezPt(L0, eio(pulseA)); dot(q[0], q[1], 10, C.bot, 1, 40); }
+
+  // outputs
+  OUT.forEach((o, i) => {
+    const ko = eo(p(u, 1.3 + i * .25, .7)); if (ko <= 0) return;
+    const X = 1060 + (1 - ko) * 60, Y = o.y, Wd = 740, Ht = 240, cy = Y + Ht / 2;
+    const P = [[PC[0] + 92, PC[1]], [PC[0] + 170, PC[1]], [960, cy], [1060, cy]];
+    bezLine(P, eo(p(u, 1.1 + i * .25, .7)), rgba(o.col, .5), 2.5);
+    // codegen flow
+    const flowA = Math.min(p(u, 2, .5), 1 - p(u, 9, .8));
+    for (let j = 0; j < 4; j++) {
+      const f = ((u * .55 + j / 4 + i * .13) % 1);
+      if (flowA > 0) { const q = bezPt(P, f); dot(q[0], q[1], 4, o.col, flowA * Math.sin(f * Math.PI), 14); }
+    }
+    if (pulseB > 0 && pulseB < 1) { const q = bezPt(P, eio(pulseB)); dot(q[0], q[1], 10, C.bot, 1, 40); }
+
+    const uk = upd(i), flash = uk * (1 - p(u, 13.4 + i * .12, .9));
+    const isBot = o.name === 'Bot Client';
+    panel(X, Y, Wd, Ht, { alpha: ko, stroke: rgba(o.col, isBot ? .75 : .4), lw: isBot ? 2.5 : 1.5, glow: flash > 0 ? C.bot : (isBot ? C.bot : null), glowA: isBot ? .35 + flash : flash });
+    ctx.save(); ctx.globalAlpha *= ko;
+    dot(X + 34, Y + 40, 7, o.col, 1, 12);
+    txt(o.name, X + 54, Y + 50, { size: 28, weight: 800, color: o.col });
+    const nw = tw(o.name, 28, 800);
+    txt(o.lang, X + 70 + nw, Y + 49, { size: 20, weight: 500, color: C.dim });
+    txt(o.file, X + Wd - 120, Y + 48, { size: 17, color: C.faint, mono: true, align: 'right' });
+    chip(uk > .5 ? 'v1.4' : 'v1.3', X + Wd - 24, Y + 42, uk > .5 ? C.bot : C.dim, { align: 'right', size: 16, fillA: .14 + flash * .4 });
+    ctx.fillStyle = C.line; ctx.fillRect(X, Y + 72, Wd, 1);
+    const chars = 400 * p(u, 2.4 + i * .3, 2.2);
+    code(o.lines, X + 32, Y + 110, { size: 19, lh: 27, chars, hlW: Wd - 32,
+      insert: { ...o.add, k: uk, chars: Math.floor(40 * p(u, 12.9 + i * .12, .6)), flash: 1 - p(u, 15, 2) * .6 } });
+    // synced badge
+    const kb = eback(p(u, 13.3 + i * .15, .5));
+    if (kb > 0) {
+      ctx.save(); ctx.translate(X + Wd - 52, Y + Ht - 46); ctx.scale(kb, kb);
+      dot(0, 0, 22, rgba(C.bot, .2), 1, 0); check(0, 0, 26, C.bot); ctx.restore();
+    }
+    ctx.restore();
+  });
+
+  // hand-written bot: stale
+  const kg = eo(p(u, 14.6, .8));
+  if (kg > 0) {
+    const GX = 120, GY = 812 + (1 - kg) * 30, GW = 500, GH = 170;
+    const shake = Math.sin(u * 60) * 5 * (1 - p(u, 15.6, .5)) * p(u, 15.2, .1);
+    panel(GX + shake, GY, GW, GH, { alpha: kg, dash: [8, 8], stroke: rgba(C.red, .8), fill: rgba(C.red, .05) });
+    ctx.save(); ctx.globalAlpha *= kg; ctx.translate(shake, 0);
+    botIcon(GX + 56, GY + 58, 46, C.red, .9);
+    txt('손으로 짠 봇 패킷', GX + 104, GY + 66, { size: 27, weight: 800 });
+    chip('v1.3', GX + GW - 26, GY + 56, C.red, { align: 'right', size: 16 });
+    txt('difficulty 필드 없음 → 파싱 오류', GX + 32, GY + 116, { size: 22, color: C.red });
+    txt('→ 테스트 결과를 믿을 수 없음', GX + 32, GY + 148, { size: 22, color: C.dim });
+    ctx.restore();
+    const kx = eback(p(u, 15.2, .5));
+    if (kx > 0) { ctx.save(); ctx.translate(GX + GW - 4, GY + 4); ctx.scale(kx, kx); dot(0, 0, 24, '#2a1216', 1, 0); cross(0, 0, 26, C.red); ctx.restore(); }
+  }
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 4 · server-first, bot mimics client flow (33.3 – 46.5)
+// ═════════════════════════════════════════════════════════════
+function sServerFirst(t) {
+  // Part A — schedule gap
+  const aA = win(t, 33.3, 39.1, .5);
+  if (aA > 0) {
+    const v = t - 33.3;
+    ctx.save(); ctx.globalAlpha = aA;
+    const x0 = 330, colW = 180, lanes = [[C.server, '서버팀', 380], [C.client, '클라팀', 540]];
+    // week grid
+    for (let w = 0; w <= 8; w++) {
+      const x = x0 + w * colW, k = eo(p(v, .1 + w * .04, .5));
+      ctx.fillStyle = `rgba(148,163,184,${.12 * k})`; ctx.fillRect(x, 280, 1, 380);
+      if (w < 8) txt('W' + (w + 1), x + colW / 2, 690, { size: 20, color: C.faint, align: 'center', mono: true, alpha: k });
+    }
+    const prog = eio(p(v, .5, 1.9));
+    lanes.forEach(([col, name, y], i) => {
+      const k = eo(p(v, .2 + i * .15, .6));
+      txt(name, 120, y + 10, { size: 30, weight: 800, color: col, alpha: k });
+      const len = i === 0 ? 3 : 7;
+      panel(x0, y - 30, colW * len, 60, { r: 12, alpha: k * .9, fill: rgba(col, .06), stroke: rgba(col, .35) });
+      const fill = colW * 3 * prog;
+      ctx.save(); ctx.globalAlpha *= k; rr(x0, y - 30, fill, 60, 12); ctx.fillStyle = rgba(col, .35); ctx.fill(); ctx.restore();
+      txt(i === 0 ? '던전 컨텐츠 서버 로직' : 'UI · 연출 · 리소스 작업 중…', x0 + 22, y + 9, { size: 23, weight: 700, alpha: k });
+    });
+    // playhead
+    const px = x0 + colW * 3 * prog;
+    ctx.fillStyle = rgba('#ffffff', .8 * aA); ctx.fillRect(px - 1, 270, 2, 400);
+    chip('NOW', px, 258, '#ffffff', { align: 'center', size: 15, alpha: eo(p(v, .4, .4)) });
+    const kd = eback(p(v, 2.4, .5));
+    if (kd > 0) { ctx.save(); ctx.translate(x0 + colW * 3 - 40, 380); ctx.scale(kd, kd); dot(0, 0, 20, C.server, 1, 30); check(0, 0, 24, '#1a1405'); ctx.restore(); }
+    // gap
+    const gx = x0 + colW * 3 + 14, gw = colW * 4 - 14;
+    const kg = Math.min(eo(p(v, 2.6, .5)), 1 - eo(p(v, 3.6, .4)));
+    if (kg > 0) {
+      ctx.save(); ctx.globalAlpha *= kg; rr(gx, 350, gw, 60, 12); ctx.clip();
+      ctx.strokeStyle = rgba(C.server, .3); ctx.lineWidth = 2;
+      for (let x = gx - 60; x < gx + gw; x += 18) { ctx.beginPath(); ctx.moveTo(x, 410); ctx.lineTo(x + 60, 350); ctx.stroke(); }
+      ctx.restore();
+      txt('클라 연동까지 대기…?', gx + gw / 2, 389, { size: 24, weight: 700, color: C.server, align: 'center', alpha: kg });
+    }
+    const kb = eback(p(v, 3.6, .7));
+    if (kb > 0) {
+      const bx = gx + (1 - clamp(kb)) * 80;
+      panel(bx, 350, gw, 60, { r: 12, alpha: clamp(kb), fill: rgba(C.bot, .14), stroke: C.bot, glow: C.bot, glowA: .6 });
+      botIcon(bx + 36, 382, 30, C.bot, clamp(kb));
+      txt('봇 클라이언트로 바로 컨텐츠 테스트', bx + 66, 389, { size: 23, weight: 800, color: C.bot, alpha: clamp(kb) });
+    }
+    txt('서버는 보통 클라보다 먼저 컨텐츠를 완성합니다.', 120, 820, { size: 34, weight: 700, alpha: eo(p(v, 1.2, .6)) });
+    txt('기다리지 말고 — 봇이 클라 대신 패킷을 보내 검증합니다.', 120, 874, { size: 30, color: C.bot, weight: 600, alpha: eo(p(v, 3.9, .6)) });
+    ctx.restore();
+  }
+
+  // Part B — sequence diagram
+  const aB = win(t, 38.8, 46.5, .5);
+  if (aB > 0) {
+    const v = t - 38.8;
+    ctx.save(); ctx.globalAlpha = aB;
+    const BX = 700, SX = 1320, top = 250, rows = 360, step = 74;
+    const SEQ = [
+      [1, 'LoginReq'], [-1, 'LoginAck'], [1, 'EnterWorldReq'], [-1, 'EnterWorldAck'],
+      [1, 'EnterDungeonReq'], [-1, 'EnterDungeonAck'], [1, 'SkillUseReq × N', 'burst'], [-1, 'DungeonClearNoti'],
+    ];
+    const starts = []; let s0 = .9;
+    SEQ.forEach(m => { starts.push(s0); s0 += m[2] ? 1.8 : .55; });
+    // lifelines
+    [[BX, 'Bot Client', C.bot], [SX, 'Game Server', C.server]].forEach(([x, lab, col], i) => {
+      const k = eo(p(v, .1 + i * .15, .6));
+      panel(x - 130, top - 36 + (1 - k) * 20, 260, 68, { alpha: k, stroke: col, fill: rgba(col, .1), glow: col, glowA: .4 });
+      if (i === 0) botIcon(x - 92, top - 2, 32, col, k);
+      txt(lab, x + (i === 0 ? 18 : 0), top + 9, { size: 26, weight: 800, color: col, align: 'center', alpha: k });
+      const lk = eo(p(v, .3, 1));
+      ctx.save(); ctx.globalAlpha *= .5; ctx.setLineDash([6, 8]); ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, top + 34); ctx.lineTo(x, lerp(top + 34, 960, lk)); ctx.stroke(); ctx.restore();
+    });
+    SEQ.forEach(([dir, label, kind], i) => {
+      const st = starts[i], k = eio(p(v, st, .45)); if (k <= 0) return;
+      const y = rows + i * step, xa = dir > 0 ? BX : SX, xb = dir > 0 ? SX : BX, col = dir > 0 ? C.bot : C.server;
+      const xe = lerp(xa, xb, k);
+      ctx.save(); ctx.strokeStyle = rgba(col, .8); ctx.lineWidth = 2.5; if (dir < 0) ctx.setLineDash([10, 7]);
+      ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xe, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(xe, y); ctx.lineTo(xe - 14 * dir, y - 8); ctx.lineTo(xe - 14 * dir, y + 8); ctx.fill(); ctx.restore();
+      if (k < 1) dot(xe, y, 7, col, 1, 26);
+      txt(label, (BX + SX) / 2, y - 14, { size: 21, weight: 700, color: col, align: 'center', mono: true, alpha: eo(p(v, st + .15, .4)) });
+      txt(String(i + 1).padStart(2, '0'), BX - 160, y + 7, { size: 18, color: C.faint, mono: true, alpha: eo(p(v, st, .3)) });
+      if (kind === 'burst') {
+        for (let j = 0; j < 9; j++) {
+          const f = p(v, st + .4 + j * .14, .38);
+          if (f > 0 && f < 1) dot(lerp(BX, SX, f), y + (j % 2 ? 6 : -6) * 0, 5, C.bot, 1, 20);
+          const g = p(v, st + .55 + j * .14, .38);
+          if (g > 0 && g < 1) dot(lerp(SX, BX, g), y + 20, 3.5, C.server, .8, 14);
+        }
+      }
+    });
+    // left: real client (in progress)
+    const kc = eo(p(v, .4, .7));
+    panel(120, 300, 340, 220, { alpha: kc * .9, dash: [7, 7], stroke: rgba(C.client, .6), fill: rgba(C.client, .04) });
+    txt('Client', 150, 356, { size: 28, weight: 800, color: C.client, alpha: kc });
+    txt('개발 중…', 258, 356, { size: 22, color: C.dim, alpha: kc });
+    txt('실제 클라가 보낼', 150, 420, { size: 23, color: C.dim, alpha: kc });
+    txt('패킷 순서 그대로', 150, 456, { size: 23, weight: 700, alpha: kc });
+    txt('봇이 흉내 → → →', 150, 492, { size: 23, weight: 700, color: C.bot, alpha: eo(p(v, 1, .6)) });
+    // right: checklist
+    const CHECKS = [[1, '로그인 · 월드 입장'], [5, '던전 입장 시퀀스'], [6, '전투 패킷 반복'], [7, '클리어 · 보상 검증']];
+    txt('클라 없이 검증', 1490, 340, { size: 30, weight: 800, alpha: eo(p(v, .6, .6)) });
+    CHECKS.forEach(([ri, lab], j) => {
+      const k = eo(p(v, starts[ri] + .5, .4)); if (k <= 0) return;
+      const y = 410 + j * 72;
+      dot(1508, y - 8, 17, rgba(C.bot, .18), k, 0); check(1508, y - 8, 20, C.bot, k);
+      txt(lab, 1540, y, { size: 24, weight: 600, alpha: k });
+    });
+    ctx.restore();
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 5 · hand-off to publisher, load test (46.5 – 58.5)
+// ═════════════════════════════════════════════════════════════
+const GRID = (() => { const r = rng(42), cells = []; for (let j = 0; j < 18; j++) for (let i = 0; i < 24; i++) cells.push({ i, j, o: r(), ph: r() * 6 }); return cells.sort((a, b) => a.o - b.o); })();
+const cpuAt = ccu => { const k = ccu / 1000; return 5 + 11 * k + .4 * k * k; };   // 5,000 CCU → 70%
+const latAt = ccu => { const k = ccu / 1000; return 18 + 6 * k + (k > 4.8 ? (k - 4.8) ** 2 * 40 : 0); };
+const fmt = n => Math.round(n).toLocaleString('en-US');
+function sPublisher(t) {
+  // Part A — hand-off
+  const aA = win(t, 46.5, 49.6, .45);
+  if (aA > 0) {
+    const v = t - 46.5;
+    ctx.save(); ctx.globalAlpha = aA;
+    const kL = eo(p(v, .05, .5)), kR = eo(p(v, .2, .5));
+    panel(160, 330, 460, 420, { alpha: kL, stroke: rgba(C.server, .5) });
+    txt('서버팀', 390, 390, { size: 32, weight: 800, color: C.server, align: 'center', alpha: kL });
+    const arrived = p(v, 1.85, .4);
+    panel(1300, 330, 460, 420, { alpha: kR, stroke: rgba(C.pub, .4 + arrived * .5), glow: C.pub, glowA: arrived * .8 });
+    txt('퍼블리셔', 1530, 390, { size: 32, weight: 800, color: C.pub, align: 'center', alpha: kR });
+    txt('QA · 인프라팀', 1530, 424, { size: 20, color: C.dim, align: 'center', alpha: kR });
+    // arc
+    const m = eio(p(v, .65, 1.2));
+    ctx.save(); ctx.globalAlpha *= eo(p(v, .4, .4)) * (1 - arrived * .6); ctx.setLineDash([6, 10]); ctx.strokeStyle = rgba(C.bot, .5); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(620, 540); ctx.quadraticCurveTo(960, 300, 1300, 540); ctx.stroke(); ctx.restore();
+    const cx = lerp(390, 1530, m), cy = 540 - Math.sin(m * Math.PI) * 150;
+    const kp = eback(p(v, .2, .5));
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(clamp(kp, 0, 2), clamp(kp, 0, 2)); ctx.rotate(Math.sin(m * Math.PI) * -.06);
+    panel(-150, -85, 300, 170, { fill: rgba(C.bot, .1), stroke: C.bot, glow: C.bot, glowA: .7, lw: 2 });
+    botIcon(-98, -18, 52, C.bot);
+    txt('BotClient 패키지', -58, -26, { size: 22, weight: 800, color: C.bot });
+    ['생성된 패킷 코드', '컨텐츠 시나리오', '부하 설정 (동접 · RPS)'].forEach((s, i) => txt('· ' + s, -58, 6 + i * 26, { size: 17, color: C.dim }));
+    ctx.restore();
+    ['장비 스펙 산정', '라이브 인프라 테스트'].forEach((s, i) => {
+      const k = eo(p(v, 2.1 + i * .2, .4));
+      txt('→ ' + s, 1390, 680 + i * 40, { size: 24, weight: 700, alpha: k });
+    });
+    ctx.restore();
+  }
+
+  // Part B — load test dashboard
+  const aB = win(t, 49.3, 58.5, .5);
+  if (aB > 0) {
+    const v = t - 49.3;
+    ctx.save(); ctx.globalAlpha = aB;
+    const ccu = 6000 * eio(p(v, .7, 5.4)), cpu = cpuAt(ccu), lat = latAt(ccu);
+    const dimRes = 1 - .35 * eo(p(v, 6.2, .6));
+    ctx.save(); ctx.globalAlpha *= dimRes;
+
+    // bots panel
+    const k1 = eo(p(v, 0, .6));
+    panel(120, 210, 540, 560, { alpha: k1, stroke: rgba(C.bot, .45) });
+    txt('동시 접속 봇', 150, 262, { size: 24, weight: 700, color: C.dim, alpha: k1 });
+    txt(fmt(ccu), 630, 272, { size: 52, weight: 800, color: C.bot, align: 'right', mono: true, alpha: k1 });
+    const shown = Math.floor(GRID.length * ccu / 6000);
+    for (let n = 0; n < shown; n++) {
+      const g = GRID[n], x = 162 + g.i * 20.5, y = 320 + g.j * 23.5;
+      const blink = .55 + .45 * Math.sin(t * 5 + g.ph);
+      ctx.fillStyle = rgba(C.bot, blink * k1); ctx.fillRect(x - 4, y - 4, 8, 8);
+    }
+    // packet streams to servers
+    const streams = Math.floor(4 + 26 * ccu / 6000);
+    for (let s = 0; s < streams; s++) {
+      const f = (t * 1.3 + s * .618) % 1, ty = 300 + ((s * 97) % 330);
+      dot(lerp(665, 770, f), lerp(320 + ((s * 53) % 420), ty, f), 2.6, C.bot, Math.sin(f * Math.PI) * k1, 10);
+    }
+    // servers
+    const units = [['LB', 230, 60, Math.min(99, cpu * .45)], ['Game Server', 320, 200, cpu], ['DB', 545, 150, Math.min(99, cpu * .62)]];
+    units.forEach(([name, y, h, load], i) => {
+      const k = eo(p(v, .15 + i * .1, .5));
+      const col = load < 60 ? C.bot : load < 72 ? C.server : C.red;
+      panel(775, y, 210, h, { alpha: k, r: 12, stroke: rgba(col, .6), glow: load > 72 ? C.red : null, glowA: .5 });
+      txt(name, 795, y + 34, { size: 20, weight: 700, alpha: k });
+      if (h > 80) {
+        for (let l = 0; l < 3; l++) dot(800 + l * 18, y + 62, 4, col, k * (.4 + .6 * ((Math.floor(t * 8) + l + i) % 3 === 0)), 8);
+        txt(Math.round(load) + '%', 965, y + h - 22, { size: 30, weight: 800, color: col, align: 'right', mono: true, alpha: k });
+        txt('CPU', 795, y + h - 24, { size: 16, color: C.faint, mono: true, alpha: k });
+      }
+      ctx.save(); ctx.globalAlpha *= k; rr(795, y + h - 14, 170, 5, 3); ctx.fillStyle = 'rgba(148,163,184,0.18)'; ctx.fill();
+      rr(795, y + h - 14, 170 * load / 100, 5, 3); ctx.fillStyle = col; ctx.fill(); ctx.restore();
+    });
+
+    // chart
+    const k2 = eo(p(v, .3, .6));
+    const CX = 1030, CY = 210, CW = 770, CH = 430;
+    panel(CX, CY, CW, CH, { alpha: k2 });
+    ctx.save(); ctx.globalAlpha *= k2;
+    txt('CPU 사용률 vs 동시 접속', CX + 30, CY + 46, { size: 24, weight: 700 });
+    txt('Game Server · 1대', CX + CW - 30, CY + 46, { size: 18, color: C.faint, align: 'right', mono: true });
+    const px0 = 1100, px1 = 1770, py0 = 590, py1 = 285;
+    const X = c => lerp(px0, px1, c / 6000), Y = c => lerp(py0, py1, c / 100);
+    ctx.strokeStyle = 'rgba(148,163,184,0.14)'; ctx.lineWidth = 1;
+    [0, 25, 50, 75, 100].forEach(g => { ctx.beginPath(); ctx.moveTo(px0, Y(g)); ctx.lineTo(px1, Y(g)); ctx.stroke(); txt(g + '%', px0 - 12, Y(g) + 6, { size: 15, color: C.faint, align: 'right', mono: true }); });
+    [0, 2000, 4000, 6000].forEach(g => txt(g ? g / 1000 + 'k' : '0', X(g), py0 + 28, { size: 15, color: C.faint, align: 'center', mono: true }));
+    // threshold
+    ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = rgba(C.red, .7); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px0, Y(70)); ctx.lineTo(px1, Y(70)); ctx.stroke(); ctx.restore();
+    txt('임계 70%', px0 + 10, Y(70) - 10, { size: 16, weight: 700, color: C.red, mono: true });
+    // line + area
+    if (ccu > 10) {
+      const g = ctx.createLinearGradient(0, py1, 0, py0); g.addColorStop(0, rgba(C.bot, .28)); g.addColorStop(1, rgba(C.bot, 0));
+      ctx.beginPath(); ctx.moveTo(X(0), py0);
+      for (let c = 0; c <= ccu; c += 40) ctx.lineTo(X(c), Y(cpuAt(c) + Math.sin(c * .006) * .7));
+      ctx.lineTo(X(ccu), Y(cpu)); ctx.lineTo(X(ccu), py0); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath();
+      for (let c = 0; c <= ccu; c += 40) { const yy = Y(cpuAt(c) + Math.sin(c * .006) * .7); c ? ctx.lineTo(X(c), yy) : ctx.moveTo(X(c), yy); }
+      ctx.lineTo(X(ccu), Y(cpu)); ctx.strokeStyle = C.bot; ctx.lineWidth = 3; ctx.stroke();
+      dot(X(ccu), Y(cpu), 7, cpu > 70 ? C.red : C.bot, 1, 24);
+    }
+    // 5,000 marker
+    const km = eback(p(ccu, 5000, 400));
+    if (km > 0) {
+      ctx.save(); ctx.setLineDash([4, 6]); ctx.strokeStyle = rgba(C.pub, .8); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(X(5000), py0); ctx.lineTo(X(5000), Y(70)); ctx.stroke(); ctx.restore();
+      dot(X(5000), Y(70), 9 * clamp(km, 0, 1.3), C.pub, 1, 30);
+      ctx.save(); ctx.translate(X(5000) - 20, Y(70) - 70); ctx.scale(km, km);
+      panel(-250, -30, 270, 54, { r: 10, fill: rgba(C.pub, .16), stroke: C.pub });
+      txt('서버 1대 ≈ 동접 5,000', -115, 6, { size: 21, weight: 800, color: C.pub, align: 'center' });
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // stat chips
+    const STATS = [['RPS', fmt(ccu * 8), C.bot], ['p99 지연', Math.round(lat) + 'ms', lat > 80 ? C.red : C.bot], ['DB QPS', fmt(ccu * 1.6), C.client]];
+    STATS.forEach(([lab, val, col], i) => {
+      const k = eo(p(v, .5 + i * .1, .5)), x = 1030 + i * 262;
+      panel(x, 662, 246, 108, { alpha: k, stroke: rgba(col, .4) });
+      txt(lab, x + 22, 700, { size: 18, weight: 600, color: C.dim, alpha: k });
+      txt(val, x + 22, 748, { size: 34, weight: 800, color: col, mono: true, alpha: k });
+    });
+    ctx.restore();
+
+    // results
+    const RES = [
+      [C.pub, '장비 스펙 산정', '대당 동접 5,000 (CPU 70% 기준)', '목표 동접 50,000 → 서버 10대 + 여유분'],
+      [C.client, '라이브 인프라 테스트', '실서비스 환경에 같은 봇으로 부하 투입', 'LB · 네트워크 · DB 병목을 오픈 전에 확인'],
+    ];
+    RES.forEach(([col, title, l1, l2], i) => {
+      const k = eo(p(v, 6.2 + i * .35, .7)); if (k <= 0) return;
+      const x = 120 + i * 850, y = 800 + (1 - k) * 40;
+      panel(x, y, 830, 200, { alpha: k, stroke: col, lw: 2, fill: rgba(col, .07), glow: col, glowA: .5 });
+      ctx.save(); ctx.globalAlpha *= k;
+      dot(x + 50, y + 54, 9, col, 1, 20);
+      txt(title, x + 76, y + 66, { size: 34, weight: 800, color: col });
+      txt(l1, x + 40, y + 122, { size: 25, color: C.dim });
+      txt(l2, x + 40, y + 164, { size: 27, weight: 700 });
+      ctx.restore();
+    });
+    txt('* 수치는 설명을 위한 예시입니다', 1800, 1018, { size: 16, color: C.faint, align: 'right', alpha: eo(p(v, 6.8, .5)) });
+    ctx.restore();
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE 6 · Outro (58.5 – 64)
+// ═════════════════════════════════════════════════════════════
+const OUTRO = [
+  [C.proto, '.proto', '단일 원천'], [C.client, 'Codegen', '클라 · 서버 · 봇'], [C.bot, 'Bot Client', '패킷 항상 최신'],
+  [C.server, '컨텐츠 테스트', '서버 선개발 검증'], [C.pub, '스펙 · 라이브', '퍼블리셔 부하 테스트'],
+];
+function sOutro(t) {
+  const a = win(t, 58.5, 64.2, .6); if (a <= 0) return;
+  const v = t - 58.5;
+  ctx.save(); ctx.globalAlpha = a;
+  const xs = OUTRO.map((_, i) => 260 + i * 350), y = 440;
+  const kl = eio(p(v, .3, 1.6));
+  ctx.strokeStyle = 'rgba(148,163,184,0.3)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(lerp(xs[0], xs[4], kl), y); ctx.stroke();
+  for (let j = 0; j < 10; j++) {
+    const f = (v * .35 + j / 10) % 1;
+    if (lerp(xs[0], xs[4], f) <= lerp(xs[0], xs[4], kl)) dot(lerp(xs[0], xs[4], f), y, 3.5, '#fff', .7 * Math.sin(f * Math.PI), 16);
+  }
+  OUTRO.forEach(([col, lab, sub], i) => {
+    const k = eback(p(v, .3 + i * .3, .6)); if (k <= 0) return;
+    const x = xs[i];
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+    ctx.shadowColor = rgba(col, .6); ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.arc(0, 0, 72, 0, 7); ctx.fillStyle = C.panel; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+    if (i === 0) txt('{ }', 0, 12, { size: 38, weight: 800, color: col, align: 'center', mono: true });
+    if (i === 1) txt('</>', 0, 12, { size: 34, weight: 800, color: col, align: 'center', mono: true });
+    if (i === 2) botIcon(0, 6, 62, col);
+    if (i === 3) check(0, 2, 56, col);
+    if (i === 4) { [[-24, 18], [-4, 32], [16, 48]].forEach(([bx, bh]) => { ctx.fillStyle = col; rr(bx, 24 - bh, 14, bh, 3); ctx.fill(); }); }
+    ctx.restore();
+    const kt = eo(p(v, .5 + i * .3, .5));
+    txt(lab, x, y + 132, { size: 30, weight: 800, color: col, align: 'center', alpha: kt });
+    txt(sub, x, y + 172, { size: 22, color: C.dim, align: 'center', alpha: kt });
+  });
+  words(['패킷', '정의', '하나가,', '개발부터', '라이브까지.'], W / 2, 820, t, 60.3, { size: 64, stagger: .1, colors: [C.proto, null, null, null, C.bot] });
+  txt('Protobuf → Codegen → Bot Client → Content Test → Capacity & Live', W / 2, 890, { size: 22, color: C.faint, align: 'center', mono: true, alpha: eo(p(v, 2.6, .8)) });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t);
+  sTitle(t); sProto(t); sCodegen(t); sServerFirst(t); sPublisher(t); sOutro(t);
+  headers(t); progress(t);
+  // final fade to black
+  const fo = p(t, 63.4, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [
+    new FontFace('Pretendard', 'url(../assets/fonts/Pretendard-Variable.woff2)', { weight: '100 900' }),
+    new FontFace('JetBrains Mono', 'url(../assets/fonts/JetBrainsMono.woff2)', { weight: '100 800' }),
+  ];
+  for (const f of faces) { try { document.fonts.add(await f.load()); } catch (e) { console.warn('font', e); } }
+  await document.fonts.ready;
+})();
+
+// preview playback (skipped when ?render)
+if (!location.search.includes('render')) {
+  window.ready.then(() => {
+    let start = performance.now(), paused = false, pt = 0;
+    const qs = new URLSearchParams(location.search); if (qs.has('t')) start -= parseFloat(qs.get('t')) * 1000;
+    cv.addEventListener('click', () => { paused = !paused; if (!paused) start = performance.now() - pt * 1000; });
+    const loop = now => { if (!paused) pt = ((now - start) / 1000) % DURATION; renderAt(pt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
