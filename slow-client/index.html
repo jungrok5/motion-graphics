@@ -59,10 +59,10 @@
   </div>
   <div class="bar">
     <button class="btn" id="play" aria-label="재생"></button>
-    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="84" aria-valuenow="0">
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="93" aria-valuenow="0">
       <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
     </div>
-    <div class="time" id="time">0:00 / 1:23</div>
+    <div class="time" id="time">0:00 / 1:32</div>
     <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
   <div class="chapters" id="chapters"></div>
@@ -72,7 +72,7 @@
 //  클라가 느리면 서버도 느려질까 — 백프레셔와 격리
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
-const W = 1920, H = 1080, DURATION = 83.5;
+const W = 1920, H = 1080, DURATION = 92.5;
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 
@@ -248,8 +248,8 @@ const HEAD = [
   [15.0, 26.0, '02', '느린 클라의 두 종류', '느린 회선, 느린 기기'],
   [26.0, 41.0, '03', '압력이 서버로 거꾸로 온다', '수신 버퍼 → Zero Window → 송신 버퍼 → 앱 송신 큐'],
   [41.0, 55.0, '04', '서버가 느려지는 네 가지 경로', '기다리거나, 쌓아두거나, 락을 쥐거나, 몰려오거나'],
-  [55.0, 67.0, '05', '잘 만든 서버는 격리한다', '느린 클라는 혼자만 느리게'],
-  [67.0, 78.0, '06', '인프라에서 확인하는 법', 'Send-Q · Zero Window · 세션 큐 · 메모리 · 틱을 같이 본다'],
+  [55.0, 76.0, '05', '잘 만든 서버는 격리한다', '느린 클라는 혼자만 느리게 — 그리고 상한만으로는 새는 곳'],
+  [76.0, 87.0, '06', '인프라에서 확인하는 법', 'Send-Q · Zero Window · 세션 큐 · 메모리 · 틱을 같이 본다'],
 ];
 function headers(t) {
   for (const [s, e, n, title, sub] of HEAD) {
@@ -489,7 +489,7 @@ function sPaths(t) {
 //  05 · a well-built server isolates
 // ═════════════════════════════════════════════════════════════
 function sIsolate(t) {
-  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const [S] = HEAD[4]; const a = win(t, S, S + 10, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const k = eo(p(u, .1, .6));
   panel(120, 215, 700, 470, { alpha: k, stroke: rgba(C.bot, .4) });
@@ -505,6 +505,49 @@ function sIsolate(t) {
            ['상태 패킷은 최신값만', '이동 · HP는 덮어써도 된다 — 밀린 과거는 버린다'], ['상한 초과가 지속되면 정리', '끊고 재접속시키는 게 모두에게 낫다'],
            ['버퍼 풀 · 재사용', '할당을 줄여 GC 부담을 막는다'], ['클라도 매 프레임 수신을 다 비운다', '처리 예산을 두고 렌더와 분리']], u, .8, 270, C.bot, 1, 880, 920);
   txt('느린 클라가 서버를 늦추지 못하게 하는 게 서버의 책임', W / 2, 870, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 5.5, .6)) });
+  ctx.restore();
+}
+
+
+// 05 · part B — where isolation still leaks even with a queue cap
+function sLeaks(t) {
+  const [S, E] = HEAD[4]; const a = win(t, S + 9.7, E, .5); if (a <= 0) return;
+  const u = t - S - 9.7; ctx.save(); ctx.globalAlpha = a;
+  chip('상한만으로는 새는 곳', 1800, 112, C.red, { align: 'right', size: 22, alpha: eo(p(u, 0, .5)) });
+  let f = cardFrame(0, u, 'IOCP 대기 중인 보내기', 'WSASend는 완료될 때까지 버퍼를 붙잡는다 → 대기 요청 수 · 바이트에도 상한', C.proto);
+  if (f) { const { x, y, k, v } = f, n = Math.min(14, Math.floor(v * 3));
+    txt('느린 세션의 대기 요청', x + 36, y + 170, { size: 17, color: C.dim, alpha: k });
+    for (let i = 0; i < n; i++) { ctx.save(); ctx.globalAlpha *= k; rr(x + 36 + i * 54, y + 200, 44, 70, 6); ctx.fillStyle = rgba(i >= 8 ? C.red : C.proto, .55); ctx.fill(); ctx.restore(); }
+    ctx.save(); ctx.globalAlpha *= k; ctx.setLineDash([6, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 36 + 8 * 54 - 5, y + 190); ctx.lineTo(x + 36 + 8 * 54 - 5, y + 280); ctx.stroke(); ctx.restore();
+    txt('필요한 상한', x + 36 + 8 * 54 - 5, y + 304, { size: 15, weight: 700, color: C.red, align: 'center', alpha: k });
+    txt('대기 ' + n + '건 · ' + n * 64 + 'KB 고정', x + 790, y + 170, { size: 18, weight: 800, mono: true, color: n >= 8 ? C.red : C.text, align: 'right', alpha: k }); }
+  f = cardFrame(1, u, '공유 브로드캐스트 버퍼', '여러 세션이 함께 참조 → 가장 느린 세션이 보낼 때까지 해제되지 않는다', C.server);
+  if (f) { const { x, y, k, v } = f, bx = x + 150, by = y + 240;
+    const done = i => i !== 3 && v > .6 + i * .3;
+    const ref = 6 - [0, 1, 2, 3, 4, 5].filter(done).length;
+    ctx.save(); ctx.globalAlpha *= k; rr(bx - 70, by - 45, 140, 90, 12); ctx.fillStyle = rgba(ref <= 1 && v > 3 ? C.red : C.server, .3); ctx.fill(); ctx.strokeStyle = C.server; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    txt('패킷 버퍼', bx, by - 6, { size: 18, weight: 800, align: 'center', alpha: k });
+    txt('ref ' + ref, bx, by + 22, { size: 18, weight: 800, mono: true, color: ref === 1 ? C.red : C.server, align: 'center', alpha: k });
+    for (let i = 0; i < 6; i++) { const sx = x + 470 + (i % 3) * 110, sy = y + 190 + Math.floor(i / 3) * 100, d = done(i), slow = i === 3;
+      ctx.save(); ctx.globalAlpha *= k * (d ? .25 : .8); ctx.strokeStyle = slow ? C.pub : C.server; ctx.lineWidth = 2; ctx.setLineDash(d ? [4, 6] : []); ctx.beginPath(); ctx.moveTo(bx + 70, by); ctx.lineTo(sx - 22, sy); ctx.stroke(); ctx.restore();
+      dot(sx, sy, 14, slow ? C.pub : d ? C.faint : C.server, k, 10); txt(slow ? '느린' : '완료', sx, sy + 38, { size: 14, color: slow ? C.pub : C.dim, align: 'center', alpha: k * (slow || d ? 1 : 0) }); } }
+  f = cardFrame(2, u, 'EAGAIN 처리', '실패 즉시 재시도 · 쓰기 가능 이벤트를 계속 감시 → CPU가 헛돈다', C.pub);
+  if (f) { const { x, y, k, v } = f, cpu = Math.min(100, 15 + v * 18), an = v * 8;
+    ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = C.pub; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x + 170, y + 245, 50, an, an + Math.PI * 1.6); ctx.stroke();
+    const ex = x + 170 + Math.cos(an + Math.PI * 1.6) * 50, ey = y + 245 + Math.sin(an + Math.PI * 1.6) * 50; dot(ex, ey, 7, C.pub, 1, 14); ctx.restore();
+    txt('send → EAGAIN → send …', x + 170, y + 325, { size: 15, mono: true, color: C.dim, align: 'center', alpha: k });
+    txt('IO 스레드 CPU', x + 320, y + 236, { size: 18, weight: 700, alpha: k });
+    ctx.save(); ctx.globalAlpha *= k; rr(x + 320, y + 252, 440, 26, 8); ctx.fillStyle = 'rgba(148,163,184,0.1)'; ctx.fill(); rr(x + 320, y + 252, 440 * cpu / 100, 26, 8); ctx.fillStyle = rgba(cpu > 80 ? C.red : C.pub, .65); ctx.fill(); ctx.restore();
+    txt(Math.round(cpu) + '%', x + 760, y + 236, { size: 20, weight: 800, mono: true, align: 'right', color: cpu > 80 ? C.red : C.text, alpha: k });
+    txt('→ 버퍼가 비었다는 알림만 받고 다시 시도', x + 320, y + 318, { size: 16, color: C.bot, alpha: k }); }
+  f = cardFrame(3, u, '숨은 대기', '소켓은 논블로킹이어도 로직 스레드가 다른 데서 기다린다', C.red);
+  if (f) { const { x, y, k, v } = f, now = (v % 4) * 90;
+    txt('Zone A', x + 36, y + 238, { size: 16, weight: 700, color: C.dim, mono: true, alpha: k });
+    [[0, 25, C.server], [25, 40, C.red, '세션 락'], [65, 20, C.server], [85, 45, C.red, '동기 로깅'], [130, 20, C.server], [150, 40, C.red, 'TLS · 라이브러리'], [190, 30, C.server]].forEach(([s0, d, col, lab]) => {
+      const vis = clamp((now - s0) / d); if (vis <= 0) return;
+      ctx.save(); ctx.globalAlpha *= k; rr(x + 130 + s0 * 2.8, y + 218, d * 2.8 * vis - 2, 32, 5); ctx.fillStyle = rgba(col, .6); ctx.fill(); ctx.restore();
+      if (lab && vis >= 1) txt(lab, x + 130 + (s0 + d / 2) * 2.8, y + 290, { size: 15, weight: 700, color: C.red, align: 'center', alpha: k }); }); }
+  txt('격리 = 큐 상한 + 대기 요청 상한 + 버퍼 공유 끊기 + 헛도는 재시도 없애기 + 숨은 대기 제거', W / 2, 975, { size: 22, weight: 800, align: 'center', alpha: eo(p(u, 6.5, .6)) });
   ctx.restore();
 }
 
@@ -583,7 +626,7 @@ function sOutro(t) {
 function renderAt(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
   background(t);
-  sTitle(t); sAnswer(t); sKinds(t); sBackpressure(t); sPaths(t); sIsolate(t); sDetect(t); sOutro(t);
+  sTitle(t); sAnswer(t); sKinds(t); sBackpressure(t); sPaths(t); sIsolate(t); sLeaks(t); sDetect(t); sOutro(t);
   headers(t); progress(t);
   // final fade to black
   const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }

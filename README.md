@@ -167,7 +167,7 @@
 
 - 플레이어: [`boss-lag/`](https://jungrok5.github.io/motion-graphics/boss-lag/)
 
-## slow-client (83s)
+## slow-client (92s)
 
 "클라가 느리면 서버도 느려질까?" — 백프레셔와 느린 클라 격리. `tech-motion-explainer` 스킬로 제작.
 
@@ -177,7 +177,7 @@
 | 02 느린 클라의 두 종류 | 느린 회선(받는 속도 부족) · 느린 기기(읽고 처리하는 속도 부족) |
 | 03 압력이 서버로 거꾸로 온다 | 클라 수신 버퍼 → Zero Window → 서버 SO_SNDBUF → send() EAGAIN/블로킹 → 앱 송신 큐 증가 |
 | 04 서버가 느려지는 네 가지 경로 | 블로킹 send · 무제한 송신 큐(메모리 · GC · OOM) · 락 보유 대기 · 몰아치는 입력 |
-| 05 잘 만든 서버는 격리한다 | 논블로킹 send, 세션별 큐 상한, 상태 패킷 최신값 덮어쓰기, 느린 세션 정리, 버퍼 풀 |
+| 05 잘 만든 서버는 격리한다 | 논블로킹 send, 세션별 큐 상한, 상태 패킷 최신값 덮어쓰기, 느린 세션 정리, 버퍼 풀 · 상한만으로 새는 곳: IOCP 대기 요청, 공유 브로드캐스트 버퍼, EAGAIN 헛돌기, 숨은 대기(락 · 로깅 · TLS) |
 | 06 인프라에서 확인하는 법 | `ss` Send-Q, `tcp.analysis.zero_window`, 세션 큐 · 메모리 · 틱 p99를 함께 보고 판단 |
 
 - 플레이어: [`slow-client/`](https://jungrok5.github.io/motion-graphics/slow-client/)
