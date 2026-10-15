@@ -1,4 +1,4 @@
-// Headless check of a player page: no page errors, play advances time, chapter jump works,
+// Headless check of a player page (add --shots <dir> for full-page screenshots): no page errors, play advances time, chapter jump works,
 // speed button cycles, notes render (count of chapter headings), no horizontal overflow at phone width.  Usage: node scripts/check-player.mjs <page.html>
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
@@ -49,6 +49,13 @@ await phone.goto(url);
 await phone.evaluate(() => window.ready);
 const overflow = await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
+// --shots <dir>: full-page screenshots (desktop + phone) to eyeball the notes section
+const shotsAt = process.argv.indexOf('--shots');
+if (shotsAt > 0) {
+  const dir = process.argv[shotsAt + 1]; fs.mkdirSync(dir, { recursive: true });
+  await desk.screenshot({ path: path.join(dir, 'page-desktop.png'), fullPage: true });
+  await phone.screenshot({ path: path.join(dir, 'page-phone.png'), fullPage: true });
+}
 console.log({ afterPlay, bigHidden, afterJump, rateAfterClick, notesShown, notesChapters, phoneOverflow: overflow, errors });
 await browser.close();
 server.close();

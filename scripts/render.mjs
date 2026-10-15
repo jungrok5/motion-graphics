@@ -41,7 +41,7 @@ const grab = t => tab.evaluate(t => { window.renderAt(t); return document.getEle
 if (stills) {
   fs.mkdirSync(out, { recursive: true });
   for (const t of stills.split(',').map(Number)) {
-    fs.writeFileSync(path.join(out, `t${String(t).padStart(5, '0')}.png`), Buffer.from(await grab(t), 'base64'));
+    fs.writeFileSync(path.join(out, `t${t.toFixed(1).padStart(5, '0')}.png`), Buffer.from(await grab(t), 'base64'));
   }
 } else {
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', '-',

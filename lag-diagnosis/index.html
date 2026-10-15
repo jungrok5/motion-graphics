@@ -19,7 +19,7 @@
   .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
     border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
   canvas { display: block; width: 100%; height: 100%; }
-  .big { position: absolute; inset: 0; margin: auto; width: 84px; height: 84px; border-radius: 50%; border: 1.5px solid var(--accent);
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: 84px; height: 84px; border-radius: 50%; border: 1.5px solid var(--accent);
     background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
   .big[hidden] { display: none; }
   .big:hover { transform: scale(1.06); }
@@ -824,6 +824,7 @@ if (!location.search.includes('render')) {
     replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
   };
   const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [DURATION - 5.5, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
   const POSTER = 3.6;
   let t = 0, playing = false, started = false, last = 0;
   const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;

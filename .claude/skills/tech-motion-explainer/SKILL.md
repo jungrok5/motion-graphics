@@ -39,9 +39,14 @@ Each chapter = one idea and one visual device. Pick from the device catalog belo
 
 ### 3. Build
 1. `mkdir <slug>` and copy `template.html` → `<slug>/index.html`. Replace `__TITLE__` (2–4 word name).
-2. Set `DURATION`, `HEAD` (chapter rows: start, end, number, title, subtitle), `TITLE`, `OUTRO`.
+2. Set `DURATION`, `HEAD` (chapter rows: start, end, number, title, subtitle), `TITLE` (intro only), `OUTRO`.
+   The player reads `DURATION` for the time label and slider range; nothing else to update.
+   Length guide: chapter title ≤ 14 chars, subtitle ≤ 40 chars, a centered canvas line ≤ ~1600px at its size
+   (check with `tw(text, size, weight)` when unsure).
 3. Delete the example scenes, write one `sXxx(t)` per chapter, and list them in `renderAt`.
-4. Scene skeleton:
+4. Helpers in the template: `panel`, `chip`, `dot`, `txt`, `tw`, `code`, `words`, `bezPt`, `rng`, easing (`eo`, `eio`, `eback`, `win`, `p`).
+   Devices beyond that (cards, lanes, tanks, bars, hatching) live in the reference videos in the catalog below; copy the function you need.
+5. Scene skeleton:
    ```js
    function sThing(t) {
      const [S, E] = HEAD[i]; const a = win(t, S, E, .5); if (a <= 0) return;
@@ -56,7 +61,7 @@ Each chapter = one idea and one visual device. Pick from the device catalog belo
    A chapter can have sub-phases: two `win()` windows overlapping by ~0.3s (see `sServerFirst`, `sPublisher`).
    Or one window whose layout persists while state changes (see `sCodegen` → sync, which spans two headers).
 
-4. Write the notes into the `<!-- NOTES -->` slot (inside `<section class="notes">`), for the same audience:
+6. Write the notes into the `<!-- NOTES -->` slot (inside `<section class="notes">`), for the same audience:
    ```html
    <p class="lede">2–3 sentences: what the video explains and the main takeaway.</p>
    <article data-ch="01"><p>…</p></article>      <!-- one per chapter number in HEAD; no heading -->
@@ -65,16 +70,23 @@ Each chapter = one idea and one visual device. Pick from the device catalog belo
    ```
    The page inserts each chapter title and a "▶ 이 장면" jump button from `HEAD`, so chapter renames need no notes edit.
    Each chapter: 2–4 short paragraphs (or a `<ul>`) that say what is on screen and why. Numbers must match the canvas exactly.
-5. Add the gallery entry (step 5), then generate the reading pages from those notes:
+7. Add the gallery entry (see Deliver), then generate the reading pages from those notes:
    `node scripts/build-articles.mjs` → `<slug>/article.html` (글로 읽기: lede, table of contents, chapters with
    "▶ 이 장면 보기" links to `index.html#chNN`, glossary) and the site-wide `glossary.html` (all terms, merged, searchable).
    Never edit these generated files by hand; edit the notes in `<slug>/index.html` and rerun.
 
 ### 4. Verify (mandatory, before showing the user)
 ```bash
-node scripts/render.mjs <slug>/index.html <scratch>/stills --stills <mid of each chapter + 1–2 transitions>
-node scripts/check-player.mjs <slug>/index.html
+node scripts/render.mjs <slug>/index.html <scratch>/<slug>-stills --stills <times>
+node scripts/check-player.mjs <slug>/index.html --shots <scratch>/<slug>-stills
 ```
+- Use a fresh stills folder per video. Files are named `t003.6.png`, `t011.0.png` so they sort by time.
+- Pick times: the end of each chapter (everything revealed), plus the moments where something moves through
+  or lands near text (packets crossing labels, counters growing, chips appearing). Overlaps hide in those in-between frames.
+- The two `404` lines in the render log are expected: fonts are tried at `assets/fonts/` then `../assets/fonts/`.
+- `--shots` saves full-page desktop and phone screenshots; look at the notes section in both.
+- The poster frame (`POSTER`, before play) shows the intro; the big play button sits under the title, so keep the intro's
+  story strip above y ≈ 900.
 Read every still. Fix overlapping text, clipped boxes, truncated typed lines, empty areas. Re-render only the stills you changed.
 Then re-read every on-screen claim and the notes as a skeptical reviewer: is it true as stated, is it compared like-for-like,
 is any number or effect exaggerated, is an example number labeled `예시`? Fix before delivering.
@@ -94,7 +106,8 @@ is any number or effect exaggerated, is an example number labeled `예시`? Fix 
 - **Color = role.** The palette is `C.proto / client / server / bot / pub / red`; rename the roles in a comment if the subject differs, but keep one meaning per color. Red only for failure/threshold.
 - **Motion vocabulary**: things enter with `eo` + 30–60px slide; emphasis uses `eback` pop or glow pulse; packets are `dot()`s on `bezPt` paths. Nothing moves without meaning.
 - **Text reveals**: give viewers ~1s of read time per 10 Korean characters before the next element replaces it.
-- **Contrast beats**: show the bad alternative (red dashed card + ✗) once, near the chapter that proves the point.
+- **Contrast beats**: at most one red dashed card + ✗ per video, for the main wrong approach, near the chapter that proves the point.
+  Other bad states (waiting, overflow, threshold crossed) use red fills or red hatching without the ✗ card.
 - **Korean copy**: short declarative lines. Code, identifiers and metrics stay in English/mono.
 - **No AI-sounding copy** (titles, subtitles, canvas text, notes). Avoid:
   - metaphor nouns for a process: "받는 길", "~의 여정", "편도 여행", "전체 지도" → say what it is: "패킷을 받을 때", "전체 구간";
@@ -119,3 +132,19 @@ is any number or effect exaggerated, is an example number labeled `예시`? Fix 
 | Load dashboard (dot grid, server gauges, line chart with threshold, stat chips) | scale / capacity / metrics | `sPublisher` part B |
 | Result cards row | conclusions of a chapter | `sPublisher` RES |
 | Node strip + tagline | outro summary | `sOutro` |
+
+More devices in later videos (copy the function and its helpers):
+| device | when | reference |
+|---|---|---|
+| Thread / time lanes with blocks and hatched waits (`laneLabel`, `blk`) | threads, frames, who waits on whom over time | `ue-client-threads` `sThreads`, `sBossFrame`, `sHitch` |
+| Stacked latency bar per scenario | where the milliseconds go | `ue-client-threads` `sLatency` |
+| Line chart with shaded gap and live counter | rate in vs rate out, backlog growing | `slow-client` `sSqueeze` |
+| Tanks (buffers filling, cap line) and flow arrows (`tank`, `flowArrow`) | queues, buffers, backpressure | `slow-client` `sBackpressure`, `sCap` |
+| 2×2 cards with a small animation each (`cardFrame`) | four causes / four costs | `slow-client` `sCosts` |
+| Byte cells per field, bit layout | packet formats, sizes | `one-byte` `sSizes` (`protoRow`, `bitRow`) |
+| Bars with values + savings panel | totals, cost, capacity comparisons | `one-byte` `sTotals`, `sCapacity` |
+| Terminal output + judgement list | which metric to read and what it means | `slow-client` `sDetect` |
+| Two-column fix list (`noteRow`) | client side vs server side remedies | `slow-client` `sFixes` |
+
+For a protocol timing diagram with time running down the page, use the lane devices rotated: one vertical lifeline per side,
+y = time in ms (label the axis), arrows between lifelines at their send/receive times, red hatching for waits.
