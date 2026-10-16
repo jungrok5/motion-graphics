@@ -1,0 +1,878 @@
+<meta charset="utf-8">
+<title>Skill Journey Glow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #050407; --surface: #120e10; --line: #2e2420; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #ffb48a; --live: #fff1e6; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(18,14,16,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(255,180,138,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(255,180,138,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="내 스킬 하나가 상대 화면에 뜨기까지 — 빛 입자 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../skill-journey/">전체 영상</a><a href="../skill-journey/article.html">설명</a><a href="../skill-journey/terms.html">용어집</a></nav>
+</div>
+<!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">{"imports": {"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}}</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Skill Journey Glow — 내 스킬 하나가 상대 화면에 뜨기까지 (~21s, 1080×1920)
+//  Glowing particles + bloom + slow 3D camera. three.js renders offscreen,
+//  the 2D canvas #c composites it and draws header / labels / captions.
+//  Every frame is a pure function of time: renderAt(t).
+//  Facts (example: 20Hz server, RTT 50ms) follow ../skill-journey/index.html:
+//    input 10 · uplink 25 · tick wait 25 · tick 12 · downlink 25 · frame 8 · interp buffer 100 · render 16 = 221ms
+//    my screen: cast ~25ms (prediction), damage confirmed ~120ms; other screen ~221ms.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1080, H = 1920, DURATION = 21;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math ─────────────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const gauss = R => { let s = 0; for (let i = 0; i < 4; i++) s += R(); return (s - 2) / .577; };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ── timeline: video seconds ↔ example milliseconds ───────────
+// 0–10 input · 10–35 uplink · 35–60 tick wait · 60–72 tick · 72–97 downlink · 97–105 frame · 105–205 interp buffer · 205–221 render
+const TM = [[0, 0], [.8, 0], [3.4, 10], [7.6, 35], [9.8, 60], [11.2, 72], [13.4, 97], [13.7, 105], [15.9, 205], [16.6, 221]];
+function msAt(t) {
+  if (t <= TM[0][0]) return 0;
+  for (let i = 1; i < TM.length; i++) if (t <= TM[i][0]) return lerp(TM[i - 1][1], TM[i][1], (t - TM[i - 1][0]) / (TM[i][0] - TM[i - 1][0]));
+  return 221;
+}
+const STAGES = [[0, '입력 · 처리'], [10, '업링크 (편도)'], [35, '틱 대기'], [60, '틱 처리'], [72, '다운링크'], [97, '다음 프레임'], [105, '보간 버퍼'], [205, '렌더'], [221, '상대 화면']];
+// [start, end, number, title, subtitle] — chapters (progress bar + header)
+const HEAD = [
+  [0, 3.4, '01', '입력', 'INPUT'],
+  [3.4, 7.6, '02', '업링크', 'UPLINK'],
+  [7.6, 11.2, '03', '서버 틱', 'SERVER TICK'],
+  [11.2, 17.2, '04', '상대 화면', 'OTHER CLIENT'],
+  [17.2, DURATION, '05', '합계', 'TOTAL'],
+];
+const CREAM_AT = 17.0;   // flash → cream end card
+
+// ── palette ──────────────────────────────────────────────────
+const COL = { peach: new THREE.Color('#ffc29a'), white: new THREE.Color('#fff2e6'), rose: new THREE.Color('#ff9a86'), lav: new THREE.Color('#9d8cff'), gold: new THREE.Color('#ffd69c'), ember: new THREE.Color('#ff8a5c') };
+const warm = R => { const r = R(); return r < .45 ? COL.peach : r < .72 ? COL.white : r < .86 ? COL.rose : r < .96 ? COL.gold : COL.lav; };
+
+// ── three setup ──────────────────────────────────────────────
+const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.setPixelRatio(1); gl.setSize(W, H, false);
+gl.setClearColor(0x040305, 1);
+gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, W / H, .05, 400);
+const composer = new EffectComposer(gl);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .6, .5, .02);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const U = { uPx: { value: H / (2 * Math.tan(THREE.MathUtils.degToRad(25))) }, uFocus: { value: 10 }, uAperture: { value: .1 }, uTime: { value: 0 }, uMax: { value: 80 } };
+const PVS = `
+attribute float size; attribute float alpha; attribute vec3 color; attribute float phase;
+uniform float uPx, uFocus, uAperture, uTime, uMax, uGain;
+varying vec3 vC; varying float vBok;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  float base = size * uPx / d;
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / d);
+  float s = min(sqrt(base * base + coc * coc), uMax);
+  float e = max(base, 1.4) / max(s, 1.4);
+  vBok = smoothstep(5.0, 16.0, coc);
+  float a = alpha * uGain * mix(e * e, 0.32 * e, vBok);
+  a *= 0.82 + 0.18 * sin(uTime * (1.3 + phase * 2.7) + phase * 40.0);
+  if (s < 1.6) a *= (s / 1.6) * (s / 1.6);
+  gl_PointSize = max(s, 1.6);
+  vC = color * a;
+  gl_Position = projectionMatrix * mv;
+  if (alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const PFS = `
+varying vec3 vC; varying float vBok;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0; float d = dot(c, c); if (d > 1.0) discard;
+  float core = exp(-d * 6.0) + 0.25 * exp(-d * 1.6);
+  float disc = smoothstep(1.0, 0.78, d) * (0.6 + 0.4 * d);
+  gl_FragColor = vec4(vC * mix(core, disc, vBok), 1.0);
+}`;
+const LVS = `
+attribute vec3 color; attribute float alpha;
+uniform float uPx, uFocus, uAperture, uGain;
+varying vec3 vC;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / d);
+  vC = color * alpha * uGain / (1.0 + coc * 0.12);
+  gl_Position = projectionMatrix * mv;
+}`;
+const LFS = `varying vec3 vC; void main() { gl_FragColor = vec4(vC, 1.0); }`;
+const blendOpts = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendEquation: THREE.AddEquation };
+const pMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: PVS, fragmentShader: PFS, ...blendOpts });
+const lMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: LVS, fragmentShader: LFS, ...blendOpts });
+
+class PB {   // point builder
+  constructor() { this.p = []; this.s = []; this.a = []; this.c = []; this.ph = []; }
+  add(v, size, alpha, col, ph = .5) { this.p.push(v.x, v.y, v.z); this.s.push(size); this.a.push(alpha); this.c.push(col.r, col.g, col.b); this.ph.push(ph); return this; }
+  get n() { return this.s.length; }
+  build(gain = 1) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(this.s, 1));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    g.setAttribute('phase', new THREE.Float32BufferAttribute(this.ph, 1));
+    const o = new THREE.Points(g, pMat(gain)); o.frustumCulled = false; o.userData.base = Float32Array.from(this.a); scene.add(o); return o;
+  }
+}
+class LB {   // line-segment builder
+  constructor() { this.p = []; this.a = []; this.c = []; }
+  add(v1, v2, a1, col, a2 = a1) { this.p.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z); this.a.push(a1, a2); this.c.push(col.r, col.g, col.b, col.r, col.g, col.b); return this; }
+  build(gain = 1) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    const o = new THREE.LineSegments(g, lMat(gain)); o.frustumCulled = false; o.userData.base = Float32Array.from(this.a); scene.add(o); return o;
+  }
+}
+const setGain = (o, g) => { o.material.uniforms.uGain.value = g; o.visible = g > .002; };
+
+// Trail: N points sampled from a position function at past times (pure function of t)
+class Trail {
+  constructor(N, col, size, lineA = .5, seed = 1) {
+    this.N = N; const R = rng(seed); const pb = new PB();
+    for (let i = 0; i < N; i++) pb.add(V(0, 0, 0), size * lerp(1, .25, i / (N - 1)), 0, i < 2 ? COL.white : col, R());
+    this.pts = pb.build();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(new Float32Array(N), 1));
+    const cc = []; for (let i = 0; i < N; i++) cc.push(col.r, col.g, col.b);
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+    this.line = new THREE.Line(g, lMat(lineA)); this.line.frustumCulled = false; scene.add(this.line);
+  }
+  // fn(time, out) → bool (false = not on screen yet); dt: seconds between samples
+  set(fn, t, dt, gain) {
+    const P = this.pts.geometry.attributes, L = this.line.geometry.attributes, v = new THREE.Vector3();
+    let any = false;
+    for (let i = 0; i < this.N; i++) {
+      const ok = gain > 0 && fn(t - i * dt, v), a = ok ? gain * Math.pow(1 - i / this.N, 1.7) : 0;
+      if (ok) any = true;
+      P.position.setXYZ(i, v.x, v.y, v.z); L.position.setXYZ(i, v.x, v.y, v.z);
+      P.alpha.setX(i, a); L.alpha.setX(i, a);
+    }
+    P.position.needsUpdate = P.alpha.needsUpdate = L.position.needsUpdate = L.alpha.needsUpdate = true;
+    this.pts.visible = this.line.visible = any;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  WORLD
+// ═════════════════════════════════════════════════════════════
+const A = V(0, 0, 0);                                  // my client
+const HOPS = [['내 PC', 0, A], ['공유기 · 와이파이', 2, V(3.6, 1.4, -10)], ['ISP 망', 8, V(-4.2, -1.2, -21)], ['인터넷 백본', 16, V(4.4, -3.4, -34)],
+  ['IDC 방화벽 · DDoS 필터', 23, V(-2.8, -6.2, -47)], ['로드밸런서', 24, V(2.2, -10.5, -60)], ['게임 서버', 25, V(0, -8, -76)]];
+const S = V(0, 0, -76);                                // server tower center
+const Q = HOPS[6][2];                                  // queue layer center
+const TOP = V(0, 9.6, -76);                            // fan-out origin
+const B = V(9, 30, -100);                              // the other player's client
+const UP = new THREE.CatmullRomCurve3(HOPS.map(h => h[2]), false, 'centripetal');
+const LAYERS = [   // y, radius, name, kicker
+  [-8, 3.7, '존 메시지 큐', '다음 틱까지 대기 · 0~50ms'],
+  [-4, 4.7, '검증', '쿨다운 · 사거리 · 마나 · 치트'],
+  [0, 5.1, '판정', '데미지 · 상태 변경'],
+  [4, 4.3, 'AOI 조회', '주변 플레이어 32명'],
+  [8, 2.9, '브로드캐스트', 'SkillCastNoti · DamageNoti'],
+];
+
+// neuron-like cluster: bright core + branching glowing filaments
+function neuron(seed, c, scale, nBranch, tint) {
+  const R = rng(seed), pb = new PB(), lb = new LB(), dist = [];
+  const branch = (o, dir, steps, w, depth) => {
+    let pos = o.clone(); const d = dir.clone();
+    for (let s = 0; s < steps; s++) {
+      d.add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.28)).normalize();
+      const nxt = pos.clone().addScaledVector(d, scale * .34 * (1 - s / steps * .4));
+      const k = 1 - s / steps;
+      lb.add(pos, nxt, .5 * w * k + .05, tint);
+      const m = 5;
+      for (let j = 0; j < m; j++) {
+        const q = pos.clone().lerp(nxt, j / m).add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.025 * scale));
+        pb.add(q, (.03 + .03 * k) * w * scale, (.35 + .5 * k) * w, R() < .25 ? COL.white : tint, R()); dist.push(q.distanceTo(c));
+      }
+      if (depth < 2 && R() < .16) branch(nxt, d.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.9)).normalize(), Math.floor(steps * (.4 + R() * .3)), w * .7, depth + 1);
+      pos = nxt;
+    }
+  };
+  for (let b = 0; b < nBranch; b++) {
+    const dir = V(gauss(R), gauss(R) * .8, gauss(R)).normalize();
+    branch(c.clone().addScaledVector(dir, .15 * scale), dir, 14 + Math.floor(R() * 10), .8 + R() * .5, 0);
+  }
+  // soma haze
+  for (let i = 0; i < 420; i++) { const q = c.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.35 * scale)); pb.add(q, (.02 + R() * .04) * scale, .25 + R() * .5, warm(R), R()); dist.push(q.distanceTo(c)); }
+  // drifting dust around
+  for (let i = 0; i < 260; i++) { const q = c.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(2.4 * scale)); pb.add(q, (.012 + R() * .025) * scale, .12 + R() * .3, warm(R), R()); dist.push(q.distanceTo(c)); }
+  const pts = pb.build(), lines = lb.build();
+  pts.userData.dist = Float32Array.from(dist);
+  return { pts, lines };
+}
+
+// background dust + bokeh orbs along the whole route
+const ROUTE = [];
+for (let i = 0; i <= 60; i++) ROUTE.push(UP.getPoint(i / 60));
+for (let i = 0; i <= 20; i++) ROUTE.push(S.clone().add(V(0, -10 + i, 0)));
+for (let i = 0; i <= 40; i++) ROUTE.push(TOP.clone().lerp(B, i / 40));
+{
+  const R = rng(11), pb = new PB();
+  for (let i = 0; i < 10000; i++) {
+    const c = ROUTE[Math.floor(R() * ROUTE.length)], r = 2 + Math.pow(R(), .7) * 16;
+    const d = V(gauss(R), gauss(R), gauss(R)).normalize().multiplyScalar(r);
+    pb.add(c.clone().add(d), .014 + Math.pow(R(), 3) * .05, .1 + R() * .4, warm(R), R());
+  }
+  var DUST = pb.build(1);
+  const ob = new PB();
+  for (let i = 0; i < 70; i++) {
+    const c = ROUTE[Math.floor(R() * ROUTE.length)], r = 3 + R() * 12;
+    const d = V(gauss(R), gauss(R), gauss(R)).normalize().multiplyScalar(r);
+    const col = R() < .5 ? COL.peach : R() < .5 ? COL.lav : COL.rose;
+    ob.add(c.clone().add(d), .09 + R() * .16, .5 + R() * .5, col, R());
+  }
+  var ORBS = ob.build(1);
+}
+
+// network nodes with filament mesh along the uplink
+const NET = (() => {
+  const R = rng(23), pb = new PB(), lb = new LB(), nodes = [];
+  for (let i = 0; i < 1000; i++) {
+    const u = R(), c = UP.getPoint(u), r = 1.6 + Math.pow(R(), .8) * 7.5;
+    const q = c.clone().add(V(gauss(R), gauss(R), gauss(R)).normalize().multiplyScalar(r));
+    if (q.z > 4) continue;
+    nodes.push(q); pb.add(q, .035 + R() * .05, .45 + R() * .45, R() < .3 ? COL.white : COL.peach, R());
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    const near = nodes.map((q, j) => [q.distanceToSquared(nodes[i]), j]).filter(x => x[1] !== i).sort((a, b) => a[0] - b[0]).slice(0, 3);
+    for (const [d2, j] of near) if (j > i && d2 < 22) lb.add(nodes[i], nodes[j], .16 + R() * .14, R() < .2 ? COL.lav : COL.peach);
+  }
+  // a few long thin strands to the hops
+  for (let h = 1; h < 6; h++) for (let k = 0; k < 14; k++) lb.add(HOPS[h][2], nodes[Math.floor(R() * nodes.length)], .22, COL.peach, .02);
+  const pts = pb.build(), lines = lb.build();
+  return { pts, lines, nodes };
+})();
+
+// hop clusters (router, ISP, backbone, IDC, LB)
+const HOPC = HOPS.slice(1, 6).map(([, , c], i) => {
+  const R = rng(100 + i), pb = new PB(), lb = new LB();
+  for (let k = 0; k < 220; k++) pb.add(c.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.45)), .02 + R() * .035, .35 + R() * .5, warm(R), R());
+  pb.add(c, .22, .9, COL.white, .3);
+  for (let k = 0; k < 18; k++) { const d = V(gauss(R), gauss(R), gauss(R)).normalize().multiplyScalar(1.2 + R() * 2); lb.add(c, c.clone().add(d), .5, COL.peach, 0); }
+  return { pts: pb.build(.7), lines: lb.build(.7) };
+});
+
+// server tower: stacked rings with tick dashes and a lattice between layers
+const SRV = (() => {
+  const R = rng(31), layers = [], lat = new LB(), ringPts = [];
+  LAYERS.forEach(([y, r], li) => {
+    const pb = new PB(), lb = new LB(), pts = [], c = V(S.x, y, S.z);
+    const n = 200;
+    for (let k = 0; k < n; k++) {
+      const a = k / n * Math.PI * 2, q = c.clone().add(V(Math.cos(a) * r, gauss(R) * .03, Math.sin(a) * r));
+      pts.push(q); pb.add(q, .035 + R() * .03, .6 + R() * .35, R() < .4 ? COL.white : COL.peach, R());
+    }
+    const dashes = 28 + li * 4;
+    for (let k = 0; k < dashes; k++) {
+      const a = k / dashes * Math.PI * 2 + li * .2, d = V(Math.cos(a), 0, Math.sin(a));
+      const q1 = c.clone().addScaledVector(d, r * .72), q2 = c.clone().addScaledVector(d, r * .94);
+      lb.add(q1, q2, .9, COL.white, .5);
+      for (let j = 0; j <= 6; j++) pb.add(q1.clone().lerp(q2, j / 6), .03, .55, COL.peach, R());
+    }
+    for (let k = 0; k < 90; k++) { const a = R() * Math.PI * 2, rr = r * (.2 + R() * .45); pb.add(c.clone().add(V(Math.cos(a) * rr, gauss(R) * .1, Math.sin(a) * rr)), .025 + R() * .02, .4 + R() * .3, warm(R), R()); }
+    layers.push({ pts: pb.build(.8), lines: lb.build(.8) }); ringPts.push(pts);
+  });
+  for (let li = 0; li < LAYERS.length - 1; li++)
+    for (let k = 0; k < 170; k++) lat.add(ringPts[li][Math.floor(R() * 200)], ringPts[li + 1][Math.floor(R() * 200)], .06 + R() * .08, R() < .15 ? COL.lav : R() < .5 ? COL.rose : COL.peach);
+  // spine
+  for (let k = 0; k < 120; k++) lat.add(V(S.x, -8, S.z), ringPts[Math.floor(R() * 5)][Math.floor(R() * 200)], .05, COL.peach, .0);
+  return { layers, lattice: lat.build(1) };
+})();
+// tick wave ring (expands when a tick starts)
+const WAVE = (() => { const pb = new PB(), R = rng(41); for (let k = 0; k < 240; k++) pb.add(V(0, 0, 0), .04, .8, R() < .5 ? COL.white : COL.peach, R()); return pb.build(0); })();
+
+// fan-out: 32 receivers (AOI example), one of them is the other player (index 0 → B)
+const FAN = (() => {
+  const R = rng(57), out = [];
+  for (let i = 0; i < 32; i++) {
+    let dest;
+    if (i === 0) dest = B.clone();
+    else { const a = i / 31 * Math.PI * 2 + R() * .3, el = .25 + R() * .9; const d = V(Math.cos(a), el, Math.sin(a)).normalize(); dest = TOP.clone().addScaledVector(d, 9 + R() * 12); }
+    const ctrl = TOP.clone().add(V(0, i ? 7 : 12, 0)).add(dest.clone().sub(TOP).multiplyScalar(.2));
+    out.push({ dest, ctrl, arr: i === 0 ? 97 : 88 + R() * 16 });
+  }
+  return out;
+})();
+const DESTS = (() => {
+  const R = rng(61), pb = new PB(), owner = [];
+  FAN.forEach((f, i) => { if (!i) return; for (let k = 0; k < 46; k++) { pb.add(f.dest.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.3)), .025 + R() * .03, .5 + R() * .4, warm(R), R()); owner.push(i); } pb.add(f.dest, .14, .9, COL.white, R()); owner.push(i); });
+  const o = pb.build(1); o.userData.owner = owner; return o;
+})();
+const FANTRAILS = FAN.map((f, i) => new Trail(i ? 30 : 44, i ? COL.peach : COL.white, i ? .08 : .13, i ? .5 : .8, 70 + i));
+
+// my client / other client clusters
+const NA = neuron(5, A, 1.0, 9, COL.peach);
+const NB = neuron(9, B, 1.0, 9, COL.rose);
+// interpolation buffer ring at B
+const RING_N = V(Math.sin(.75), .25, Math.cos(.75)).normalize();
+const RING_E1 = new THREE.Vector3().crossVectors(RING_N, V(0, 1, 0)).normalize();
+const RING_E2 = new THREE.Vector3().crossVectors(RING_N, RING_E1).normalize();
+const RING_R = 1.6, RING_A0 = 2.4;
+const ringPt = (a, r = RING_R, out = new THREE.Vector3()) => out.copy(B).addScaledVector(RING_E1, Math.cos(a) * r).addScaledVector(RING_E2, Math.sin(a) * r);
+const BUF = (() => { const pb = new PB(), R = rng(71); for (let k = 0; k < 260; k++) pb.add(ringPt(k / 260 * Math.PI * 2, RING_R + gauss(R) * .02), .03, .35, COL.peach, R()); return pb.build(0); })();
+// landing burst at B
+const BURST = (() => { const pb = new PB(), R = rng(81), dirs = []; for (let k = 0; k < 420; k++) { pb.add(B, .03 + R() * .04, 0, R() < .5 ? COL.white : COL.peach, R()); dirs.push(V(gauss(R), gauss(R), gauss(R)).normalize().multiplyScalar(2 + R() * 6)); } const o = pb.build(1); o.userData.dirs = dirs; return o; })();
+
+// packet head + trails
+const HEADP = (() => { const pb = new PB(); pb.add(V(0, 0, 0), .2, 1.6, COL.white, .1); pb.add(V(0, 0, 0), .55, .45, COL.peach, .7); return pb.build(1); })();
+const UPTRAIL = new Trail(150, COL.peach, .1, .9, 3);
+const SWEEP = new Trail(36, COL.white, .09, .7, 4);
+
+// ── packet position as a function of time ───────────────────
+const tmp = new THREE.Vector3();
+const HOP_MS = HOPS.map(h => h[1]);
+function upPoint(u, out) {   // u: uplink ms 0..25
+  let i = 0; while (i < 5 && u > HOP_MS[i + 1]) i++;
+  const f = clamp((u - HOP_MS[i]) / (HOP_MS[i + 1] - HOP_MS[i]));
+  return UP.getPoint((i + f) / 6, out);
+}
+function fanPoint(i, ms, out) {   // position of fan trail i at ms (null before 72)
+  const f = FAN[i], k = clamp((ms - 72) / (f.arr - 72));
+  const s = eo(k), u = 1 - s;
+  out.set(0, 0, 0).addScaledVector(TOP, u * u).addScaledVector(f.ctrl, 2 * u * s).addScaledVector(i === 0 ? ringPt(RING_A0, RING_R, tmp) : f.dest, s * s);
+  return out;
+}
+function pkPos(t, out) {
+  const ms = msAt(t);
+  if (ms <= 10) return out.copy(A);
+  if (ms <= 35) return upPoint(ms - 10, out);
+  if (ms <= 60) { const w = t - 7.6, r = .9 * eo(clamp(w / .8)); return out.set(Q.x + Math.sin(w * 4.2) * r, Q.y + Math.sin(w * 2.1) * .12, Q.z + Math.cos(w * 4.2) * r - (1 - eo(clamp(w / .8))) * 0); }
+  if (ms <= 72) { const k = eio((ms - 60) / 12), w = t - 7.6, r = .9 * (1 - k); return out.set(Q.x + Math.sin(w * 4.2) * r, lerp(Q.y, TOP.y, k), Q.z + Math.cos(w * 4.2) * r); }
+  if (ms <= 97) return fanPoint(0, ms, out);
+  if (ms <= 105) return ringPt(RING_A0, RING_R, out);
+  if (ms <= 205) return ringPt(RING_A0 - (ms - 105) / 100 * Math.PI * 2, RING_R, out);
+  if (ms <= 221) { const k = eio((ms - 205) / 16); return ringPt(RING_A0 - Math.PI * 2 - k * 1.5, RING_R * (1 - k), out); }
+  return out.copy(B);
+}
+function smoothPk(t, out) {   // box-filtered over the last 0.6 s for camera follow
+  out.set(0, 0, 0); const v = new THREE.Vector3();
+  for (let k = 0; k < 8; k++) out.add(pkPos(t - k * .08, v));
+  return out.multiplyScalar(1 / 8);
+}
+
+// ── camera (pure function of t) ─────────────────────────────
+function cam1(t, pos, tgt) {
+  const th = .55 + .07 * t, r = 8.6 - .9 * eio(p(t, 0, 3.4));
+  tgt.copy(A).add(V(0, .2, 0)); pos.copy(A).add(V(Math.sin(th) * r, 1.4 + .25 * t, Math.cos(th) * r));
+}
+function cam2(t, pos, tgt) {
+  smoothPk(t, tgt); const th = .25 + .08 * (t - 3.4);
+  pos.copy(tgt).add(V(Math.sin(th) * 9 + 1.5, 2.6, Math.cos(th) * 9));
+  tgt.add(V(-.4, -.4, -5));
+}
+function cam3(t, pos, tgt) {
+  const th = .32 + .055 * (t - 7.6), r = 23 + 8 * eio(p(t, 7.6, 3.4)) + 17 * eio(p(t, 10.9, 1.8));
+  tgt.copy(S).add(V(0, lerp(-3, 1, eio(p(t, 7.6, 3.2))) + 10 * eio(p(t, 10.9, 1.8)), 0));
+  pos.copy(S).add(V(Math.sin(th) * r, 4.5, Math.cos(th) * r));
+}
+function cam4(t, pos, tgt) {
+  const w = eio(p(t, 12.6, 1.3)), hp = smoothPk(t, new THREE.Vector3());
+  tgt.copy(hp).lerp(B, w);
+  const th = .5 + .06 * (t - 11.2), r = lerp(30, 10, eio(p(t, 12.3, 2.8)));
+  pos.copy(B).add(V(Math.sin(th) * r, lerp(-8, 1.6, eio(p(t, 12.3, 2.6))), Math.cos(th) * r));
+}
+const CAMS = [cam1, cam2, cam3, cam4], BLEND = [[3.3, 4.5], [7.4, 8.9], [12.3, 14.0]];
+function cameraAt(t) {
+  const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), p2 = new THREE.Vector3(), t2 = new THREE.Vector3();
+  let i = 0; while (i < 3 && t > BLEND[i][1]) i++;
+  CAMS[i](t, pos, tgt);
+  if (i < 3 && t > BLEND[i][0]) { const k = eio(p(t, BLEND[i][0], BLEND[i][1] - BLEND[i][0])); CAMS[i + 1](t, p2, t2); pos.lerp(p2, k); tgt.lerp(t2, k); }
+  camera.position.copy(pos); camera.lookAt(tgt); camera.updateMatrixWorld();
+  U.uFocus.value = pos.distanceTo(tgt);
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE UPDATE
+// ═════════════════════════════════════════════════════════════
+const pulse = (x, w) => Math.exp(-(x * x) / (w * w));
+function waveAlpha(o, rw, amp, floor, reveal = 0) {   // brightening wave travelling outward from the soma; reveal: level left behind the wave
+  const a = o.geometry.attributes.alpha, base = o.userData.base, dist = o.userData.dist;
+  for (let i = 0; i < base.length; i++) a.array[i] = base[i] * (floor + reveal * clamp((rw - dist[i]) / 1.2 + .5) + amp * pulse(dist[i] - rw, .9));
+  a.needsUpdate = true;
+}
+function update3D(t) {
+  const ms = msAt(t);
+  U.uTime.value = t;
+  cameraAt(t);
+  const v = new THREE.Vector3();
+
+  // my client: press → wave out along filaments
+  const pressK = eo(p(t, .25, .5));
+  setGain(NA.pts, 1); setGain(NA.lines, .05 + 1.0 * eo(p(t, .6, 2.2)));
+  waveAlpha(NA.pts, (t - .55) * 2.4, 1.5 * pressK, .07, .75);
+
+  // dust / orbs / net
+  setGain(DUST, .9); setGain(ORBS, .8);
+  {
+    const a = NET.pts.geometry.attributes.alpha, base = NET.pts.userData.base, pk = pkPos(t, v);
+    const near = ms > 9 && ms < 37;
+    for (let i = 0; i < base.length; i++) a.array[i] = base[i] * (1 + (near ? 3 * pulse(NET.nodes[i].distanceTo(pk), 3.2) : 0));
+    a.needsUpdate = true;
+    setGain(NET.pts, .8); setGain(NET.lines, .7 + (near ? .3 : 0));
+  }
+  HOPC.forEach((h, i) => {
+    const hm = HOP_MS[i + 1] + 10, d = ms - hm;
+    const g = .65 + (d < 0 ? 2.2 * pulse(d, 1.2) : 2.2 * Math.exp(-d / 2.5) * (ms < 40 ? 1 : 0)) + (d >= 0 ? .35 : 0);
+    setGain(h.pts, g); setGain(h.lines, g * .8);
+  });
+
+  // server: tick at ms 10, 60, 110, 160, 210 (20Hz = every 50ms)
+  const sinceTick = ((ms - 10) % 50 + 50) % 50, tickFlash = ms >= 60 ? Math.exp(-sinceTick / 4) : 0;
+  const pkY = ms >= 60 && ms <= 72 ? lerp(Q.y, TOP.y, eio((ms - 60) / 12)) : -99;
+  SRV.layers.forEach((L, li) => {
+    const y = LAYERS[li][0];
+    const g = .75 + .55 * tickFlash + 1.6 * pulse(pkY - y, 1.1) + (li === 0 && ms > 35 && ms < 60 ? .4 : 0);
+    setGain(L.pts, g); setGain(L.lines, g);
+  });
+  setGain(SRV.lattice, .75 + .35 * tickFlash);
+  {   // expanding wave on the queue layer when the tick starts
+    const k = ms >= 60 && ms < 75 ? (ms - 60) / 15 : -1, P = WAVE.geometry.attributes.position;
+    if (k >= 0) {
+      const r = lerp(3.7, 9, eo(k));
+      for (let i = 0; i < 240; i++) { const a = i / 240 * Math.PI * 2; P.setXYZ(i, S.x + Math.cos(a) * r, Q.y, S.z + Math.sin(a) * r); }
+      P.needsUpdate = true;
+    }
+    setGain(WAVE, k >= 0 ? 1.3 * (1 - k) : 0);
+  }
+  // tick sweep: a light running around the queue ring, one lap per 50ms
+  SWEEP.set((tt, out) => { const m = msAt(tt); const a = -Math.PI / 2 + ((m - 10) % 50 + 50) % 50 / 50 * Math.PI * 2; out.set(S.x + Math.cos(a) * 3.7, Q.y, S.z + Math.sin(a) * 3.7); return true; }, t, .045, t > 6.6 && t < 12.5 ? .9 * win(t, 6.6, 12.5, .6) : 0);
+
+  // packet
+  const pk = pkPos(t, v), headOn = t > .25 && ms < 221;
+  HEADP.geometry.attributes.position.setXYZ(0, pk.x, pk.y, pk.z); HEADP.geometry.attributes.position.setXYZ(1, pk.x, pk.y, pk.z);
+  HEADP.geometry.attributes.position.needsUpdate = true;
+  setGain(HEADP, headOn ? (t < 3.4 ? eo(p(t, .25, .4)) * (1.6 + .4 * Math.sin(t * 7)) : 1) : 0);
+  UPTRAIL.set((tt, out) => { if (msAt(tt) < 10) return false; pkPos(tt, out); return true; }, t, .009, ms > 10 && ms <= 105 ? 1 : 0);
+
+  // fan-out (32 receivers)
+  FANTRAILS.forEach((tr, i) => {
+    if (i === 0) { tr.set((tt, out) => { const m = msAt(tt); if (m < 72) return false; fanPoint(0, Math.min(m, 97), out); return true; }, t, .025, ms > 72 && ms < 101 ? 1 : 0); return; }
+    const f = FAN[i], gone = ms > f.arr ? clamp(1 - (ms - f.arr) / 10) : 1;
+    tr.set((tt, out) => { const m = msAt(tt); if (m < 72) return false; fanPoint(i, Math.min(m, f.arr), out); return true; }, t, .025, ms > 72 ? .75 * gone : 0);
+  });
+  {
+    const a = DESTS.geometry.attributes.alpha, base = DESTS.userData.base, own = DESTS.userData.owner;
+    for (let k = 0; k < base.length; k++) { const d = ms - FAN[own[k]].arr; a.array[k] = base[k] * (.35 + (d > 0 ? 2.2 * Math.exp(-d / 12) + .4 : 0)); }
+    a.needsUpdate = true; setGain(DESTS, 1);
+  }
+
+  // other client: buffer ring fills, then landing wave + burst
+  const bufK = clamp((ms - 105) / 100);
+  {
+    const a = BUF.geometry.attributes.alpha, n = 260, cur = RING_A0 - bufK * Math.PI * 2;
+    for (let k = 0; k < n; k++) {
+      const ang = k / n * Math.PI * 2; let rel = ((RING_A0 - ang) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      a.array[k] = .3 + (rel <= bufK * Math.PI * 2 ? 1.6 : 0);
+    }
+    a.needsUpdate = true;
+    setGain(BUF, ms > 95 ? win(t, 13.2, 17.1, .5) * (ms > 205 ? 1 - .6 * clamp((ms - 205) / 16) : 1) : 0);
+  }
+  const land = t - 16.6;
+  setGain(NB.pts, .55 + (land > 0 ? .5 * Math.exp(-land * 1.5) + .2 : 0)); setGain(NB.lines, .5 + (land > 0 ? .6 * Math.exp(-land * 1.5) + .2 : 0));
+  waveAlpha(NB.pts, land > 0 ? land * 5 : -9, land > 0 ? 1.2 : 0, .55);
+  {
+    const P = BURST.geometry.attributes.position, a = BURST.geometry.attributes.alpha, dirs = BURST.userData.dirs, k = land > 0 ? eo(clamp(land / 1.4)) : 0;
+    for (let i = 0; i < dirs.length; i++) { P.setXYZ(i, B.x + dirs[i].x * k, B.y + dirs[i].y * k, B.z + dirs[i].z * k); a.array[i] = land > 0 ? 1.1 * (1 - clamp(land / 1.4)) : 0; }
+    P.needsUpdate = a.needsUpdate = true; setGain(BURST, land > 0 ? 1 : 0);
+  }
+  bloom.strength = .6 + (land > 0 ? .45 * Math.exp(-land * 2.5) : 0) + .12 * tickFlash * (t < 12 ? 1 : 0);
+}
+
+// ═════════════════════════════════════════════════════════════
+//  2D OVERLAY
+// ═════════════════════════════════════════════════════════════
+const X0 = 64, X1 = 1016, CX = 540;
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#fff', align = 'left', alpha = 1, mono = false, ls = 0, blur = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (blur > .3) ctx.filter = `blur(${blur.toFixed(1)}px)`;
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false, ls = 0) { ctx.save(); ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; if (ls) ctx.letterSpacing = ls + 'px'; const w = ctx.measureText(s).width; ctx.restore(); return w; }
+function proj(v) { const q = v.clone().project(camera); return { x: (q.x + 1) / 2 * W, y: (1 - q.y) / 2 * H, behind: q.z > 1 }; }
+
+// caption: words fade + un-blur one by one
+function caption(lines, t, t0, t1, o = {}) {
+  const { size = 64, y = 1580, stagger = .14 } = o;
+  const out = 1 - eio(p(t, t1 - .45, .45)); if (out <= 0 || t < t0) return;
+  lines.forEach((line, li) => {
+    const ws = line.split(' '), sp = size * .28, widths = ws.map(w => tw(w, size, 800));
+    let x = CX - (widths.reduce((a, b) => a + b, 0) + sp * (ws.length - 1)) / 2;
+    ws.forEach((w, i) => {
+      const k = eo(p(t, t0 + (li * ws.length + i) * stagger + li * .25, .55));
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24;
+      txt(w, x, y + li * size * 1.3 + (1 - k) * 14, { size, weight: 800, color: '#fff7f0', alpha: k * out, blur: (1 - k) * 16 });
+      ctx.restore(); x += widths[i] + sp;
+    });
+  });
+}
+// label in the reference style: kicker + bold name, leader line to a ring dot on the 3D anchor
+function label(anchor, side, name, kicker, a, o = {}) {
+  if (a <= 0) return; const P = proj(anchor); if (P.behind) return;
+  const { dy = 0, col = '#ffc29a' } = o;
+  const lx = side === 'r' ? X1 : X0, ly = P.y + dy, al = side === 'r' ? 'right' : 'left';
+  const nw = tw(name, 40, 800), end = side === 'r' ? lx - nw - 22 : lx + nw + 22;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.strokeStyle = 'rgba(255,214,190,.55)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(lerp(P.x, end, .15), ly + 8); ctx.lineTo(end, ly + 8); ctx.stroke();
+  ctx.beginPath(); ctx.arc(P.x, P.y, 7, 0, 7); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(P.x, P.y, 3, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 16;
+  txt(kicker, lx, ly - 36, { size: 22, weight: 600, mono: true, color: col, align: al, alpha: a });
+  txt(name, lx, ly + 22, { size: 40, weight: 800, color: '#fff', align: al, alpha: a });
+  ctx.restore();
+}
+function header(t, dark) {
+  const ink = dark ? 'rgba(255,240,228,.78)' : 'rgba(40,30,24,.72)', rule = dark ? 'rgba(255,220,200,.16)' : 'rgba(40,30,24,.16)';
+  const acc = dark ? '#ff9f7a' : '#d8613e';
+  let cur = HEAD[0]; for (const h of HEAD) if (t >= h[0]) cur = h;
+  const a = eo(p(t, .1, .6));
+  txt('A LOOK INSIDE · ONE SKILL CAST', X0, 112, { size: 24, weight: 600, color: ink, ls: 3.5, alpha: a });
+  const k = eo(p(t, cur[0], .5));
+  txt(`${cur[2]} / 05 · ${cur[4]}`, X1, 112, { size: 24, weight: 600, color: ink, ls: 3.5, align: 'right', alpha: a * lerp(.2, 1, k) });
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = rule; ctx.fillRect(X0, 140, X1 - X0, 1.5);
+  ctx.fillStyle = acc; ctx.fillRect(X0, 140, (X1 - X0) * clamp(t / DURATION) * .999 + 1, 2);
+  ctx.restore();
+}
+function counter(t) {
+  const a = Math.min(eo(p(t, 1.0, .6)), 1 - eio(p(t, CREAM_AT - .5, .5))); if (a <= 0) return;
+  const ms = msAt(t); let st = STAGES[0][1]; for (const [m, s] of STAGES) if (ms >= m) st = s;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 18;
+  const num = String(Math.floor(ms)).padStart(3, '0');
+  txt(num, X0, 262, { size: 84, weight: 700, mono: true, color: '#fff3ea', alpha: a });
+  txt('ms', X0 + tw(num, 84, 700, true) + 12, 262, { size: 36, weight: 600, mono: true, color: '#ffb48a', alpha: a });
+  txt(st, X0, 314, { size: 32, weight: 700, color: '#ffc9a8', alpha: a });
+  txt('* 수치는 예시 · 서버 20Hz · RTT 50ms', X1, 200, { size: 22, weight: 500, color: 'rgba(255,230,215,.55)', align: 'right', alpha: a });
+  // moments when the same skill shows up on each screen
+  [[25, '내 화면', '시전 시작 (예측)'], [120, '내 화면', '데미지 확정'], [221, '상대 화면', '내 스킬이 보임']].forEach(([m, who, what], i) => {
+    const k = eo(clamp((ms - m) / 4)); if (k <= 0) return;
+    const y = 380 + i * 50;
+    ctx.save(); ctx.globalAlpha = a * k;
+    ctx.beginPath(); ctx.arc(X0 + 8, y - 10, 6, 0, 7); ctx.fillStyle = i === 2 ? '#ff9f7a' : '#ffe2cc'; ctx.fill(); ctx.restore();
+    txt(`~${m}ms`, X0 + 28, y, { size: 26, weight: 700, mono: true, color: '#fff3ea', alpha: a * k });
+    txt(`${who} · ${what}`, X0 + 28 + tw(`~${m}ms`, 26, 700, true) + 16, y, { size: 28, weight: 700, color: i === 2 ? '#ffb48a' : 'rgba(255,240,230,.85)', alpha: a * k });
+  });
+  ctx.restore();
+}
+function vignette() {
+  const g = ctx.createRadialGradient(CX, H * .48, H * .22, CX, H * .5, H * .72);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const b = ctx.createLinearGradient(0, H * .72, 0, H); b.addColorStop(0, 'rgba(0,0,0,0)'); b.addColorStop(1, 'rgba(0,0,0,.5)');
+  ctx.fillStyle = b; ctx.fillRect(0, H * .72, W, H * .28);
+  const tp = ctx.createLinearGradient(0, 0, 0, 480); tp.addColorStop(0, 'rgba(0,0,0,.45)'); tp.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = tp; ctx.fillRect(0, 0, W, 480);
+}
+function labels(t) {
+  const ms = msAt(t);
+  // beat 1: my client
+  label(A, 'r', '내 클라', '입력 · 예측 실행', win(t, 1.0, 3.6, .5), { dy: -260 });
+  // beat 2: hops — appear as the packet approaches, fade after it passes
+  for (let i = 1; i <= 5; i++) {
+    const hm = HOP_MS[i] + 10, a = clamp(1 - Math.abs(ms - hm) / 5.5) * win(t, 3.6, 7.5, .3);
+    label(HOPS[i][2], i % 2 ? 'r' : 'l', HOPS[i][0], `+${HOP_MS[i]}ms`, eo(a));
+  }
+  // beat 3: server layers
+  label(V(S.x - LAYERS[0][1], LAYERS[0][0], S.z), 'l', LAYERS[0][2], LAYERS[0][3], win(t, 7.9, 11.3, .4), { dy: -90 });
+  for (let li = 1; li < 5; li++) {
+    const [y, r, name, kick] = LAYERS[li], side = li % 2 ? 'r' : 'l';
+    label(V(S.x + (side === 'r' ? r : -r) * .9, y, S.z), side, name, kick, win(t, 9.7 + li * .3, 11.3, .35));
+  }
+  label(V(S.x + 3.7, Q.y, S.z), 'r', '틱 50ms마다 (20Hz)', 'SERVER TICK', win(t, 8.1, 9.9, .4), { dy: -90 });
+  // beat 4: other client + interpolation buffer
+  label(B, 'r', '상대 클라', '32명 중 한 명', win(t, 13.2, 14.2, .4), { dy: -300 });
+  label(ringPt(RING_A0 - Math.PI * .5), 'l', '보간 버퍼 ~100ms', '이벤트도 보간 시점에 재생할 때', win(t, 13.8, 16.5, .4), { dy: -240 });
+}
+// ── end card (cream) ─────────────────────────────────────────
+function endCard(t) {
+  const v = t - CREAM_AT;
+  ctx.fillStyle = '#f2ece3'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(CX, 820, 0, CX, 820, 1300); g.addColorStop(0, 'rgba(255,253,249,.8)'); g.addColorStop(1, 'rgba(222,210,196,.7)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  header(t, false);
+  const cy = 780, km = eback(p(v, .15, .7));
+  // sunburst that collapses into the mark
+  const kb = p(v, 0, 1.2);
+  if (kb < 1) {
+    const R = rng(3); ctx.save(); ctx.globalAlpha = 1 - kb; ctx.lineWidth = 2;
+    for (let i = 0; i < 120; i++) {
+      const a = R() * Math.PI * 2, r0 = lerp(160, 90, eo(kb)) + R() * 40, r1 = r0 + lerp(500, 60, eo(kb)) * (.4 + R() * .6);
+      ctx.strokeStyle = R() < .5 ? 'rgba(224,105,74,.55)' : 'rgba(200,170,150,.5)';
+      ctx.beginPath(); ctx.moveTo(CX + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(CX + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // mark: a glowing packet dot with its short trail and a ring
+  ctx.save(); ctx.translate(CX, cy); ctx.scale(km, km);
+  const halo = ctx.createRadialGradient(0, 0, 10, 0, 0, 170); halo.addColorStop(0, 'rgba(232,110,76,.35)'); halo.addColorStop(1, 'rgba(232,110,76,0)');
+  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 170, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(216,97,62,.55)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 96, 0, 7); ctx.stroke();
+  [[-150, 14, .35], [-112, 20, .6]].forEach(([x, r, al]) => { ctx.fillStyle = `rgba(216,97,62,${al})`; ctx.beginPath(); ctx.arc(x, 0, r, 0, 7); ctx.fill(); });
+  ctx.fillStyle = '#d8613e'; ctx.beginPath(); ctx.arc(0, 0, 56, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(255,240,228,.85)'; ctx.beginPath(); ctx.arc(-14, -14, 14, 0, 7); ctx.fill();
+  ctx.restore();
+  const kt = eo(p(v, .7, .7)), ks = eo(p(v, 1.2, .7)), ku = eo(p(v, 1.7, .7));
+  txt('스킬 하나의 221ms', CX, 1060 + (1 - kt) * 20, { size: 104, weight: 800, color: '#1d1714', align: 'center', alpha: kt, blur: (1 - kt) * 12, ls: -2 });
+  txt('내 화면 ~25ms · 상대 화면 ~221ms', CX, 1140, { size: 40, weight: 600, color: '#5a4d44', align: 'center', alpha: ks, blur: (1 - ks) * 8 });
+  txt('예시: 서버 20Hz · RTT 50ms', CX, 1196, { size: 26, weight: 500, color: '#8a7b70', align: 'center', alpha: ks });
+  const url = 'jungrok5.github.io/motion-graphics/skill-journey', uw = tw(url, 26, 600, true);
+  ctx.save(); ctx.globalAlpha = ku; ctx.fillStyle = 'rgba(216,97,62,.6)';
+  ctx.fillRect(CX - uw / 2 - 90, 1500, 60, 1.5); ctx.fillRect(CX + uw / 2 + 30, 1500, 60, 1.5); ctx.restore();
+  txt(url, CX, 1509, { size: 26, weight: 600, mono: true, color: '#c4573a', align: 'center', alpha: ku });
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  const cream = p(t, CREAM_AT, .45);
+  if (cream < 1) {
+    update3D(Math.min(t, CREAM_AT + .5));
+    composer.render();
+    ctx.drawImage(gl.domElement, 0, 0, W, H);
+    vignette();
+    labels(t);
+    counter(t);
+    caption(['스킬 버튼을 누르면'], t, .55, 3.5);
+    caption(['패킷은 여러 장비를 지나', '서버까지 편도 약 25ms'], t, 3.9, 7.6);
+    caption(['서버의 틱에서 판정되고', '주변 32명에게 전파된다'], t, 8.1, 11.4);
+    caption(['상대 화면에는', '약 221ms 뒤에 닿는다'], t, 12.4, CREAM_AT + .1);
+    header(t, true);
+    // landing flash
+    const fl = p(t, 16.7, .4);
+    if (fl > 0) {   // light opening out from the landing point
+      const P = proj(B), r = lerp(60, 2200, eio(fl)), g = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, r);
+      g.addColorStop(0, 'rgba(255,248,240,1)'); g.addColorStop(.55, `rgba(255,236,220,${.9 * eo(fl)})`); g.addColorStop(1, 'rgba(255,220,200,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+  }
+  if (cream > 0) { ctx.save(); ctx.globalAlpha = eio(cream); endCard(t); ctx.restore(); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = HEAD.map(h => [h[0], h[2], h[3]]);
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 9.6;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
