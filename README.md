@@ -52,6 +52,8 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 쇼츠 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
 | 보스가 뜨면 왜 렉이 걸릴까? | 0:50 | 인원 10배 → 갱신 약 100배, 시야 2배 → 보이는 인원 약 4배, 줄이는 방법 | [쇼츠](https://jungrok5.github.io/motion-graphics/boss-lag-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+| 서버 안의 50ms | 0:55 | 틱 예산, 큐 적체, 브로드캐스트 N×(N−1), 틱을 막는 DB · 락 · GC | [쇼츠](https://jungrok5.github.io/motion-graphics/server-tick-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/server-tick-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/server-tick/) |
+| 클라가 느리면 서버도 느려진다 | 0:56 | 처리 감소 → Zero Window → 서버 송신 큐, 큐 상한, 클라 · 서버 해결법 | [쇼츠](https://jungrok5.github.io/motion-graphics/slow-client-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/slow-client-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/slow-client/) |
 
 ## 한 주제의 세 페이지
 
