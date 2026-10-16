@@ -549,7 +549,7 @@ function sLoss(t) {
   // results
   const k1 = eback(p(u, 8.9, .5)), k2 = eback(p(u, 5.0, .5));
   if (k1 > 0) { txt('B·C·D 도착 (즉시 ACK 시)', 90, 1376, { size: 34, weight: 700, color: C.dim, alpha: clamp(k1) }); txt('245 ms', 90, 1452, { size: 92, weight: 800, mono: true, color: C.red, alpha: clamp(k1) }); }
-  if (k2 > 0) { txt('A~D 전달', 580, 1376, { size: 34, weight: 700, color: C.dim, alpha: clamp(k2) }); txt('75 ms', 580, 1452, { size: 92, weight: 800, mono: true, color: C.bot, alpha: clamp(k2) }); }
+  if (k2 > 0) { txt('A~D 전달 (뒤 패킷 있을 때)', 580, 1376, { size: 34, weight: 700, color: C.dim, alpha: clamp(k2) }); txt('75 ms', 580, 1452, { size: 92, weight: 800, mono: true, color: C.bot, alpha: clamp(k2) }); }
   caption(['Nagle이면 dup ACK가 없어 RTO까지', '* 예시: RTT 30 ms, 최소 RTO 200 ms (Linux)'], u, 9.4, C.red);
   ctx.restore();
 }

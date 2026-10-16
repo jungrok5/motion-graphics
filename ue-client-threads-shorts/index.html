@@ -419,7 +419,7 @@ function sThreads(t) {
   const kn = eo(p(u, 3, .6));
   txt('* 리시브 · 센드 스레드는 자체 소켓 모듈', X0, 1376, { size: 34, weight: 600, color: C.dim, alpha: kn });
   txt('   (언리얼 기본은 게임 스레드에서 소켓 처리)', X0, 1428, { size: 34, color: C.faint, alpha: kn });
-  caption(['액터는 게임 스레드만 바꿀 수 있다', '받은 패킷은 다음 틱에 적용된다'], u, 6.2, C.server);
+  caption(['액터는 게임 스레드만 바꿀 수 있다', '받은 패킷은 다음 틱까지 기다린다'], u, 6.2, C.server);
   ctx.restore();
 }
 

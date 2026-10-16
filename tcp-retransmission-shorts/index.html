@@ -477,8 +477,8 @@ function sTwoKinds(t) {
   // results
   const k1 = eback(p(u, 2.6, .5)), k2 = eback(p(u, 7.0, .5));
   if (k1 > 0) { txt('정지 · 약 1 RTT', 90, 1372, { size: 34, weight: 700, color: C.dim, alpha: clamp(k1) }); txt('≈100ms', 90, 1452, { size: 92, weight: 800, mono: true, color: C.bot, alpha: clamp(k1) }); }
-  if (k2 > 0) { txt('정지', 580, 1372, { size: 34, weight: 700, color: C.dim, alpha: clamp(k2) }); txt('620ms', 580, 1452, { size: 92, weight: 800, mono: true, color: C.red, alpha: clamp(k2) }); }
-  caption(['게임 트래픽은 RTO로 빠지기 쉽다', 'RTO 최소 200ms, 실패마다 2배 (리눅스)'], u, 8.0, C.red);
+  if (k2 > 0) { txt('정지 · 2번 손실', 580, 1372, { size: 34, weight: 700, color: C.dim, alpha: clamp(k2) }); txt('620ms', 580, 1452, { size: 92, weight: 800, mono: true, color: C.red, alpha: clamp(k2) }); }
+  caption(['띄엄띄엄한 게임 트래픽은 RTO로', 'RTO 최소 200ms, 실패마다 2배 (리눅스)'], u, 8.0, C.red);
   ctx.restore();
 }
 
@@ -521,7 +521,7 @@ function sHOL(t) {
     txt('아무것도 안 옴', TX((1 + rt) / 2), ty + 96, { size: 36, weight: 800, color: C.red, align: 'center' });
     txt('한꺼번에', TX(rt + .4), ty - 110, { size: 36, weight: 800, color: C.red, align: 'center' });
   }
-  [['멈췄다가 한꺼번에 처리', C.red], ['러버밴딩 · 순간이동', C.client], ['이동 · 스킬 · 채팅이 같이 멈춤', C.server]].forEach(([s2, c], i) =>
+  [['멈췄다가 한꺼번에 처리', C.red], ['러버밴딩 · 순간이동', C.client], ['한 연결의 이동 · 스킬 · 채팅 멈춤', C.server]].forEach(([s2, c], i) =>
     kchip(s2, X0, 1290 + i * 70, c, { size: 34, alpha: eo(p(u, 6.2 + i * .35, .4)) }));
   caption(['뒤 데이터도 도착한 채로 기다린다', '재전송이 오면 한꺼번에 앱으로 넘어간다'], u, 7.4, C.red);
   ctx.restore();
@@ -535,11 +535,11 @@ const CMDS = [
   '  rtt:182/90 rto:1200 cwnd:4',
   '  retrans:0/37',
   '$ nstat -az TcpRetransSegs \\',
-  '      TcpExtTCPTimeouts',
+  '      TcpOutSegs TcpExtTCPTimeouts',
 ];
 const FIX = [
   ['이동 · 위치는 UDP로', '최신 상태만 중요한 데이터는 다시 안 보낸다'],
-  ['TCP_NODELAY · thin-stream', 'tcp_thin_linear_timeouts로 백오프 완화'],
+  ['TCP_NODELAY · thin-stream', 'Nagle 끄기 · thin_linear_timeouts로 백오프 완화'],
   ['세션 송신 큐 상한', '넘으면 오래된 상태 패킷 버리기'],
 ];
 function sCheck(t) {

@@ -391,7 +391,7 @@ function sSegments(t) {
 const frameAt = s => (s >= 1.4 && s < 2.1) ? 230 + 40 * Math.sin(s * 9) : 16 + 2.5 * Math.sin(s * 13) + 1.5 * Math.sin(s * 5.3);
 const rttAt = s => 45 + 780 * Math.exp(-(((s - 2.0) / .5) ** 2)) + 6 * Math.sin(s * 7);
 const KINDS = [
-  { name: '클라렉', col: C.client, lines: ['FPS · 프레임타임 급등', '화면 · UI · 입력 전부 멈칫', '핑은 정상', '나만 그럼'] },
+  { name: '클라렉', col: C.client, lines: ['FPS · 프레임타임 급등', '화면 · UI · 입력 전부 멈칫', '전송 핑은 정상', '나만 그럼'] },
   { name: '네트워크렉', col: C.proto, lines: ['핑 · 손실 · 지터 급등', 'FPS · UI는 정상', '다른 캐릭터가 순간이동', '나 · 같은 망 (서버 회선: 전체)'] },
   { name: '서버렉', col: C.server, lines: ['서버 틱 시간 > 예산', 'FPS · 전송 핑은 정상', '판정이 필요한 반응이 늦음', '같은 채널 · 존이 동시에'] },
 ];

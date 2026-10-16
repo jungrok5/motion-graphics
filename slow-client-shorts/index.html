@@ -438,8 +438,8 @@ function sBackpressure(t) {
     tank(x, y, w, h, i === 0 ? Math.min(1, lvl) : lvl, col, k, Math.min(30, over));
     lab.forEach((l, j) => txt(l, x + w / 2, y + h + 52 + j * 44, { size: 36, weight: 800, color: j ? C.text : col, align: 'center', alpha: k }));
   });
-  backedLabel('수신 스레드', 900, y + h / 2 - 10, 34, C.red, eo(p(u, .8, .4)));
-  backedLabel('정지', 900, y + h / 2 + 40, 34, C.red, eo(p(u, .8, .4)));
+  backedLabel('큐 가득', 900, y + h / 2 - 10, 34, C.red, eo(p(u, .8, .4)));
+  backedLabel('수신 정지', 900, y + h / 2 + 40, 34, C.red, eo(p(u, .8, .4)));
   const zero = u >= 3.1;
   hArrow(484, 596, y + 110, eo(p(u, .6, .5)), zero ? C.red : C.proto, zero ? 0 : 1.2, u);
   hArrow(596, 484, y + 250, eo(p(u, 2.6, .4)), C.client, 0, u, true);
@@ -451,7 +451,7 @@ function sBackpressure(t) {
     const kk = eo(p(u, s + .3, .4)); if (kk <= 0) return;
     txt(lab, X0 + 40, 1110 + i * 76, { size: 40, weight: 800, color: i >= 3 ? C.red : C.text, alpha: kk });
   });
-  caption(['못 뽑아낸 만큼 서버에 남는다', '세션별 송신 큐 = 서버 메모리'], u, 8.6, C.server);
+  caption(['못 뽑아낸 만큼 서버에 남는다', '느린 클라가 몰리면 서버 메모리가 찬다'], u, 8.6, C.server);
   ctx.restore();
 }
 

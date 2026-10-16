@@ -428,7 +428,7 @@ function sFix(t) {
   const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   [['먼 대상은 갱신을 드물게', '가까울수록 자주, 멀수록 드물게', C.bot],
-   ['시야 인원에 상한', '가까운 N명만 자세히 보낸다', C.bot],
+   ['시야 인원에 상한', '가까운 K명만 자세히 보낸다', C.bot],
    ['채널 · 인스턴스 사본으로 나누기', '한곳에 모이는 인원 자체를 줄인다', C.proto]].forEach(([ti, de, col], i) => {
     const k = eo(p(u, .3 + i * .7, .6)); if (k <= 0) return;
     const y = 380 + i * 365;

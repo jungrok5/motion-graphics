@@ -553,13 +553,13 @@ function causeNet(u) {
   chip('클라 화면', xc, ly - 76, C.client, { align: 'center', size: 34, alpha: kl });
   chip('서버 판정', xs, ly + 78, C.server, { align: 'center', size: 34, alpha: kl });
   burst(xc, ly, p(u, tSnap + .1, .7));
-  caption(['입력이 안 오면 서버 캐릭터는 제자리', '서버 정책에 따라 늦은 입력은 거부 · 잘림'], u, 3.7, C.proto);
+  caption(['입력이 안 오면 서버 캐릭터는 제자리', '서버 정책에 따라 몰려온 입력은 거부 · 잘림'], u, 3.7, C.proto);
 }
 const CASES = [
   { title: '속도 검증 (안티 스피드핵)', col: C.pub },
   { title: '충돌 · 지형 불일치', col: C.server },
   { title: '상태이상 선적용', col: C.pub },
-  { title: '서버 틱 지연 (과부하)', col: C.red },
+  { title: '서버 틱 지연 · 입력 버림', col: C.red },
 ];
 function caseSim(i, v) {
   const base = X0 + 100, sp = 130, run = (s, k = 1) => base + sp * k * Math.max(0, s - .6);
