@@ -24,8 +24,8 @@ Files:
 From the user's content, write down:
 - **Actors / artifacts** (e.g. `.proto`, client, server, bot, publisher). Each gets one role color, used consistently.
 - **The flow**, in order. Each step becomes a chapter.
-- **The audience** — default: an infra team without game-dev background. Write for what they actually ask
-  (traffic, cost, server count, which metric to look at), not for game programmers.
+- **The audience** — default: engineers without game-dev background (backend, infra, QA). Write for what they actually ask
+  (what happens on the wire and on the server, which number or metric to look at), not only for game programmers.
 - **The punchline** — why this matters (e.g. "packets never go stale", "test before the client exists"). It becomes the title and the outro tagline.
   State it as a fact. Do not stage a question and answer it ("답: 조건부로 맞다"); if a claim has conditions, show the conditions as content.
 - **Concrete details only this subject has**: real file names, message names, field names, commands, metrics.

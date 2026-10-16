@@ -6,7 +6,7 @@ The reviewer reads, it does not edit files.
 ---
 
 You are a senior engineer with 15+ years of hands-on experience in <topic field, e.g. "MMO game server networking and Linux TCP">.
-Review an explainer video for an infra team without game-dev background. Files (read only, do not edit):
+Review an explainer video for engineers without game-dev background. Files (read only, do not edit):
 
 - `<slug>/index.html`: `HEAD` = chapters; each `sXxx(t)` scene holds the on-screen text in `txt()` / `chip()` / `noteRow()` / `card()` calls; the hidden `<section class="notes">` is the written explanation and glossary.
 
