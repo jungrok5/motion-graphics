@@ -40,6 +40,10 @@
   .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .links a, .head-links a { font: 600 14px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 9px 13px; background: var(--surface); }
   .links a:hover, .head-links a:hover { border-color: var(--accent); }
+  .section-head { display: flex; flex-direction: column; gap: 8px; }
+  .section-head h2 { margin: 0; font-size: 26px; font-weight: 800; }
+  .section-head p { margin: 0; color: var(--dim); line-height: 1.6; max-width: 62ch; }
+  .poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .head-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
   footer { color: var(--dim); font-size: 13px; }
   footer a { color: var(--fg); }
@@ -52,7 +56,10 @@
     <h1>코드로 그리는 기술 설명 영상</h1>
     <p>모든 프레임을 코드로 그립니다. 브라우저에서 바로 재생되고, 주제마다 영상 · 설명 · 용어집이 한 세트입니다.</p>
   </header>
+  <section class="section-head"><h2>기술 설명 영상</h2><p>주제마다 가로 영상 · 설명 · 용어집이 한 세트이고, 모바일용 세로 영상이 따로 있습니다.</p></section>
   <ul id="list"></ul>
+  <section class="section-head"><h2>스타일 실험</h2><p>같은 주제를 다른 그림체로 다시 만든 실험입니다. 3D(WebGL)로 그려서 브라우저에서 실시간으로 재생됩니다. 수치와 내용은 검수를 마친 본편과 같습니다.</p></section>
+  <ul id="lab"></ul>
   <footer>Source: <a href="https://github.com/jungrok5/motion-graphics">github.com/jungrok5/motion-graphics</a></footer>
 </main>
 <script>
@@ -131,6 +138,40 @@
       desc: '모바일용 세로 영상. Nagle이 작은 스킬 패킷을 ACK까지 붙잡고, delayed ACK와 겹치면 더 늦고, 손실 시 RTO까지 기다린다. TCP_NODELAY + 틱 배칭을 56초에.',
       tags: ['mobile', '9:16', 'Nagle', 'TCP_NODELAY'] },
   ];
+  // Style experiments: one card per topic × style, with a wide (PC) and a vertical (mobile) page.
+  const LAB = [
+    { style: 'A · 빛 입자', wide: 'skill-journey-glow-wide/', tall: 'skill-journey-glow/', mp4: 'out/skill-journey-glow.mp4', full: 'skill-journey/',
+      title: '빛 입자 · 내 스킬 하나가 상대 화면에 뜨기까지', length: '0:21',
+      desc: '빛나는 입자와 번짐, 천천히 도는 카메라. 빛점 하나가 네트워크 장비를 지나 서버 틱의 고리 탑에서 판정되고, 32갈래로 퍼져 상대 화면에 닿기까지 221ms.',
+      tags: ['three.js', 'particles', 'bloom'] },
+    { style: 'B · 3D 유리 패널', wide: 'skill-journey-glass-wide/', tall: 'skill-journey-glass/', mp4: 'out/skill-journey-glass.mp4', full: 'skill-journey/',
+      title: '유리 패널 · 내 스킬 하나가 상대 화면에 뜨기까지', length: '0:22',
+      desc: '3D 격자 공간에 뜬 유리 패널 4장(내 클라 · 네트워크 · 게임 서버 · 상대 클라)을 카메라가 패킷을 따라 지나가며 누적 ms를 쌓는다.',
+      tags: ['three.js', 'glass UI', 'camera'] },
+    { style: 'A · 빛 입자', wide: 'boss-lag-glow-wide/', tall: 'boss-lag-glow/', mp4: 'out/boss-lag-glow.mp4', full: 'boss-lag/',
+      title: '빛 입자 · 보스가 뜨면 렉이 생기는 이유', length: '0:21',
+      desc: '플레이어 200명이 보스 주위로 모이고, 서로 잇는 빛의 호 39,800개가 돔을 이룬다. 시야 2배 → 약 4배, 먼 대상은 드물게 · 가까운 K명만 · 채널로 나누기.',
+      tags: ['three.js', 'N × (N − 1)', 'bloom'] },
+    { style: 'B · 3D 유리 패널', wide: 'boss-lag-glass-wide/', tall: 'boss-lag-glass/', mp4: 'out/boss-lag-glass.mp4', full: 'boss-lag/',
+      title: '유리 패널 · 보스가 뜨면 렉이 생기는 이유', length: '0:22',
+      desc: '격자 바닥 위 플레이어 카드가 보스 주위로 몰리고, 모든 쌍을 잇는 빛 그물 위로 갱신 수 · 시야 반경 · 줄이는 방법 패널이 차례로 뜬다.',
+      tags: ['three.js', 'glass UI', 'N × (N − 1)'] },
+  ];
+  const lab = document.getElementById('lab');
+  for (const v of LAB) {
+    const li = document.createElement('li');
+    li.innerHTML = `<a class="card" href="${v.wide}">
+      <div class="poster"><img src="${v.wide}poster.png" alt="" loading="lazy"></div>
+      <div class="meta"><span class="eyebrow"></span><h2></h2><p></p><div class="tags">${v.length ? `<span class="len">${v.length}</span>` : ''}${v.tags.map(t => `<span>${t}</span>`).join('')}</div></div></a>`;
+    const links = document.createElement('div'); links.className = 'links';
+    links.innerHTML = `<a href="${v.wide}">▶ 가로 (PC)</a>` + (v.tall ? `<a href="${v.tall}">▶ 세로 (모바일)</a>` : '')
+      + (v.mp4 ? `<a href="${v.mp4}">세로 MP4</a>` : '') + `<a href="${v.full}">본편</a>`;
+    li.appendChild(links);
+    li.querySelector('.eyebrow').textContent = v.style;
+    li.querySelector('h2').textContent = v.title;
+    li.querySelector('p').textContent = v.desc;
+    lab.appendChild(li);
+  }
   const list = document.getElementById('list');
   for (const v of VIDEOS) {
     const li = document.createElement('li');

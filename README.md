@@ -1,7 +1,8 @@
 # motion-graphics
 
-MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설명 영상 모음입니다.
-렉, 틱, 브로드캐스트, TCP 재전송처럼 서버 · 네트워크 · 클라이언트가 함께 얽힌 주제를 다룹니다.
+코드로 모션그래픽을 만드는 실험 레포입니다. 여러 그림체(2D 설명형, 빛 입자, 3D 유리 패널, 연속 줌인 등)와
+사운드 같은 표현 방식을 시험하고, 그 시험 주제로 MMO 게임 서버와 네트워크에서 생기는 일
+(렉, 틱, 브로드캐스트, TCP 재전송처럼 서버 · 네트워크 · 클라이언트가 함께 얽힌 주제)을 씁니다.
 
 영상은 동영상 파일이 아니라 코드로 그리는 웹 페이지입니다. 브라우저에서 바로 재생되고,
 필요하면 같은 페이지를 MP4로 구울 수 있습니다. 주제마다 **영상 · 설명 · 용어집** 세 페이지가 한 세트입니다.
@@ -63,6 +64,19 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 이동 패킷, 바이트를 줄이면 무슨 일이? | 0:54 | 34/24/19/8B 인코딩, 1바이트 = 월 6.5TB, 34B → 8B면 −168TB/월, 프로토버퍼 비교 | [세로 영상](https://jungrok5.github.io/motion-graphics/one-byte-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/one-byte-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
 | 사라진 패킷 하나가 전부를 멈춘다 | 0:55 | Fast Retransmit vs RTO, HOL 블로킹, ss -ti · nstat 확인, 줄이는 법 | [세로 영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
 | Nagle과 TCP_NODELAY | 0:56 | Nagle 보류 규칙, delayed ACK +60ms, 손실 시 RTO 245ms vs 75ms, NODELAY + 틱 배칭 | [세로 영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
+
+## 스타일 실험
+
+같은 주제를 다른 그림체로 다시 만든 20초 안팎의 영상입니다. 3D(WebGL, three.js)로 그려 브라우저에서 실시간으로 재생되고,
+가로(PC)와 세로(모바일) 페이지가 따로 있습니다. 수치와 내용은 검수를 마친 본편과 같습니다.
+스타일별 만드는 법은 스킬의 [`styles/`](.claude/skills/tech-motion-explainer/styles/)에 정리했습니다.
+
+| 스타일 | 주제 | 보기 |
+|---|---|---|
+| 빛 입자 | 내 스킬 하나가 상대 화면에 뜨기까지 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-glow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-glow/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-glow.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
+| 3D 유리 패널 | 내 스킬 하나가 상대 화면에 뜨기까지 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
+| 빛 입자 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glow/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glow.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+| 3D 유리 패널 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
 
 ## 한 주제의 세 페이지
 
