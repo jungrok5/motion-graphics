@@ -129,6 +129,7 @@
 <li><code>TCP_USER_TIMEOUT</code>, keepalive 설정으로 죽은 연결을 빨리 정리한다.</li>
 <li>장비 큐, MTU, 무선 구간 drop을 구간별로 점검한다.</li>
 </ul>
+<p>작은 패킷을 보내는 소켓에 Nagle이 켜져 있으면 ACK를 못 받은 세그먼트가 하나뿐이라 dup ACK가 생기지 않고, 손실은 빠른 재전송 대신 RTO로만 복구됩니다. 이 관계는 <a href="https://jungrok5.github.io/motion-graphics/nagle-nodelay/">Nagle과 TCP_NODELAY 영상</a>에서 다룹니다.</p>
 </section>
 <p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
 <footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>

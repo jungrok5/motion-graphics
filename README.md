@@ -223,6 +223,22 @@
 
 - 플레이어: [`ue-client-threads/`](https://jungrok5.github.io/motion-graphics/ue-client-threads/)
 
+## nagle-nodelay (101s)
+
+"Nagle과 TCP_NODELAY" — 작은 게임 패킷이 TCP 기본 설정에서 늦어지는 이유와 손실 시 재전송에 주는 영향. `tech-motion-explainer` 스킬로 제작.
+
+| 챕터 | 내용 |
+|---|---|
+| 01 작은 패킷 | MoveReq 24B · SkillUseReq 16B에 헤더 52B, 헤더 비율 68% (예시) |
+| 02 Nagle 규칙 | ACK 안 받은 작은 세그먼트가 있으면 새 작은 데이터는 송신 버퍼에 보류 |
+| 03 Delayed ACK | 서버가 ACK를 40 ms 늦추면 스킬 패킷이 60 ms 보류, 85 ms에 도착 (NODELAY면 25 ms) |
+| 04 손실 나면: 재전송 | Nagle이면 날아간 작은 세그먼트가 하나뿐 → dup ACK 없음 → RTO 200 ms 뒤 215 ms 도착. NODELAY면 dup ACK ×3으로 빠른 재전송, 75 ms |
+| 05 TCP_NODELAY | `setsockopt` · .NET `NoDelay` · Unreal `SetNoDelay` |
+| 06 패킷 수 비용 | NODELAY만 켜면 메시지마다 패킷 → 틱마다 모아 보내기: 600,000 → 100,000 pps (예시) |
+| 07 확인할 지표 | `ss -ti`의 rto · ato, `TcpExtDelayedACKs` · `TcpRetransSegs`, `txpck/s`, 입력 → 서버 수신 p99 |
+
+- 플레이어: [`nagle-nodelay/`](https://jungrok5.github.io/motion-graphics/nagle-nodelay/)
+
 ## 새 영상 만들기 (Claude Code 스킬)
 
 이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고
