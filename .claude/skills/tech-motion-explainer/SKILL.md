@@ -14,6 +14,7 @@ Files:
 - `template.html` (this folder) — engine + player + 4 example scenes (intro, code panel, node flow, outro).
 - `scripts/render.mjs` — stills (`--stills 3,20`) or full MP4.
 - `scripts/check-player.mjs` — headless check: page errors, play, chapter jump, speed button, notes, phone-width overflow.
+- `expert-review.md` — prompt for the senior-expert review agent (step 5).
 - `scripts/build-articles.mjs` — builds `<slug>/article.html` (설명) and `<slug>/terms.html` (용어집) from the notes in every video page.
 - `assets/fonts/` — Pretendard (Korean/Latin UI) and JetBrains Mono (code). Loaded from `../assets/fonts/`.
 
@@ -91,7 +92,18 @@ Read every still. Fix overlapping text, clipped boxes, truncated typed lines, em
 Then re-read every on-screen claim and the notes as a skeptical reviewer: is it true as stated, is it compared like-for-like,
 is any number or effect exaggerated, is an example number labeled `예시`? Fix before delivering.
 
-### 5. Deliver
+### 5. Expert review (mandatory, separate agent)
+After the verify step, spawn a separate agent as a senior expert in the topic, using the prompt in
+`expert-review.md` (this folder). It reads the page and returns findings in three classes:
+**틀림** (false; always fix), **오해 소지** (misleading; fix when a word or clause does it), **단순화 (OK)** (leave as is).
+
+- This is explanatory material: simplification, rounded or labeled example numbers, idealized timelines and analogies
+  are allowed as long as nothing is false. Do not tighten the copy beyond what a 틀림 / 오해 소지 finding needs.
+- Apply fixes to the canvas text and the notes together, re-render only the stills you changed, rerun
+  `node scripts/build-articles.mjs`, and tell the user in one or two lines what the review changed.
+- If a finding seems wrong to you, keep the text and say why in your summary instead of silently ignoring it.
+
+### 6. Deliver
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
   `{"article.html": "<slug>/article.html", "terms.html": "<slug>/terms.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
   The page tries `assets/fonts/` first, then `../assets/fonts/`.
