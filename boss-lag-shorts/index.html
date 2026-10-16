@@ -293,8 +293,8 @@ function words(ws, cx, y, t, t0, o = {}) {
 const fmt = n => Math.round(n).toLocaleString('en-US');
 // ── vertical layout (shorts) ─────────────────────────────────
 // Safe area: shorts apps draw their own UI over the top ~180px, the bottom ~380px and a column on the right.
-// Content stays in x 60–900, y 200–1530. Header y 220–380, stage y 420–1330, caption y 1380–1520.
-const X0 = 60, X1 = 900, CX = (X0 + X1) / 2;
+// Content stays in x 80–1000 (centered), y 200–1530; keep text out of the lower-right corner (x > 900, y > 1100). Header y 220–380, stage y 420–1330, caption y 1380–1520.
+const X0 = 80, X1 = 1000, CX = (X0 + X1) / 2;   // symmetric: centered on 540
 
 // [start, end, number, title, subtitle]
 const HEAD = [
@@ -375,7 +375,7 @@ function sSquare(t) {
   panel(X0, 430, X1 - X0, 430, { alpha: k });
   const src = [CX, cy + 20];
   for (let i = 0; i < M; i++) {
-    const an = -Math.PI / 2 + (i + .5) / M * Math.PI * 2, x = CX + Math.cos(an) * R * 1.6, y = cy + 20 + Math.sin(an) * R * .6;
+    const an = -Math.PI / 2 + (i + .5) / M * Math.PI * 2, x = CX + Math.cos(an) * R * 1.75, y = cy + 20 + Math.sin(an) * R * .6;
     ctx.save(); ctx.globalAlpha *= k * .35; ctx.strokeStyle = C.server; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(src[0], src[1]); ctx.lineTo(x, y); ctx.stroke(); ctx.restore();
     const f = (u * .9 + i * .05) % 1; if (u > 1) dot(lerp(src[0], x, f), lerp(src[1], y, f), 6, C.server, k * Math.sin(f * Math.PI), 10);
     dot(x, y, 12, C.client, k, 8);
