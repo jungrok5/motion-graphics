@@ -103,8 +103,8 @@ After the verify step, spawn a separate agent as a senior expert in the topic, u
   `node scripts/build-articles.mjs`, and tell the user in one or two lines what the review changed.
 - If a finding seems wrong to you, keep the text and say why in your summary instead of silently ignoring it.
 
-### Vertical shorts (9:16)
-When the user asks for a short (쇼츠 / 릴스 / 세로), make a separate 40–60s cut of an existing topic, not a full conversion.
+### Mobile vertical version (9:16)
+When the user asks for a vertical or mobile version (세로 영상 / 모바일 / 쇼츠 / 릴스), make a separate 40–60s cut of an existing topic, not a full conversion.
 Pick 3–4 ideas that carry the topic's main message and redraw them for a phone screen.
 
 - Base: copy `boss-lag-shorts/index.html` (1080×1920 engine, vertical `headers()` / `progress()` / `caption()`, player sized 9:16).
@@ -114,10 +114,10 @@ Pick 3–4 ideas that carry the topic's main message and redraw them for a phone
   Header y 100–340, picture y 370–1470, two-line caption y 1500–1640.
 - Type: title 80, caption 54 / 44, picture labels ≥ 34, key numbers 90+. Give labels that sit over dots a dark backing. One idea per screen; the caption states it in one line.
 - End card: the takeaway in two short lines and the full video's link (`jungrok5.github.io/motion-graphics/<slug>`).
-- The player nav links to the full video's 영상 · 설명 · 용어집; shorts have no notes of their own.
+- The player nav links to the full video's 영상 · 설명 · 용어집; vertical versions have no notes of their own.
 - Verify the same way (stills, `check-player`), then bake the MP4 to upload: `node scripts/render.mjs <slug>-shorts/index.html out/<slug>-shorts.mp4`.
 - Gallery entry: `{ path: '<slug>-shorts/', vertical: true, mp4: 'out/<slug>-shorts.mp4', full: '<slug>/', … }`;
-  add a `세로 쇼츠` link to the full video's player nav.
+  add a `모바일 세로 영상` link to the full video's player nav. In user-facing copy call it 세로 영상 or 모바일 세로 영상, not 쇼츠; title prefix `세로 · `, desc starts `모바일용 세로 영상.`, tags start `'mobile', '9:16'`.
 
 ### 6. Deliver
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:

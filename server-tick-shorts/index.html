@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Server Tick Shorts</title>
+<title>Server Tick Vertical</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
   /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
@@ -78,7 +78,7 @@
 
 <div class="player">
   <div class="stage" id="stage">
-    <canvas id="c" width="1080" height="1920" aria-label="MMO 게임서버 틱 루프와 틱이 밀리는 이유 세로 쇼츠"></canvas>
+    <canvas id="c" width="1080" height="1920" aria-label="MMO 게임서버 틱 루프와 틱이 밀리는 이유 세로 영상"></canvas>
     <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
   </div>
   <div class="bar">
@@ -97,7 +97,7 @@
 <section class="notes" id="notes" hidden></section>
 <script>
 // ─────────────────────────────────────────────────────────────
-//  서버 틱 쇼츠 — 50ms 틱 루프, 큐 적체, N² 브로드캐스트, 틱을 막는 대기
+//  서버 틱 세로 영상 — 50ms 틱 루프, 큐 적체, N² 브로드캐스트, 틱을 막는 대기
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
 const W = 1080, H = 1920, DURATION = 55;
@@ -301,7 +301,7 @@ const HEAD = [
   [4.5, 16.0, '01', '틱 루프', '로직 스레드는 50ms마다 같은 일을 반복한다'],
   [16.0, 28.0, '02', '큐가 밀릴 때', '들어오는 속도가 처리 속도를 넘는 순간'],
   [28.0, 39.0, '03', 'AOI · 브로드캐스트', '모이는 인원의 제곱으로 늘어나는 비용'],
-  [39.0, 50.0, '04', '틱을 막는 것들', '틱이나 응답을 막는 바깥의 대기'],
+  [39.0, 50.0, '04', '틱을 막는 것들', '틱이나 응답을 멈추게 하는 대기'],
 ];
 function headers(t) {
   for (const [s, e, n, title, sub] of HEAD) {

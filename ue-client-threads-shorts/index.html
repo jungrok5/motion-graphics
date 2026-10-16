@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Unreal Threads Shorts</title>
+<title>Unreal Threads Vertical</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
   /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
@@ -78,7 +78,7 @@
 
 <div class="player">
   <div class="stage" id="stage">
-    <canvas id="c" width="1080" height="1920" aria-label="언리얼 클라이언트의 스레드와 프레임 때문에 생기는 지연을 보여주는 세로 쇼츠 모션그래픽"></canvas>
+    <canvas id="c" width="1080" height="1920" aria-label="언리얼 클라이언트의 스레드와 프레임 때문에 생기는 지연을 보여주는 세로 영상 모션그래픽"></canvas>
     <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
   </div>
   <div class="bar">
@@ -97,7 +97,7 @@
 <section class="notes" id="notes" hidden></section>
 <script>
 // ─────────────────────────────────────────────────────────────
-//  언리얼 클라의 스레드와 렉 (세로 쇼츠) — 프레임 = 틱, 다음 틱 대기, FPS 지연, 보스전 GPU 대기
+//  언리얼 클라의 스레드와 렉 (세로 영상) — 프레임 = 틱, 다음 틱 대기, FPS 지연, 보스전 GPU 대기
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
 const W = 1080, H = 1920, DURATION = 56;

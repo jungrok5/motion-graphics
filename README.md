@@ -45,24 +45,24 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 내 스킬 하나가 상대 화면에 뜨기까지 | 1:25 | 입력부터 네트워크 · 서버 틱 · 다운링크 · 상대 클라 보간과 렌더까지 단계별 지연과 합계 | [영상](https://jungrok5.github.io/motion-graphics/skill-journey/) · [설명](https://jungrok5.github.io/motion-graphics/skill-journey/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/skill-journey/terms.html) |
 | 언리얼 클라의 스레드와 렉 | 1:52 | 게임 · 렌더 · GPU 스레드와 자체 리시브 · 센드 스레드, FPS가 패킷 적용과 화면 지연에 주는 영향, 보스전 GPU 대기와 히치 | [영상](https://jungrok5.github.io/motion-graphics/ue-client-threads/) · [설명](https://jungrok5.github.io/motion-graphics/ue-client-threads/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/ue-client-threads/terms.html) |
 
-**세로 쇼츠**
+**모바일 세로 영상**
 
-공유용 9:16 짧은 버전입니다. 본편의 핵심 장면만 휴대폰 화면에 맞게 다시 그렸고, 끝에서 본편으로 이어집니다.
+휴대폰에서 보기 좋게 만든 9:16 세로 버전입니다. 본편의 핵심 장면만 세로 화면에 맞게 다시 그렸고, 끝에서 본편으로 이어집니다.
 
-| 쇼츠 | 길이 | 다루는 내용 | 보기 |
+| 주제 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
-| 보스가 뜨면 왜 렉이 걸릴까? | 0:50 | 인원 10배 → 갱신 약 100배, 시야 2배 → 보이는 인원 약 4배, 줄이는 방법 | [쇼츠](https://jungrok5.github.io/motion-graphics/boss-lag-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
-| 서버 안의 50ms | 0:55 | 틱 예산, 큐 적체, 브로드캐스트 N×(N−1), 틱을 막는 DB · 락 · GC | [쇼츠](https://jungrok5.github.io/motion-graphics/server-tick-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/server-tick-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/server-tick/) |
-| 클라가 느리면 서버도 느려진다 | 0:56 | 처리 감소 → Zero Window → 서버 송신 큐, 큐 상한, 클라 · 서버 해결법 | [쇼츠](https://jungrok5.github.io/motion-graphics/slow-client-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/slow-client-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/slow-client/) |
-| 언리얼 클라의 스레드와 FPS | 0:56 | 리시브 · 게임 · 렌더 · GPU 스레드, 다음 틱 적용, 60fps ≈ 88ms vs 15fps ≈ 263ms | [쇼츠](https://jungrok5.github.io/motion-graphics/ue-client-threads-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/ue-client-threads-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/ue-client-threads/) |
-| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 0:55 | 예측과 판정, 원인 두 가지(네트워크 · 판정 불일치), 재조정 · 스무딩 | [쇼츠](https://jungrok5.github.io/motion-graphics/rubber-banding-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/rubber-banding-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/rubber-banding/) |
-| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 0:55 | 렉의 세 구간, 클라 · 네트워크 · 서버 렉의 신호, 전송 핑 vs 앱 핑, 판별 순서 | [쇼츠](https://jungrok5.github.io/motion-graphics/lag-diagnosis-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/lag-diagnosis-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) |
-| 내 스킬 하나가 상대 화면에 뜨기까지 | 0:54 | 다섯 구간, 네트워크 편도, 내 화면 ~25ms vs 상대 화면 ~221ms, 보간 버퍼 | [쇼츠](https://jungrok5.github.io/motion-graphics/skill-journey-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
-| 50ms와 RTT, 렉은 어디서 생길까? | 0:54 | 틱 50ms 예산, 과부하 시 응답 70→180ms, RTT 30 vs 200ms, 누가 늦어지나 | [쇼츠](https://jungrok5.github.io/motion-graphics/tick-and-rtt-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tick-and-rtt-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
-| 패킷 정의 하나로, 개발부터 라이브까지 | 0:57 | .proto → 클라 · 서버 · 봇 코드 생성, 필드 추가, 서버 먼저 봇 테스트, 부하 테스트로 장비 산정 | [쇼츠](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/proto-bot-pipeline-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) |
-| 이동 패킷, 바이트를 줄이면 무슨 일이? | 0:54 | 34/24/19/8B 인코딩, 1바이트 = 월 6.5TB, 34B → 8B면 −168TB/월, 프로토버퍼 비교 | [쇼츠](https://jungrok5.github.io/motion-graphics/one-byte-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/one-byte-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
-| 사라진 패킷 하나가 전부를 멈춘다 | 0:55 | Fast Retransmit vs RTO, HOL 블로킹, ss -ti · nstat 확인, 줄이는 법 | [쇼츠](https://jungrok5.github.io/motion-graphics/tcp-retransmission-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
-| Nagle과 TCP_NODELAY | 0:56 | Nagle 보류 규칙, delayed ACK +60ms, 손실 시 RTO 245ms vs 75ms, NODELAY + 틱 배칭 | [쇼츠](https://jungrok5.github.io/motion-graphics/nagle-nodelay-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
+| 보스가 뜨면 왜 렉이 걸릴까? | 0:50 | 인원 10배 → 갱신 약 100배, 시야 2배 → 보이는 인원 약 4배, 줄이는 방법 | [세로 영상](https://jungrok5.github.io/motion-graphics/boss-lag-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+| 서버 안의 50ms | 0:55 | 틱 예산, 큐 적체, 브로드캐스트 N×(N−1), 틱을 막는 DB · 락 · GC | [세로 영상](https://jungrok5.github.io/motion-graphics/server-tick-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/server-tick-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/server-tick/) |
+| 클라가 느리면 서버도 느려진다 | 0:56 | 처리 감소 → Zero Window → 서버 송신 큐, 큐 상한, 클라 · 서버 해결법 | [세로 영상](https://jungrok5.github.io/motion-graphics/slow-client-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/slow-client-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/slow-client/) |
+| 언리얼 클라의 스레드와 FPS | 0:56 | 리시브 · 게임 · 렌더 · GPU 스레드, 다음 틱 적용, 60fps ≈ 88ms vs 15fps ≈ 263ms | [세로 영상](https://jungrok5.github.io/motion-graphics/ue-client-threads-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/ue-client-threads-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/ue-client-threads/) |
+| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 0:55 | 예측과 판정, 원인 두 가지(네트워크 · 판정 불일치), 재조정 · 스무딩 | [세로 영상](https://jungrok5.github.io/motion-graphics/rubber-banding-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/rubber-banding-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/rubber-banding/) |
+| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 0:55 | 렉의 세 구간, 클라 · 네트워크 · 서버 렉의 신호, 전송 핑 vs 앱 핑, 판별 순서 | [세로 영상](https://jungrok5.github.io/motion-graphics/lag-diagnosis-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/lag-diagnosis-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) |
+| 내 스킬 하나가 상대 화면에 뜨기까지 | 0:54 | 다섯 구간, 네트워크 편도, 내 화면 ~25ms vs 상대 화면 ~221ms, 보간 버퍼 | [세로 영상](https://jungrok5.github.io/motion-graphics/skill-journey-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
+| 50ms와 RTT, 렉은 어디서 생길까? | 0:54 | 틱 50ms 예산, 과부하 시 응답 70→180ms, RTT 30 vs 200ms, 누가 늦어지나 | [세로 영상](https://jungrok5.github.io/motion-graphics/tick-and-rtt-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tick-and-rtt-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
+| 패킷 정의 하나로, 개발부터 라이브까지 | 0:57 | .proto → 클라 · 서버 · 봇 코드 생성, 필드 추가, 서버 먼저 봇 테스트, 부하 테스트로 장비 산정 | [세로 영상](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/proto-bot-pipeline-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) |
+| 이동 패킷, 바이트를 줄이면 무슨 일이? | 0:54 | 34/24/19/8B 인코딩, 1바이트 = 월 6.5TB, 34B → 8B면 −168TB/월, 프로토버퍼 비교 | [세로 영상](https://jungrok5.github.io/motion-graphics/one-byte-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/one-byte-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
+| 사라진 패킷 하나가 전부를 멈춘다 | 0:55 | Fast Retransmit vs RTO, HOL 블로킹, ss -ti · nstat 확인, 줄이는 법 | [세로 영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
+| Nagle과 TCP_NODELAY | 0:56 | Nagle 보류 규칙, delayed ACK +60ms, 손실 시 RTO 245ms vs 75ms, NODELAY + 틱 배칭 | [세로 영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
 
 ## 한 주제의 세 페이지
 
@@ -97,7 +97,7 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
    틀린 내용은 반드시 고치고, 오해 소지는 짧게 고칠 수 있을 때 고친다. 설명을 위한 단순화와 예시 수치는 허용한다.
 6. **배포:** 설명 · 용어집 페이지를 생성하고, 목록과 README에 추가한 뒤 푸시한다.
 
-세로 쇼츠는 "이 주제로 쇼츠 만들어줘"라고 하면 됩니다. 본편의 핵심 3~4장면을 1080×1920으로 다시 그리고, 업로드용 MP4까지 굽습니다.
+세로 영상은 "이 주제로 세로 영상 만들어줘"라고 하면 됩니다. 본편의 핵심 3~4장면을 1080×1920으로 다시 그리고, 업로드용 MP4까지 굽습니다.
 
 문구 규칙도 스킬에 들어 있습니다. 짧은 평서문으로 쓰고, "~의 길" 같은 비유나 대구로 끝나는 표어는 쓰지 않으며,
 같은 수준끼리 비교하고, 효과를 부풀리지 않습니다.
@@ -143,11 +143,11 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 <주제>/index.html          영상 (설명 · 용어집 원본 포함)
 <주제>/article.html        설명 (생성됨)
 <주제>/terms.html          용어집 (생성됨)
-<주제>-shorts/index.html   세로 쇼츠 (본편의 설명 · 용어집을 같이 씀)
+<주제>-shorts/index.html   세로 영상 (본편의 설명 · 용어집을 같이 씀)
 index.html                 전체 목록 페이지 (VIDEOS 배열에 주제 추가)
 assets/fonts/              Pretendard, JetBrains Mono (둘 다 OFL)
 scripts/                   렌더 · 점검 · 페이지 생성 스크립트
-out/                       구운 MP4 (쇼츠 업로드용 포함)
+out/                       구운 MP4 (가로 · 세로)
 .claude/skills/tech-motion-explainer/   영상 제작 스킬
 .github/workflows/pages.yml             GitHub Pages 배포
 ```

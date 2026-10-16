@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Slow Client Shorts</title>
+<title>Slow Client Vertical</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
   /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
@@ -78,7 +78,7 @@
 
 <div class="player">
   <div class="stage" id="stage">
-    <canvas id="c" width="1080" height="1920" aria-label="느린 클라이언트가 서버 송신 큐까지 쌓이는 과정 세로 쇼츠"></canvas>
+    <canvas id="c" width="1080" height="1920" aria-label="느린 클라이언트가 서버 송신 큐까지 쌓이는 과정 세로 영상"></canvas>
     <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
   </div>
   <div class="bar">
@@ -97,7 +97,7 @@
 <section class="notes" id="notes" hidden></section>
 <script>
 // ─────────────────────────────────────────────────────────────
-//  느린 클라 쇼츠 — 보스전 처리량, Zero Window 역압, 송신 큐 상한, 양쪽 대응
+//  느린 클라 세로 영상 — 보스전 처리량, Zero Window 역압, 송신 큐 상한, 양쪽 대응
 //  Every frame is a pure function of time: renderAt(t).
 // ─────────────────────────────────────────────────────────────
 const W = 1080, H = 1920, DURATION = 56.5;

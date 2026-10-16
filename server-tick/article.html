@@ -97,7 +97,7 @@
 </section>
 <section id="ch05">
 <h2><span class="n">05</span>틱을 막는 것들</h2>
-<p class="sub">틱이나 응답을 막는 바깥의 대기 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
+<p class="sub">틱이나 응답을 멈추게 하는 대기 · <a class="scene" href="index.html#ch05">▶ 이 장면 보기</a></p>
 <p>로직 스레드 바깥에서 생기는 대기 네 가지를 카드로 보여준다. 각 카드 아래 막대는 해당 상황에서 스레드가 어떻게 막히는지 그린 것이다.</p>
 <ul>
 <li>I/O 스레드 포화: 암호화, 압축, 패킷 폭주로 I/O CPU가 100%에 가까워지고 수신이 밀린다. 이때 로직 스레드 사용률은 30%로 한가하고 틱 길이도 정상이다. 늘어나는 것은 입력이 로직에 닿기까지의 지연이다. 지표는 <code>IO CPU 100% · 수신 대기</code>다.</li>
