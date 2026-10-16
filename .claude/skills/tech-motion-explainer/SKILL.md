@@ -107,7 +107,7 @@ After the verify step, spawn a separate agent as a senior expert in the topic, u
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
   `{"article.html": "<slug>/article.html", "terms.html": "<slug>/terms.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
   The page tries `assets/fonts/` first, then `../assets/fonts/`.
-- Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a `## <slug> (Ns)` chapter table in `README.md`.
+- Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a row in the matching group table under "영상 목록" in `README.md` (title · length · one-line summary · 영상 / 설명 / 용어집 links).
   Run `node scripts/build-articles.mjs` again if anything changed, then commit and push (the generated pages are committed).
 - MP4 only if asked: `node scripts/render.mjs <slug>/index.html out/<slug>.mp4` (~3.5 min per minute of video).
 

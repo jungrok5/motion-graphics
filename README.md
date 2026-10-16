@@ -1,270 +1,151 @@
 # motion-graphics
 
-코드로 만드는 기술 설명 모션그래픽. 각 영상은 `renderAt(t)` 하나로 모든 프레임을 그리는 캔버스 페이지이고,
-브라우저에서 바로 재생됩니다. 플레이어는 재생 속도(1× · 0.75× · 0.5×)를 바꿀 수 있고,
-주제마다 영상 · 설명 · 용어집이 한 세트입니다: `<영상>/index.html`(영상), `article.html`(챕터별 글 설명),
-`terms.html`(그 주제의 용어만 모은 용어집). 세 페이지는 위쪽 탭으로 서로 오갑니다. MP4가 필요하면 같은 페이지를 Playwright로 프레임별로 찍어 ffmpeg로 굽습니다.
+MMO 게임 서버와 네트워크에서 생기는 일을 **인프라팀이 이해할 수 있게** 풀어 쓴 기술 설명 영상 모음입니다.
+렉, 틱, 브로드캐스트, TCP 재전송처럼 게임팀과 인프라팀이 같이 봐야 하는 주제를 다룹니다.
 
-- **웹에서 보기 (GitHub Pages):** https://jungrok5.github.io/motion-graphics/
-- **Claude 아티팩트 플레이어:** https://claude.ai/artifact/FMEYiR2uH4gr3HRMzaugwH
+영상은 동영상 파일이 아니라 코드로 그리는 웹 페이지입니다. 브라우저에서 바로 재생되고,
+필요하면 같은 페이지를 MP4로 구울 수 있습니다. 주제마다 **영상 · 설명 · 용어집** 세 페이지가 한 세트입니다.
 
-## proto-bot-pipeline (64s)
+- **전체 목록 (GitHub Pages):** https://jungrok5.github.io/motion-graphics/
+- 새 영상은 레포에 들어 있는 Claude Code 스킬로 같은 형식과 품질로 만듭니다 ([새 영상 만들기](#새-영상-만들기)).
 
-"패킷 정의 하나로, 개발부터 라이브까지" — Protobuf 기반 봇 클라이언트 파이프라인 설명 영상.
+## 영상 목록
 
-| 챕터 | 내용 |
+각 주제의 링크는 영상 · 설명(챕터별 글) · 용어집 순서입니다. 화면의 수치는 이해를 돕기 위한 예시이며, 영상과 설명에 그렇게 표시되어 있습니다.
+
+**패킷과 개발 파이프라인**
+
+| 주제 | 길이 | 다루는 내용 | 보기 |
+|---|---|---|---|
+| 패킷 정의 하나로, 개발부터 라이브까지 | 1:04 | 프로토버퍼로 패킷을 정의하고 클라 · 서버 · 봇 코드를 생성해, 서버 선개발 테스트와 퍼블리셔 부하 테스트까지 잇는 흐름 | [영상](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) · [설명](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/terms.html) |
+| 이동 패킷, 바이트를 줄이면 무슨 일이? | 1:37 | 같은 이동 정보를 34B · 24B · 19B · 8B로 담을 때 송신 트래픽 · 비용 · 서버 대수 · 수용 인원이 얼마나 달라지는지, 프로토버퍼는 어떻게 쓰는지 | [영상](https://jungrok5.github.io/motion-graphics/one-byte/) · [설명](https://jungrok5.github.io/motion-graphics/one-byte/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/one-byte/terms.html) |
+
+**서버 안에서**
+
+| 주제 | 길이 | 다루는 내용 | 보기 |
+|---|---|---|---|
+| 서버 안의 50ms, 무슨 일이 일어날까? | 1:21 | 스레드 구조와 틱 루프, 큐 적체 · AOI 브로드캐스트 · DB · 락 · GC가 틱을 늦추는 방식과 볼 지표 | [영상](https://jungrok5.github.io/motion-graphics/server-tick/) · [설명](https://jungrok5.github.io/motion-graphics/server-tick/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/server-tick/terms.html) |
+| 보스가 뜨면 왜 렉이 걸릴까? | 1:22 | 인원이 몰리면 갱신이 N×(N−1)로 늘고, 시야가 넓으면 더 나빠지는 이유와 서버 · 망 · 클라에서 터지는 지점 | [영상](https://jungrok5.github.io/motion-graphics/boss-lag/) · [설명](https://jungrok5.github.io/motion-graphics/boss-lag/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/boss-lag/terms.html) |
+| 클라가 느리면 서버도 느려진다 | 1:49 | 클라 수신 큐 → Zero Window → 서버 송신 큐로 압력이 올라오는 과정, 송신 큐 상한의 역할, 클라 · 서버 쪽 해결 방법 | [영상](https://jungrok5.github.io/motion-graphics/slow-client/) · [설명](https://jungrok5.github.io/motion-graphics/slow-client/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/slow-client/terms.html) |
+
+**네트워크와 TCP**
+
+| 주제 | 길이 | 다루는 내용 | 보기 |
+|---|---|---|---|
+| 50ms와 RTT, 렉은 어디서 생길까? | 1:23 | 서버 틱 처리시간이 50ms를 넘을 때와 RTT가 느릴 때 각각 무엇이 달라지는지 | [영상](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) · [설명](https://jungrok5.github.io/motion-graphics/tick-and-rtt/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tick-and-rtt/terms.html) |
+| 사라진 패킷 하나가 전부를 멈춘다 | 1:21 | TCP 재전송이 언제 생기는지(빠른 재전송 · RTO · HOL 블로킹), 클라 · 서버 · 인프라에서 보이는 현상과 지표 | [영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) · [설명](https://jungrok5.github.io/motion-graphics/tcp-retransmission/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tcp-retransmission/terms.html) |
+| Nagle과 TCP_NODELAY | 1:41 | 작은 게임 패킷이 Nagle · Delayed ACK 때문에 늦어지고 손실 때 RTO까지 기다리는 이유, TCP_NODELAY와 틱 배칭 | [영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) · [설명](https://jungrok5.github.io/motion-graphics/nagle-nodelay/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/nagle-nodelay/terms.html) |
+
+**클라이언트와 체감**
+
+| 주제 | 길이 | 다루는 내용 | 보기 |
+|---|---|---|---|
+| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 1:07 | 러버밴딩이 생기는 구조(클라 예측 · 서버 판정)와 원인, 줄이는 방법 | [영상](https://jungrok5.github.io/motion-graphics/rubber-banding/) · [설명](https://jungrok5.github.io/motion-graphics/rubber-banding/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/rubber-banding/terms.html) |
+| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 1:13 | 클라렉 · 네트워크렉 · 서버렉을 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 가르는 순서 | [영상](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) · [설명](https://jungrok5.github.io/motion-graphics/lag-diagnosis/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/lag-diagnosis/terms.html) |
+| 내 스킬 하나가 상대 화면에 뜨기까지 | 1:25 | 입력부터 네트워크 · 서버 틱 · 다운링크 · 상대 클라 보간과 렌더까지 단계별 지연과 합계 | [영상](https://jungrok5.github.io/motion-graphics/skill-journey/) · [설명](https://jungrok5.github.io/motion-graphics/skill-journey/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/skill-journey/terms.html) |
+| 언리얼 클라의 스레드와 렉 | 1:52 | 게임 · 렌더 · GPU 스레드와 자체 리시브 · 센드 스레드, FPS가 패킷 적용과 화면 지연에 주는 영향, 보스전 GPU 대기와 히치 | [영상](https://jungrok5.github.io/motion-graphics/ue-client-threads/) · [설명](https://jungrok5.github.io/motion-graphics/ue-client-threads/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/ue-client-threads/terms.html) |
+
+## 한 주제의 세 페이지
+
+| 페이지 | 파일 | 내용 |
+|---|---|---|
+| 영상 | `<주제>/index.html` | 1~2분짜리 캔버스 애니메이션. 재생 · 탐색 · 챕터 이동 · 재생 속도(1× · 0.75× · 0.5×) · 전체 화면 |
+| 설명 | `<주제>/article.html` | 요약, 목차, 챕터별 글. 챕터마다 "▶ 이 장면 보기"를 누르면 영상이 그 챕터에서 열린다(`index.html#ch03`) |
+| 용어집 | `<주제>/terms.html` | 그 주제에 나온 용어만 모은 목록, 검색 가능 |
+
+설명과 용어집의 원본은 영상 페이지 안에 숨겨 둔 `<section class="notes">`입니다. 글을 고칠 때는 이 원본만 고치고
+`node scripts/build-articles.mjs`로 두 페이지를 다시 만듭니다.
+
+키보드: 스페이스 재생/정지, ←/→ 5초 이동, `,` `.` 재생 속도.
+
+## 어떻게 만들어지나
+
+- 영상 하나가 HTML 파일 하나입니다. 1920×1080 캔버스에 모든 프레임을 `renderAt(t)`라는 시간의 순수 함수로 그립니다.
+  랜덤도 시드를 고정해서, 같은 시각이면 언제나 같은 화면이 나옵니다.
+- 그래서 탐색바로 아무 시점으로 바로 이동할 수 있고, 같은 페이지를 프레임별로 찍어 MP4로 만들 수 있습니다.
+- 외부 라이브러리 없이 동작합니다. 폰트(Pretendard, JetBrains Mono)만 `assets/fonts/`에서 불러옵니다.
+
+## 새 영상 만들기
+
+`.claude/skills/tech-motion-explainer/`에 스킬이 있습니다. Claude Code에서 이 레포를 열고 기술 내용을 주면서
+"이걸로 모션그래픽 만들어줘"라고 하면 다음 순서로 영상 · 설명 · 용어집 세트를 만듭니다.
+
+1. **내용 정리:** 등장 요소, 흐름, 핵심 메시지, 그 주제에만 있는 구체적인 이름과 지표를 뽑는다.
+2. **스토리보드:** 4~8개 챕터, 챕터마다 생각 하나와 그림 하나.
+3. **구현:** 템플릿을 복사해 장면을 쓰고, 설명과 용어집 원본을 쓴다.
+4. **검증:** 스틸을 렌더해 겹침과 잘림을 고치고, 플레이어를 헤드리스로 점검한다.
+5. **전문가 검수:** 별도 에이전트가 그 주제의 시니어 전문가로서 화면과 글을 읽는다.
+   틀린 내용은 반드시 고치고, 오해 소지는 짧게 고칠 수 있을 때 고친다. 설명을 위한 단순화와 예시 수치는 허용한다.
+6. **배포:** 설명 · 용어집 페이지를 생성하고, 목록과 README에 추가한 뒤 푸시한다.
+
+문구 규칙도 스킬에 들어 있습니다. 짧은 평서문으로 쓰고, "~의 길" 같은 비유나 대구로 끝나는 표어는 쓰지 않으며,
+같은 수준끼리 비교하고, 효과를 부풀리지 않습니다.
+
+| 파일 | 역할 |
 |---|---|
-| 01 패킷 정의 | `.proto` 한 파일에 모든 클라↔서버 메시지 정의 |
-| 02 코드 생성 | `protoc` 한 번으로 클라 · 서버 · 봇 코드 동시 생성 |
-| 03 항상 동기화 | 필드 추가 → 재생성 → 봇도 자동 갱신 (수작업 봇은 낡음) |
-| 04 서버가 먼저 | 클라보다 먼저 완성된 서버 컨텐츠를, 클라 패킷 플로우를 흉내 낸 봇으로 검증 |
-| 05 퍼블리셔에게 | 같은 봇으로 대규모 부하 → 장비 스펙 산정 · 라이브 인프라 테스트 |
-
-- 플레이어: [`proto-bot-pipeline/`](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) — 재생/일시정지, 탐색바, 챕터 이동, 전체 화면 (Space = 재생/일시정지, ←/→ = 5초 이동)
-- MP4: `out/proto-bot-pipeline.mp4`
+| `SKILL.md` | 작업 순서, 화면 · 문구 · 정확성 규칙, 연출 카탈로그(어떤 장면은 어느 영상의 어느 함수를 참고할지) |
+| `template.html` | 엔진(그리기 헬퍼, 배경, 챕터 헤더, 진행바) + 플레이어 + 설명 원본 자리 + 예시 장면 |
+| `expert-review.md` | 전문가 검수 에이전트에게 주는 지시문(틀림 / 오해 소지 / 단순화 기준) |
 
 ### 원샷 프롬프트
 
-이 영상을 처음부터 다시 만들 때 쓴 요구사항을 한 번에 담은 프롬프트입니다.
+스킬 없이 처음부터 만들 때 쓰는 요청 예시입니다. `[내용]`만 바꿔 쓰면 됩니다.
 
 ````text
-아래 기술 내용을 1920×1080, 약 64초짜리 모션그래픽 설명 영상으로 만들어줘.
+아래 기술 내용을 인프라팀이 이해할 수 있는 1920×1080, 1~2분짜리 모션그래픽 설명 영상으로 만들어줘.
 
 [내용]
-게임 개발에서 프로토버퍼로 패킷을 정의하고 protoc로 클라·서버 코드를 생성해 쓴다.
-봇 클라이언트도 같은 생성 코드를 쓰면 패킷이 항상 동기화되어 낡지 않는다.
-서버가 보통 컨텐츠를 먼저 만들기 때문에, 서버팀은 클라의 컨텐츠 패킷 플로우를 모방하는 봇 클라이언트를 만들어 컨텐츠를 테스트한다.
-이 봇을 퍼블리셔에게 전달하면 장비 스펙 산정과 라이브 인프라 부하 테스트에 쓴다.
+(설명할 기술 내용. 등장 요소, 흐름, 꼭 전달하고 싶은 메시지)
 
 [구성]
-- 인트로(5초): "패킷 정의 하나로, 개발부터 라이브까지" 단어별 등장, 아래에 .proto → Codegen → Bot → Content Test → Publisher 점 스트립.
-- 01 패킷 정의: game_packet.proto 코드가 타이핑되는 에디터 패널(LoginReq, EnterDungeonReq, SkillUseReq),
-  오른쪽에 "message = 패킷 하나 / 언어 중립 스키마 / Single Source of Truth" 카드 3개.
-- 02 코드 생성: 왼쪽 .proto 카드 → 가운데 protoc 노드(회전 점선 링) → 오른쪽 Client(Unity C#) / Server(C++) / Bot Client(C#) 카드로
-  베지어 선을 따라 점이 흐르고, 각 카드에 실제 생성 코드 스니펫이 타이핑.
-- 03 항상 동기화: 같은 레이아웃에서 .proto에 `int32 difficulty = 3;`이 초록 하이라이트로 삽입 → 펄스가 protoc를 지나
-  세 카드에 동시에 전달 → 각 카드에 Difficulty 줄 추가(봇은 "시나리오에서 값 지정" 라벨), 버전 칩 v1.3→v1.4, ✓ 배지.
-  대비로 "손으로 짠 봇 패킷"(빨간 점선, v1.3, 번호 · 타입 수동 관리 → 잘못 파싱, ✗) 카드.
-- 04 서버가 먼저: 주차별 간트(서버팀 W3 완료, 클라팀 W7까지 작업 중) → 빈 구간에 "봇 클라이언트로 바로 컨텐츠 테스트".
-  이어서 Bot Client ↔ Game Server 시퀀스 다이어그램(LoginReq/Ack, EnterWorld, EnterDungeon, SkillUseReq × N 버스트, DungeonClearNoti),
-  오른쪽에 "클라 없이 검증" 체크리스트.
-- 05 퍼블리셔에게: 서버팀 → 퍼블리셔로 BotClient 패키지가 호를 그리며 이동 → 부하 대시보드
-  (동접 봇 도트 그리드 0→6,000, LB/Game Server/DB 게이지, CPU vs 동접 그래프와 70% 임계선, "서버 1대 ≈ 동접 5,000" 마커, RPS·p99·DB QPS 칩)
-  → 결과 카드 "장비 스펙 산정", "라이브 인프라 테스트". 수치는 예시라고 표기.
-- 아웃트로: 5단계 원형 노드 스트립 + "패킷 정의 하나가, 개발부터 라이브까지."
+- 인트로 5초(제목 단어별 등장 + 흐름을 요약한 점 스트립), 챕터 4~8개(각 10~15초), 아웃트로 5.5초(요약 노드 + 표어).
+- 챕터마다 생각 하나와 그림 하나: 코드 패널, 노드 흐름, 시간 레인, 시퀀스 다이어그램, 막대 · 그래프, 버퍼 탱크 등.
+- 실제 이름(메시지 · 필드 · 명령 · 지표)을 쓰고, 지어낸 수치는 "예시"로 표시.
+
+[문구]
+- 짧은 평서문. 비유 · 대구로 끝나는 표어 · "~의 길" 같은 표현은 쓰지 말고 요점을 그대로 쓴다.
+- 같은 수준끼리 비교하고, 조건이 있는 효과는 조건을 함께 쓴다. 효과를 부풀리지 않는다.
 
 [스타일]
-- 다크 네이비 배경, 은은한 그리드와 파티클, 역할별 색 고정(proto 보라, client 하늘, server 앰버, bot 초록, publisher 핑크, 실패 빨강).
-- Pretendard(한글) + JetBrains Mono(코드), 코드 문법 하이라이트, 좌상단 챕터 헤더, 하단 챕터 진행바.
-- 요소는 ease-out으로 30~60px 슬라이드하며 등장, 강조는 팝/글로우.
+- 다크 네이비 배경, 역할별 색 고정(실패 · 대기는 빨강), Pretendard + JetBrains Mono, 좌상단 챕터 헤더, 하단 진행바.
 
 [구현]
-- 단일 HTML 캔버스. 모든 프레임은 renderAt(t)의 순수 함수(랜덤은 시드 고정).
-- 페이지에 플레이어: 재생/일시정지, 드래그 가능한 탐색바(챕터 눈금), 챕터 버튼, 재생 속도(1× · 0.75× · 0.5×), 전체 화면, 키보드(스페이스 재생, ←/→ 5초, `,` `.` 속도).
-- 영상 · 설명 · 용어집을 한 세트로: 챕터별 글 설명 페이지(챕터마다 그 장면으로 가는 링크)와 이 주제의 용어집 페이지.
-  인프라팀이 읽는다고 보고 화면에 나온 수치와 똑같이 쓴다.
-- Playwright + ffmpeg로 같은 페이지를 30fps MP4로 굽는 스크립트도 함께.
-- 각 챕터 중간 프레임을 스틸로 뽑아 겹침·잘림을 확인하고 고친 뒤 보여줘.
-- 문구는 짧은 평서문. "~의 길", "~하는 곳" 같은 비유나 대구로 끝나는 표어는 쓰지 말고 요점을 그대로 쓴다. 예시 수치는 예시라고 표기.
+- 단일 HTML 캔버스, 모든 프레임은 renderAt(t)의 순수 함수(랜덤은 시드 고정).
+- 플레이어: 재생/일시정지, 드래그 탐색바(챕터 눈금), 챕터 버튼, 재생 속도 1× · 0.75× · 0.5×, 전체 화면, 키보드.
+- 영상 · 설명(챕터별 글, 장면 바로가기) · 용어집(이 주제의 용어만) 세 페이지를 한 세트로.
+- 챕터마다 스틸을 뽑아 겹침 · 잘림을 고치고, 별도 에이전트로 시니어 전문가 검수를 거친 뒤 보여줘.
 ````
 
-## rubber-banding (67s)
+## 레포 구조
 
-"앞으로 달렸는데, 왜 뒤로 끌려갈까?" — MMO 러버밴딩의 구조, 원인, 줄이는 방법. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 러버밴딩이란 | 클라 화면의 위치와 서버가 인정한 위치가 벌어졌다가 서버 쪽으로 되돌려지는 현상 |
-| 02 예측과 판정 | 클라는 입력 즉시 이동(예측), 서버가 Move #n을 검증해 Ack · 어긋나면 Correction |
-| 03 원인 ① 네트워크 | 지연 스파이크 · 패킷 손실 · TCP 재전송 대기(HOL) → 서버 캐릭터는 제자리 → 되돌림 |
-| 04 원인 ② 판정 불일치 | 속도 검증(버프 만료) · 충돌/지형 · 상태이상 선적용 · 서버 틱 지연 |
-| 05 줄이는 방법 | 시퀀스 번호 + Ack, 재조정, 오차 허용치, 보정 보간, 이동은 UDP + 최근 입력 중복 전송, 서버 틱 여유 |
-
-- 플레이어: [`rubber-banding/`](https://jungrok5.github.io/motion-graphics/rubber-banding/)
-
-## lag-diagnosis (73s)
-
-"렉 걸렸다. 서버 탓일까, 내 탓일까?" — 클라렉 · 네트워크렉 · 서버렉을 가르는 법. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 렉의 세 구간 | 한 번의 반응 = 입력 처리 + 업링크 + 서버 큐·틱 + 다운링크 + 렌더링 |
-| 02 클라렉 | 프레임타임 급등(히치), 화면·UI·입력 전부 멈칫, 핑은 정상, 나만 그럼 |
-| 03 네트워크렉 | RTT·손실 급등, FPS·UI는 정상, 다른 캐릭터 순간이동, 나 또는 같은 망 (서버 회선이면 전체) |
-| 04 서버렉 | 틱 처리시간 > 예산, 같은 채널 전원이 동시에, FPS·전송 핑은 정상 |
-| 05 핑 두 개로 가르기 | 전송 핑(커널 · 소켓의 TCP RTT) vs 앱 핑(게임 로직 큐 경유) — 앱 핑만 높으면 서버 |
-| 06 판별 순서 | 프레임타임 → 전송 핑 → 앱 핑 · 영향 범위, 비교표 |
-
-- 플레이어: [`lag-diagnosis/`](https://jungrok5.github.io/motion-graphics/lag-diagnosis/)
-
-## server-tick (81s)
-
-"서버 안의 50ms, 무슨 일이 일어날까?" — MMO 게임서버의 스레드 구조, 틱 루프, 부하가 틱에 끼치는 영향. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 스레드 구조 | I/O 스레드 → 존별 메시지 큐 → 존당 로직 스레드(틱 루프) → 송신 큐 → I/O 송신, DB는 비동기 워커 |
-| 02 틱 루프 | 50ms 예산: 메시지 처리 → 월드 업데이트 → AOI → 브로드캐스트 → 대기 |
-| 03 큐가 밀릴 때 | 유입 > 처리 → 큐 깊이 증가 → 틱 예산 초과 → 악순환 |
-| 04 AOI · 브로드캐스트 폭발 | N명이 모이면 틱당 N×(N−1) 갱신, 송신 큐 적체, 느린 클라부터 끊김 |
-| 05 틱을 막는 것들 | I/O 포화 · 동기 DB 호출 · 락 경합 · GC Stop-the-world |
-| 06 어디를 보나 | 구간별 지표와 이상 신호 표 |
-
-- 플레이어: [`server-tick/`](https://jungrok5.github.io/motion-graphics/server-tick/)
-
-## tcp-retransmission (81s)
-
-"사라진 패킷 하나가 전부를 멈춘다" — TCP 재전송의 원인과 클라 · 서버 · 인프라에 나타나는 현상과 메트릭. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 잃으면 다시 보낸다 | Seq/ACK, 손실, Dup ACK × 3 → Fast Retransmit |
-| 02 언제 생기나 | 혼잡(라우터 큐 tail drop) · 무선/핸드오버 · NIC 링 버퍼 오버플로 · ACK 유실/MTU 블랙홀 |
-| 03 두 가지 재전송 | Fast Retransmit(≈1 RTT) vs RTO(최소 200ms, 2배씩 백오프), 게임 트래픽은 RTO로 빠지기 쉬움 |
-| 04 Head-of-Line 블로킹 | 뒤에 도착한 세그먼트도 커널 버퍼에서 대기 → 앱에는 정지 후 몰림 |
-| 05 클라 · 서버 · 인프라 | 표시 핑 급등 · 송신 큐/메모리 증가 · 재전송률 · RTO · SRTT · cwnd · drop |
-| 06 확인하고 줄이기 | `ss -ti`, `nstat`, Prometheus, Wireshark 필터 / UDP · thin-stream · 송신 큐 상한 · TCP_USER_TIMEOUT |
-
-- 플레이어: [`tcp-retransmission/`](https://jungrok5.github.io/motion-graphics/tcp-retransmission/)
-
-## skill-journey (85s)
-
-"내 스킬 하나가 상대 화면에 뜨기까지" — 입력부터 상대 화면까지의 경로. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 전체 구간 | 내 클라 → 네트워크 → 게임 서버 → 네트워크 → 상대 클라 |
-| 02 내 클라 안에서 | 키 입력 → 게임 루프 → 예측 실행 → UseSkillReq 생성 → 직렬화 · 암호화 → send() → NIC |
-| 03 네트워크 구간 | 공유기 · ISP · 백본 · 방화벽 · LB를 지나는 편도 ≈ RTT/2 |
-| 04 서버 안에서 | NIC → I/O 스레드 → 세션 → 존 큐(다음 틱 대기) → 검증 · 판정 · AOI · 브로드캐스트 → 송신 |
-| 05 상대 화면까지 | 다운링크 → recv → 다음 프레임 → 보간 버퍼(~100ms) → 애니 · 이펙트 → 화면 |
-| 06 시간을 다 더하면 | 예시 합계 ≈ 221ms(이벤트도 보간 시점에 재생할 때), 가장 큰 덩어리: 보간 · 네트워크 편도×2 · 틱 대기 |
-
-- 플레이어: [`skill-journey/`](https://jungrok5.github.io/motion-graphics/skill-journey/)
-
-## tick-and-rtt (83s)
-
-"50ms와 RTT, 렉은 어디서 생길까?" — 틱 처리시간 예산과 RTT의 영향. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 틱은 서버 세계의 시계 | 20Hz = 50ms마다 세계가 한 칸, 조건: 처리시간 < 틱 간격 |
-| 02 50ms를 넘으면 | 다음 틱이 밀림 → 8Hz, 서버 내 응답 = 틱 대기 + 처리: 70ms → 180ms, 존 전원이 동시에 |
-| 03 끊김과 왜곡 | 스냅샷 간격 증가 → 보간 버퍼 바닥, 쿨다운 늘어짐(틱 횟수로 셀 때), 틱 몰아치기, dt 증가 |
-| 04 RTT란 | 업링크 + 서버(틱 대기 · 처리) + 다운링크, RTT 30ms vs 200ms |
-| 05 RTT가 느리면 | 결과 확인 지연 · 남이 보는 나는 과거 · 판정 불일치(랙 보상) · 보정 폭 증가 · 지터 |
-| 06 정리 | 틱 처리시간 vs RTT vs 지터 비교표, 남이 보이는 지연 공식(같은 RTT 가정) |
-
-- 플레이어: [`tick-and-rtt/`](https://jungrok5.github.io/motion-graphics/tick-and-rtt/)
-
-## boss-lag (82s)
-
-"보스가 뜨면 왜 렉이 걸릴까?" — 인원 집중, N² 브로드캐스트, 시야 반경. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 사람이 몰린다 | 보스 등장 → 흩어져 있던 플레이어 200명이 한곳으로 |
-| 02 브로드캐스트는 N × (N − 1) | 한 명의 변화 → N−1명에게 복제, 200명 = 39,800/틱 = 796,000/초 ≈ 320Mbps |
-| 03 시야가 넓으면 더 나빠진다 | 반경 2배 → 면적 4배 · 보이는 인원 약 4배(밀도가 고를 때) → 브로드캐스트 · AOI 비용 · 클라 수신/렌더 4배 |
-| 04 보스 전투가 더하는 것 | 광역기 판정(피격 × 보는 사람), 이펙트 · 버프 · 투사체, 어그로 · AI, HP · 페이즈 갱신 |
-| 05 어디서 터지나 | 존 스레드 한 코어 100% · 틱 초과 · 아웃바운드 대역폭 · 클라 다운링크 · 클라 FPS 하락이 함께 온다 |
-| 06 게임은 이렇게 줄인다 | 거리별 갱신 빈도, 시야 인원 상한, 반경 자동 축소, 묶어 보내기 · 델타, 채널 분리, 클라 LOD |
-
-- 플레이어: [`boss-lag/`](https://jungrok5.github.io/motion-graphics/boss-lag/)
-
-## slow-client (109s)
-
-"클라가 느리면 서버도 느려진다" — 클라 성능이 서버까지 끌어내리는 경로와 줄이는 방법. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 보스전에 생기는 일 | 받아야 할 패킷 1,500 → 8,000/초, 처리할 수 있는 패킷 = FPS × 프레임당 예산 200(60fps 12,000 → 15fps 3,000) — 차이가 쌓인다(예시) |
-| 02 클라 안의 수신 큐 | 수신 스레드를 따로 둔 구조라면 수신 스레드가 소켓을 비우고 메인 스레드가 프레임당 한도만큼 꺼낸다 → 밀림은 클라 큐에(렉 · 러버밴딩 · 메모리) |
-| 03 소켓이 안 비워지는 순간 | 수신 큐 상한 도달 · GC 정지 · 락 경합 · 앱 백그라운드 · 느린 회선(Zero Window 없이 서버 송신 버퍼가 바로 참, 클라 최적화로 못 고침) |
-| 04 압력이 서버로 거꾸로 온다 | 클라 수신 버퍼 → Zero Window → 서버 SO_SNDBUF → send() EAGAIN → 앱 송신 큐 증가 |
-| 05 상한 전에도 서버는 느려진다 | 세션 큐 메모리 · 공유 브로드캐스트 버퍼 해제 지연 · 윈도우가 조금씩 열리는 세션의 쓰기 재시도 — 몇 명이면 작고 보스전처럼 몰리면 커진다. send()나 락에서 기다리는 구조면 1명으로도 존 정지 |
-| 06 송신 큐 상한은 안전장치 | 닿으면 끊기고 보스전마다 반복 — 인원 제한은 서버 전체 기준이라 한 세션 큐는 못 막는다 → 클라당 보내는 양을 묶어 닿지 않게 |
-| 07 해결 방법 | 클라: 수신 전용 스레드, 프레임당 예산 + 최신값만, 할당 줄이기, 보스전 렌더 부하 낮추기, 큐 락 짧게. 서버: 논블로킹 send · I/O 분리, 클라당 송신량 묶기, 이동 덮어쓰기, 대기 요청 · 공유 버퍼 상한, 큐 상한은 마지막 안전장치 |
-| 08 인프라에서 확인하는 법 | `ss` Send-Q, `tcp.analysis.zero_window`, 세션 큐 · 끊김 수 · 틱 p99, 클라 수신 큐 길이 · 프레임 시간 |
-
-- 플레이어: [`slow-client/`](https://jungrok5.github.io/motion-graphics/slow-client/)
-
-## one-byte (97s)
-
-"이동 패킷, 바이트를 줄이면 무슨 일이?" — 바이트 다이어트의 효과를 크기별로. `tech-motion-explainer` 스킬로 제작.
-예시 가정: 동접 5,000 · 보는 사람 50 · 이동 갱신 10Hz · 이동이 송신의 60%(24B 기준) · 송신 $0.05~0.09/GB · 서버 대당 $700/월.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 같은 이동 정보, 네 가지 크기 | 프로토버퍼 기본 34B(필드 태그 · 길이) · 커스텀 24B · 비트 패킹 19B · 이동 전용 극단 양자화 8B(슬롯 12b · x/y 14b · z 8b · 방향 6b · 상태 4b · Δt 6b) |
-| 02 1바이트에 붙는 곱하기 | 1B × 50 × 10Hz × 5,000 = 2.5MB/s(20Mbps) → 216GB/일 → 6.5TB/월(동접 5,000 24시간 유지 가정) |
-| 03 왜 브로드캐스트가 대부분인가 | 1을 받고 50을 내보낸다, 이동이 송신의 60%(예시) |
-| 04 크기별 총량 | 월 송신 324 / 259 / 227 / 156TB, 34B → 8B면 −168TB(−52%), −$8.4k~15.2k/월, 유저 이동 데이터 수신 17 → 4KB/s |
-| 05 서버와 수용 인원 | 대역폭 병목 가정(예시) 25 → 20 → 18 → 12대, 일반 필드 동접 ×2.08 · 보스존(N²) ×2.06. CPU 병목이면 효과 작음 |
-| 06 패킷 하나에 몇 명 | MSS 1,460B에 42 / 60 / 76 / 182명 |
-| 07 그럼 프로토버퍼는? | 같은 수준끼리 +25% / +20%, 이동만 bytes 필드에 8B × 50명 넣으면 캐릭터당 ≈ 8.06B — 나머지는 프로토버퍼 그대로 |
-
-- 플레이어: [`one-byte/`](https://jungrok5.github.io/motion-graphics/one-byte/)
-
-## ue-client-threads (112s)
-
-"언리얼 클라의 스레드와 렉" — 받은 패킷이 화면에 그려지기까지, 프레임이 렉을 만드는 곳. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 언리얼 클라의 스레드 | 게임 스레드(입력 · 틱 · 패킷 적용), 렌더 스레드(한 프레임 뒤), RHI · GPU, 자체 소켓 모듈의 리시브 · 센드 스레드. 액터(UObject)는 게임 스레드에서만 |
-| 02 프레임과 FPS | 클라의 한 프레임 = 게임 스레드 한 틱. 서버는 "한 틱 처리 몇 ms"(20Hz 고정, 예산 50ms), 클라는 "1초에 몇 프레임". 1프레임 시간 = 1000 ÷ FPS (60fps 16.7ms · 30fps 33ms · 15fps 67ms) |
-| 03 패킷을 받을 때 | 소켓 → 리시브 스레드(recv · 조립 · 파싱) → 수신 큐 → 게임 스레드 틱(프레임당 한도 → 핸들러 → 액터) |
-| 04 패킷을 보낼 때 | 입력 → 게임 스레드 틱(샘플 · 예측 · 패킷 생성) → 송신 큐 → 센드 스레드. 10Hz 목표여도 15fps면 133 / 67ms로 들쭉날쭉 → 남들 화면에서 내가 끊겨 보인다 |
-| 05 도착에서 화면까지 | 편도 30 + 틱 끝까지(평균 1.5프레임) + 렌더 + GPU: 60fps ≈ 88ms, 15fps ≈ 263ms, 차이 약 175ms (예시) |
-| 06 보스전: 게임 스레드도 기다린다 | GPU 64ms → 렌더 스레드 대기 → 게임 스레드 대기(최대 1프레임 앞서기), 틱 60 → 15, 꺼내는 양 12,000 → 3,000/초 (틱당 200 · 유입 8,000/초는 예시) |
-| 07 히치: GC · 동기 로딩 | 게임 스레드 150ms 정지 중에도 리시브 스레드는 받는다 → 풀리면 밀린 이동을 빨리 감기 · 러버밴딩 |
-| 08 줄이는 방법 | 리시브 스레드에서 이동 합치기, 시간 기준 처리 한도, 우선순위, 액터 풀 · 비동기 로딩, GC 부담 줄이기, 보스전 GPU 부하, 타임스탬프 · 보간, 수신 큐 지표 |
-
-- 플레이어: [`ue-client-threads/`](https://jungrok5.github.io/motion-graphics/ue-client-threads/)
-
-## nagle-nodelay (101s)
-
-"Nagle과 TCP_NODELAY" — 작은 게임 패킷이 TCP 기본 설정에서 늦어지는 이유와 손실 시 재전송에 주는 영향. `tech-motion-explainer` 스킬로 제작.
-
-| 챕터 | 내용 |
-|---|---|
-| 01 작은 패킷 | MoveReq 24B · SkillUseReq 16B에 헤더 52B, 헤더 비율 68% (예시) |
-| 02 Nagle 규칙 | ACK 안 받은 작은 세그먼트가 있으면 새 작은 데이터는 송신 버퍼에 보류 |
-| 03 Delayed ACK | 서버가 ACK를 40 ms 늦추면 스킬 패킷이 60 ms 보류, 85 ms에 도착 (NODELAY면 25 ms) |
-| 04 손실 나면: 재전송 | Nagle이면 날아간 작은 세그먼트가 하나뿐 → dup ACK 없음 → RTO 200 ms 뒤 A 재전송(215 ms 도착), B·C·D는 A의 ACK 뒤(≈245 ms~). NODELAY면 dup ACK ×3으로 빠른 재전송, 75 ms |
-| 05 TCP_NODELAY | `setsockopt` · .NET `NoDelay` · Unreal `SetNoDelay` |
-| 06 패킷 수 비용 | NODELAY만 켜면 메시지마다 패킷(최대) → 틱마다 모아 보내기: 최악의 경우 600,000 → 100,000 pps (예시) |
-| 07 확인할 지표 | `ss -ti`의 rto · ato, `TcpExtDelayedACKs` · `TcpRetransSegs`, `txpck/s`, 입력 → 서버 수신 p99 |
-
-- 플레이어: [`nagle-nodelay/`](https://jungrok5.github.io/motion-graphics/nagle-nodelay/)
-
-## 새 영상 만들기 (Claude Code 스킬)
-
-이 레포에는 `.claude/skills/tech-motion-explainer/` 스킬이 있습니다. Claude Code에서 이 레포를 열고
-기술 내용을 주면서 "이걸로 모션그래픽 만들어줘"라고 하면 같은 스타일의 영상을 만듭니다.
-
-- `SKILL.md` — 스토리 추출 → 스토리보드 → 구현 → 글 설명 · 용어 정리 → 스틸 · 내용 검증 → 배포 순서와 규칙, 문체 규칙, 연출 카탈로그
-- `template.html` — 엔진(헬퍼, 배경, 헤더, 진행바, 코드 하이라이터) + 플레이어(재생 속도 포함) + 글 설명 영역 + 예시 장면 4개
+```
+<주제>/index.html          영상 (설명 · 용어집 원본 포함)
+<주제>/article.html        설명 (생성됨)
+<주제>/terms.html          용어집 (생성됨)
+index.html                 전체 목록 페이지 (VIDEOS 배열에 주제 추가)
+assets/fonts/              Pretendard, JetBrains Mono (둘 다 OFL)
+scripts/                   렌더 · 점검 · 페이지 생성 스크립트
+out/                       구운 MP4 (proto-bot-pipeline 예시)
+.claude/skills/tech-motion-explainer/   영상 제작 스킬
+.github/workflows/pages.yml             GitHub Pages 배포
+```
 
 ## 스크립트
 
 ```bash
-# MP4 굽기
-node scripts/render.mjs proto-bot-pipeline/index.html out/proto-bot-pipeline.mp4
-# 특정 시점 스틸만
-node scripts/render.mjs proto-bot-pipeline/index.html out/stills --stills 3,20,45
-# 플레이어 헤드리스 점검 (에러, 재생, 챕터 이동, 재생 속도, 글 설명, 모바일 폭)
-node scripts/check-player.mjs proto-bot-pipeline/index.html
-# 설명(<영상>/article.html)과 용어집(<영상>/terms.html) 생성 — 영상 페이지 안의 글이 원본
+# 특정 시점 스틸 (t003.6.png처럼 시간순으로 정렬되는 이름)
+node scripts/render.mjs <주제>/index.html <폴더> --stills 3,20,45
+# MP4 굽기 (영상 1분에 약 3.5분)
+node scripts/render.mjs <주제>/index.html out/<주제>.mp4
+# 플레이어 점검: 에러, 재생, 챕터 이동, 재생 속도, 설명 원본, 모바일 폭 (--shots <폴더>면 전체 화면 캡처)
+node scripts/check-player.mjs <주제>/index.html
+# 설명 · 용어집 페이지 생성 (모든 주제)
 node scripts/build-articles.mjs
 ```
 
-필요: Node 18+, Playwright(Chromium), ffmpeg.
-폰트: Pretendard, JetBrains Mono (둘 다 OFL) — `assets/fonts/`.
+필요: Node 18+, Playwright(Chromium), ffmpeg(MP4를 구울 때만).
 
-## GitHub Pages
+## 배포
 
-`.github/workflows/pages.yml`이 푸시마다 레포 전체를 Pages로 배포합니다.
-루트 `index.html`은 영상 목록이며, 새 영상은 그 안의 `VIDEOS` 배열에 추가합니다.
+`.github/workflows/pages.yml`이 푸시마다 레포 전체를 GitHub Pages로 배포합니다.
 처음 한 번은 레포 Settings → Pages → Source를 **GitHub Actions**로 설정해야 합니다.
