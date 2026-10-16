@@ -95,7 +95,7 @@
 </div>
 <!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
 <section class="notes" id="notes" hidden>
-<p class="lede">플레이어가 스킬 버튼을 누른 순간부터 다른 플레이어 화면에 그 스킬이 보이기까지 패킷이 지나는 단계를 내 클라, 네트워크, 서버, 네트워크, 상대 클라 순서로 보여준다. 예시 조건(20Hz, RTT 50ms)에서 전체 합계는 약 221ms이고, 내 화면에서는 즉시 보이는 스킬이 상대 화면에는 200ms 넘게 걸려 나타난다. 가장 큰 몫은 상대 클라의 보간 버퍼, 네트워크 왕복, 서버 틱 대기다.</p>
+<p class="lede">플레이어가 스킬 버튼을 누른 순간부터 다른 플레이어 화면에 그 스킬이 보이기까지 패킷이 지나는 단계를 내 클라, 네트워크, 서버, 네트워크, 상대 클라 순서로 보여준다. 예시 조건(20Hz, RTT 50ms)에서 전체 합계는 약 221ms이고, 내 화면에서는 약 25ms 만에 보이는 스킬이 상대 화면에는 200ms 넘게 걸려 나타난다. 이벤트도 보간 시점에 맞춰 재생하는 구현이라면 가장 큰 몫은 상대 클라의 보간 버퍼, 네트워크 편도 두 번(내 업링크, 상대 다운링크), 서버 틱 대기다.</p>
 <article data-ch="01">
 <p>화면에는 다섯 개 구간이 나란히 놓인다.</p>
 <ul>
@@ -129,21 +129,22 @@
 <article data-ch="05">
 <p>서버가 보낸 패킷은 다운링크(상대 회선 기준 <code>~25ms</code>)를 지나 상대 클라의 NIC와 recv(<code>&lt;1ms</code>)에 도착한다. 게임 루프가 다음 프레임에 읽고(<code>0~16ms</code>), 보간 버퍼(<code>~100ms</code>), 애니메이션·이펙트(즉시), vsync에 맞춘 화면 출력(<code>~16ms</code>)을 거친다.</p>
 <p>보간 버퍼는 서버 스냅샷 사이를 부드럽게 잇기 위해 상대 클라가 일부러 약 100ms 과거의 상태를 그리는 장치다. 화면에서 이 단계만 빨간색으로 강조되어 있다.</p>
-<p>아래 타임라인은 같은 스킬이 각 화면에 보이는 시점이다. 내 화면에서는 0ms에 시전이 시작되고(예측), 90ms에 데미지가 확정되며, 상대 화면에는 221ms에 내 스킬이 보인다.</p>
+<p>아래 타임라인은 같은 스킬이 각 화면에 보이는 시점이다. 내 화면에서는 입력 대기와 렌더를 거쳐 약 25ms에 시전이 시작되고(예측), 서버 판정(72ms)이 다운링크로 돌아와 그려지는 약 120ms에 데미지가 확정되며, 상대 화면에는 221ms에 내 스킬이 보인다.</p>
 </article>
 <article data-ch="06">
 <p>버튼부터 상대 화면까지 시간을 예시 조건(20Hz, RTT 50ms)으로 더하면 다음과 같다. 입력·처리 10ms, 업링크 25ms, 틱 대기 25ms, 틱 처리 12ms, 다운링크 25ms, 프레임 8ms, 보간 버퍼 100ms, 렌더 16ms로 합계는 약 221ms다.</p>
 <ul>
 <li>보간 버퍼 ~100ms: 부드러운 움직임의 대가다. 지터가 크면 더 늘린다.</li>
-<li>네트워크 왕복 ~50ms: 거리, 회선, 와이파이에 따라 달라진다.</li>
+<li>네트워크 편도×2 ~50ms: 내 업링크와 상대 다운링크의 합이다. 거리, 회선, 와이파이에 따라 달라진다.</li>
 <li>틱 대기 + 처리 ~37ms: 틱레이트가 낮을수록, 서버가 바쁠수록 늘어난다.</li>
 <li>클라 프레임 ~25ms: FPS가 낮으면 입력과 표시가 모두 늦어진다.</li>
 </ul>
 <p>막대 아래에는 구간별 묶음이 표시된다. 내 클라 10ms, 업링크 네트워크 25ms, 서버 37ms, 다운링크 네트워크 25ms, 상대 클라 124ms(프레임, 보간 버퍼, 렌더)다. 상대 클라 구간이 가장 크고, 그 대부분이 보간 버퍼다.</p>
+<p>보간 버퍼는 위치·상태 스냅샷에 쓰인다. 시전 같은 이벤트는 받자마자 재생하는 게임도 많고, 그때는 이 100ms가 빠진다. 위 합계는 이벤트도 보간 시점에 맞춰 재생하는 구현을 가정한 값이다.</p>
 </article>
 <h2>용어 정리</h2>
 <dl class="terms">
-<dt>예측 실행 (Client-side Prediction)</dt><dd>클라이언트가 서버 승인을 기다리지 않고 입력 결과를 먼저 화면에 보여주는 기법이다. 내 화면이 즉시 반응하는 이유다.</dd>
+<dt>예측 실행 (Client-side Prediction)</dt><dd>클라이언트가 서버 승인을 기다리지 않고 입력 결과를 먼저 화면에 보여주는 기법이다. 내 화면이 서버 응답을 기다리지 않고 반응하는 이유다.</dd>
 <dt>UseSkillReq / SkillCastNoti</dt><dd>클라가 서버에 스킬 사용을 요청하는 패킷과, 서버가 주변 플레이어에게 스킬 시전을 알리는 패킷이다. 영상에서 쓰는 예시 메시지 이름이다.</dd>
 <dt>직렬화</dt><dd>메모리 안의 구조체를 네트워크로 보낼 바이트 열로 바꾸는 일이다. 영상에서는 protobuf를 쓴다.</dd>
 <dt>RTT</dt><dd>패킷이 상대에게 갔다가 응답이 돌아오는 왕복 시간이다. 편도 지연은 대략 RTT의 절반으로 본다.</dd>
@@ -340,7 +341,7 @@ const HEAD = [
   [28.0, 39.0, '03', '네트워크 구간', '집에서 데이터센터까지, 여러 장비를 거치는 편도 구간'],
   [39.0, 53.0, '04', '서버 안에서', '받고, 줄 서고, 틱에서 검증 · 판정 · 전파된다'],
   [53.0, 66.0, '05', '상대 화면까지', '서버에서 상대 클라까지, 그리고 상대 클라가 일부러 기다리는 시간'],
-  [66.0, 80.0, '06', '시간을 다 더하면', '어디서 얼마나 걸리는지, 가장 큰 덩어리는 무엇인지'],
+  [66.0, 80.0, '06', '시간을 다 더하면', '어디서 얼마나 걸리는지 (이벤트도 보간 시점에 맞춰 재생할 때)'],
 ];
 function headers(t) {
   for (const [s, e, n, title, sub] of HEAD) {
@@ -576,12 +577,12 @@ function sOther(t) {
   ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = 'rgba(148,163,184,0.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.restore();
   [0, 100, 200, 300].forEach(ms => txt(ms + 'ms', X(ms), y + 34, { size: 15, color: C.faint, align: 'center', mono: true, alpha: k }));
   txt('언제 보이나', 120, y + 6, { size: 22, weight: 800, alpha: k });
-  [[0, '내 화면: 시전 시작 (예측)', C.client, -1], [90, '내 화면: 데미지 확정', C.bot, 1], [221, '상대 화면: 내 스킬이 보임', C.pub, -1]].forEach(([ms, lab, col, side], i) => {
+  [[25, '내 화면: 시전 시작 (예측)', C.client, -1], [120, '내 화면: 데미지 확정', C.bot, 1], [221, '상대 화면: 내 스킬이 보임', C.pub, -1]].forEach(([ms, lab, col, side], i) => {
     const kk = eback(p(u, 5.6 + i * .7, .5)); if (kk <= 0) return;
     dot(X(ms), y, 11 * clamp(kk, 0, 1.2), col, 1, 24);
     txt(lab, X(ms) + (i === 2 ? -12 : 12), y + side * 34 + (side > 0 ? 50 : 0), { size: 21, weight: 800, color: col, align: i === 2 ? 'right' : 'left', alpha: clamp(kk) });
   });
-  txt('내 화면에선 0ms, 상대 화면에선 200ms 넘게 걸린다', W / 2, 900, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 8.4, .6)) });
+  txt('내 화면에선 ~25ms, 상대 화면에선 200ms 넘게 걸린다', W / 2, 900, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, 8.4, .6)) });
   ctx.restore();
 }
 
@@ -610,7 +611,7 @@ function sBudget(t) {
     ctx.save(); ctx.globalAlpha *= kk; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x0, yb + 10); ctx.lineTo(x1, yb + 10); ctx.lineTo(x1, yb); ctx.stroke(); ctx.restore();
     txt(lab, (x0 + x1) / 2, yb + 40, { size: 20, weight: 800, color: col, align: 'center', alpha: kk });
   });
-  noteRow([['보간 버퍼 ~100ms', '부드러움의 대가 · 지터가 크면 더 늘린다'], ['네트워크 왕복 ~50ms', '거리 · 회선 · 와이파이'], ['틱 대기 + 처리 ~37ms', '틱레이트가 낮을수록 · 서버가 바쁠수록 증가'], ['클라 프레임 ~25ms', 'FPS가 낮으면 입력 · 표시 모두 늦어짐']], u, 5.6, 640, C.red);
+  noteRow([['보간 버퍼 ~100ms', '부드러움의 대가 · 지터가 크면 더 늘린다'], ['네트워크 편도×2 ~50ms', '내 업 + 상대 다운 · 거리 · 회선'], ['틱 대기 + 처리 ~37ms', '틱레이트가 낮을수록 · 서버가 바쁠수록 증가'], ['클라 프레임 ~25ms', 'FPS가 낮으면 입력 · 표시 모두 늦어짐']], u, 5.6, 640, C.red);
   ctx.restore();
 }
 
@@ -618,8 +619,8 @@ function sBudget(t) {
 //  OUTRO — summary strip + tagline (last ~5.5s)
 // ═════════════════════════════════════════════════════════════
 const OUTRO = {
-  nodes: [[C.client, '입력 · 예측', '내 화면은 즉시'], [C.proto, '업링크', 'RTT의 절반'], [C.server, '서버 틱', '대기 + 처리'], [C.proto, '다운링크', '상대 회선'], [C.pub, '보간 · 렌더', '일부러 과거를']],
-  tagline: ['내', '화면의', '0ms가', '상대에겐', '200ms.'], taglineColors: [C.client, null, C.client, C.pub, C.pub],
+  nodes: [[C.client, '입력 · 예측', '내 화면은 ~25ms'], [C.proto, '업링크', 'RTT의 절반'], [C.server, '서버 틱', '대기 + 처리'], [C.proto, '다운링크', '상대 회선'], [C.pub, '보간 · 렌더', '일부러 과거를']],
+  tagline: ['내', '화면은', '~25ms,', '상대', '화면은', '200ms+.'], taglineColors: [C.client, null, C.client, C.pub, null, C.pub],
   footer: 'Input → Uplink → Queue → Tick → AOI → Downlink → Interpolation → Screen',
 };
 function sOutro(t) {

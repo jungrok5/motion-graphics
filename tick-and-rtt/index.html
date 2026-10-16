@@ -95,7 +95,7 @@
 </div>
 <!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
 <section class="notes" id="notes" hidden>
-<p class="lede">게임 서버가 느릴 때와 네트워크 왕복 시간(RTT)이 길 때 플레이어가 겪는 지연이 어떻게 다른지 설명하는 영상이다. 서버의 틱 처리시간이 틱 간격(20Hz 기준 50ms)을 넘으면 같은 존의 모든 플레이어가 함께 늦어지고, RTT가 길면 그 플레이어와 그 플레이어를 보는 사람이 늦어진다. 체감 지연은 RTT, 틱 대기, 틱 처리, 보간, 프레임 시간을 더한 값으로 정리한다.</p>
+<p class="lede">게임 서버가 느릴 때와 네트워크 왕복 시간(RTT)이 길 때 플레이어가 겪는 지연이 어떻게 다른지 설명하는 영상이다. 서버의 틱 처리시간이 틱 간격(20Hz 기준 50ms)을 넘으면 같은 존의 모든 플레이어가 함께 늦어지고, RTT가 길면 그 플레이어와 그 플레이어를 보는 사람이 늦어진다. 남의 움직임이 내 화면에 보이는 지연은 RTT(나와 상대가 같다고 가정), 틱 대기, 틱 처리, 보간, 프레임 시간을 더한 값으로 정리한다.</p>
 
 <article data-ch="01">
 <p>게임 서버는 요청이 올 때마다 바로 처리하지 않고, 정해진 간격마다 세계 전체를 한 번씩 갱신한다. 이 한 번의 갱신을 틱이라고 한다. 화면의 T1, T2 … 칸이 틱이고, 20Hz 서버라면 50ms마다 한 칸씩 진행된다.</p>
@@ -105,7 +105,7 @@
 
 <article data-ch="02">
 <p>위 레인은 정상 상태로 처리 30ms, 20Hz를 유지한다. 아래 레인은 과부하 상태로 한 틱 처리에 120ms가 걸린다. 처리가 끝나야 다음 틱을 시작할 수 있으니 틱 시작이 계속 뒤로 밀리고, 실제 틱레이트는 약 8Hz로 떨어진다.</p>
-<p>플레이어 입력은 도착하자마자 처리되지 않는다. 다음 틱이 시작될 때까지 기다렸다가 그 틱에서 처리되고, 처리가 끝나야 응답이 나간다. 그래서 응답 시간은 틱 대기와 처리시간의 합이고, 과부하에서는 두 값이 함께 커진다. 화면의 첫 입력은 정상일 때 응답 70ms, 과부하일 때 180ms가 걸린다.</p>
+<p>플레이어 입력은 도착하자마자 처리되지 않는다. 다음 틱이 시작될 때까지 기다렸다가 그 틱에서 처리되고, 처리가 끝나야 응답이 나간다. 그래서 서버 안에서의 응답 시간은 틱 대기와 처리시간의 합이고, 과부하에서는 두 값이 함께 커진다. 화면의 첫 입력은 정상일 때 70ms, 과부하일 때 180ms가 걸린다. 이 값에는 네트워크 RTT가 빠져 있다.</p>
 <ul>
 <li>같은 존에 있는 플레이어 전원이 동시에 느려진다. 각자의 핑은 그대로인데 반응만 늦다.</li>
 <li>50ms는 20Hz일 때의 예산이다. 30Hz라면 33ms, 10Hz라면 100ms가 예산이다.</li>
@@ -117,7 +117,7 @@
 <p>왼쪽은 상대 캐릭터가 내 화면에서 움직이는 모습이다. 정상일 때는 서버 스냅샷이 50ms마다 고르게 도착하고, 과부하일 때는 120ms 이상 간격으로 불규칙하게 도착한다. 아래쪽 점이 스냅샷이 도착한 시점이다. 클라이언트는 받은 스냅샷 사이를 보간해서 부드럽게 그리는데, 스냅샷 간격이 벌어지면 그릴 재료가 떨어진다.</p>
 <ul>
 <li>보간 버퍼가 바닥난다. 다음 스냅샷이 오지 않아 캐릭터가 멈칫했다가 순간이동한다.</li>
-<li>쿨다운, 버프, 도트(지속 피해)가 늦게 끝난다. 틱 단위로 처리되는 시간이 늘어지기 때문이다.</li>
+<li>타이머를 틱 횟수로 세는 구현이면 쿨다운, 버프, 도트(지속 피해)가 늘어진다. 8Hz로 떨어지면 10초 버프가 약 25초가 된다. 실제 시각으로 세면 밀린 틱 하나 정도만 늦다.</li>
 <li>서버가 밀린 틱을 몰아서 실행하면 CPU가 급등하고, 그 때문에 다시 지연되는 악순환이 생긴다.</li>
 <li>틱 사이 경과 시간인 dt가 커진다. 한 번에 이동하는 거리가 길어져 충돌 판정을 놓치거나 이동 검증이 정상 이동을 핵으로 오탐할 수 있다.</li>
 </ul>
@@ -134,7 +134,7 @@
 <p>RTT가 길 때 생기는 일을 네 장의 카드로 보여준다.</p>
 <ul>
 <li>결과 확인이 늦다. 클라이언트 예측 덕분에 내 화면의 캐릭터는 바로 움직이지만, 데미지나 아이템 획득 같은 확정은 RTT와 틱을 거친 뒤에 온다. 카드에서는 시전 후 235ms 동안 확인 대기 상태였다가 -1,240 데미지가 확정된다.</li>
-<li>남들이 보는 나는 과거의 나다. 상대 화면에 보이는 내 위치는 내 RTT/2, 상대 RTT/2, 보간 지연이 더해진 만큼 늦은 위치이고, 합치면 수백 ms 전이 된다.</li>
+<li>남들이 보는 나는 과거의 나다. 상대 화면에 보이는 내 위치는 내 RTT/2, 서버 틱 대기·처리, 상대 RTT/2, 보간 지연이 더해진 만큼 늦은 위치이고, 합치면 수백 ms 전이 된다.</li>
 <li>판정이 어긋나고 엄폐물 뒤에서 맞는다. 내 화면의 적은 과거 위치에 있으므로, 서버는 시간을 되감아 내가 쏜 시점 기준으로 판정한다(랙 보상). 그 결과 상대는 이미 벽 뒤로 들어간 뒤에 맞는다.</li>
 <li>예측 오차와 러버밴딩이 커진다. 서버의 보정이 늦게 올수록 클라이언트는 더 멀리 갔다가 더 크게 되돌아온다. RTT 30ms와 200ms 레인을 비교하면 200ms 쪽의 되돌림 폭이 크다.</li>
 </ul>
@@ -146,9 +146,9 @@
 <ul>
 <li><code>틱 처리시간</code>: 서버가 세계를 한 번 갱신하는 시간이다. 커지면 응답 지연, 이동 끊김, 시간 왜곡이 생기고 같은 존 전원이 느낀다.</li>
 <li><code>RTT</code>: 내 패킷이 서버까지 갔다 오는 시간이다. 커지면 결과 확인 지연, 판정 불일치, 보정 폭 증가가 생기고 나와 나를 보는 사람이 느낀다.</li>
-<li><code>지터</code>: RTT의 흔들림이다. 커지면 보간 버퍼가 부족해 끊기고, 버퍼를 키우면 전체 지연이 늘어난다. 표에서는 느끼는 사람을 나로 적었다.</li>
+<li><code>지터</code>: RTT의 흔들림이다. 커지면 보간 버퍼가 부족해 끊기고, 버퍼를 키우면 전체 지연이 늘어난다. 내 업링크 지터는 서버에 도착하는 내 입력을 들쭉날쭉하게 만들어 나를 보는 사람에게도 내 움직임이 끊겨 보인다. 그래서 느끼는 사람은 나와 나를 보는 사람이다.</li>
 </ul>
-<p>체감 지연은 <code>RTT + 틱 대기 + 틱 처리 + 보간 + 프레임</code>으로 근사한다. 서버가 느리면 모두가 늦고, RTT가 느리면 나와 나를 보는 사람이 늦는다.</p>
+<p>남의 움직임이 보이는 지연은 내 RTT와 상대 RTT가 같다고 가정하면 <code>RTT + 틱 대기 + 틱 처리 + 보간 + 프레임</code>으로 근사한다. 내 행동의 결과를 확인하는 지연은 <code>RTT + 틱 대기 + 틱 처리</code>이고, 보통 보간은 붙지 않는다. 서버가 느리면 모두가 늦고, RTT가 느리면 나와 나를 보는 사람이 늦는다.</p>
 </article>
 
 <h2>용어 정리</h2>
@@ -509,7 +509,7 @@ function tickLane(y, procMs, label, sub, col, u, X) {
     dot(X(ms), y - 46, 7, C.client, 1, 12);
     const kw = clamp((now - ms) / Math.max(1, st - ms));
     ctx.save(); ctx.strokeStyle = C.client; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(X(ms), y - 46); ctx.lineTo(lerp(X(ms), X(Math.min(st, 400)), kw), y - 46); ctx.stroke(); ctx.restore();
-    if (now >= done && done <= 400) { check(X(done), y - 46, 18, C.bot); if (i === 0) { ctx.save(); ctx.strokeStyle = procMs > 50 ? C.red : C.bot; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X(ms), y + 30); ctx.lineTo(X(ms), y + 38); ctx.lineTo(X(done), y + 38); ctx.lineTo(X(done), y + 30); ctx.stroke(); ctx.restore(); txt('응답 ' + (done - ms) + 'ms', (X(ms) + X(done)) / 2, y + 64, { size: 18, weight: 800, align: 'center', color: procMs > 50 ? C.red : C.bot }); } }
+    if (now >= done && done <= 400) { check(X(done), y - 46, 18, C.bot); if (i === 0) { ctx.save(); ctx.strokeStyle = procMs > 50 ? C.red : C.bot; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X(ms), y + 30); ctx.lineTo(X(ms), y + 38); ctx.lineTo(X(done), y + 38); ctx.lineTo(X(done), y + 30); ctx.stroke(); ctx.restore(); txt('서버 내 응답 ' + (done - ms) + 'ms', (X(ms) + X(done)) / 2, y + 64, { size: 18, weight: 800, align: 'center', color: procMs > 50 ? C.red : C.bot }); } }
   });
 }
 function sOverrun(t) {
@@ -520,7 +520,7 @@ function sOverrun(t) {
   tickLane(560, 120, '과부하', '처리 120ms · 다음 틱이 밀림 → 8Hz', C.red, u, X);
   axis(x0, x1, 660, 400, 50, eo(p(u, .2, .6)), X);
   chip('● 입력 도착 → 다음 틱 시작까지 대기 → 처리 끝나면 응답', 120, 230, C.client, { size: 16, alpha: eo(p(u, 1, .5)) });
-  noteRow([['응답 = 틱 대기 + 처리', '둘 다 늘어난다: 70ms → 180ms'], ['같은 존 전원이 동시에', '내 핑은 그대로인데 반응만 늦다'],
+  noteRow([['서버 내 응답 = 틱 대기 + 처리', '둘 다 늘어난다: 70ms → 180ms'], ['같은 존 전원이 동시에', '내 핑은 그대로인데 반응만 늦다'],
            ['50ms는 20Hz일 때의 예산', '30Hz면 33ms, 10Hz면 100ms'], ['여유가 0이면 작은 스파이크도 바로 렉', '그래서 p99가 예산의 70~80% 안쪽이어야 안전(예시)']], u, 6.4, 750, C.server);
   ctx.restore();
 }
@@ -552,7 +552,7 @@ function sDistort(t) {
     dot(Math.min(990, shown(steps)), y, 13, C.pub, k, 20);
   });
   txt('↓ 점: 서버 스냅샷이 도착한 시점', 150, 740, { size: 16, color: C.dim, alpha: k });
-  const FX = [['보간 버퍼가 바닥난다', '다음 스냅샷이 안 와서 멈칫 → 순간이동'], ['쿨다운 · 버프 · 도트가 늦게 끝난다', '틱 단위로 처리되는 시간이 늘어짐'],
+  const FX = [['보간 버퍼가 바닥난다', '다음 스냅샷이 안 와서 멈칫 → 순간이동'], ['쿨다운 · 버프가 늘어진다', '틱 횟수로 시간을 셀 때 · 8Hz면 10초 버프가 ~25초'],
               ['밀린 틱을 몰아서 실행', 'CPU 급등 → 다시 지연되는 악순환'], ['dt가 커진다', '충돌 판정 누락 · 이동 검증 오탐']];
   FX.forEach(([ti, de], i) => {
     const kk = eo(p(u, 2 + i * .7, .5)); if (kk <= 0) return;
@@ -614,7 +614,7 @@ function sSlowRTT(t) {
     const kd = eback(p(cyc, 2.35, .4)); if (kd > 0) txt('-1,240', x + 620, ly - 40 - (cyc - 2.35) * 10, { size: 30, weight: 800, color: C.red, align: 'center', alpha: k * clamp(kd) });
     chip(cyc < 2.35 ? '확인 대기… (235ms)' : '확정', x + 380, ly, cyc < 2.35 ? C.red : C.bot, { align: 'center', size: 16, alpha: k }); }
   // 2 · others see my past
-  f = cardFrame(1, u, '남들이 보는 나는 과거', '상대 화면 = 내 RTT/2 + 상대 RTT/2 + 보간 → 수백 ms 전의 나', C.pub);
+  f = cardFrame(1, u, '남들이 보는 나는 과거', '내 RTT/2 + 틱 + 상대 RTT/2 + 보간 → 수백 ms 전의 나', C.pub);
   if (f) { const { x, y, k, v } = f; const ly = y + 240, me = x + 120 + ((v * 90) % 560), seen = Math.max(x + 120, me - 150);
     ctx.save(); ctx.globalAlpha *= k; rr(x + 60, ly - 22, 720, 44, 22); ctx.fillStyle = 'rgba(148,163,184,0.06)'; ctx.fill(); ctx.restore();
     dot(seen, ly, 13, C.pub, k * .8, 12); dot(me, ly, 13, C.client, k, 20);
@@ -651,7 +651,7 @@ function sSlowRTT(t) {
 const SUM = [
   ['틱 처리시간', '서버가 세계를 한 번 갱신하는 시간', '응답 지연 · 이동 끊김 · 시간 왜곡', '같은 존 전원', C.server],
   ['RTT', '내 패킷이 서버까지 갔다 오는 시간', '결과 확인 지연 · 판정 불일치 · 보정 폭 증가', '나 + 나를 보는 사람', C.proto],
-  ['지터', 'RTT의 흔들림', '보간 버퍼 부족 → 끊김, 버퍼를 키우면 전체 지연', '나', C.pub],
+  ['지터', 'RTT의 흔들림', '보간 버퍼 부족 → 끊김, 버퍼를 키우면 전체 지연', '나 + 나를 보는 사람', C.pub],
 ];
 function sSummary(t) {
   const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
@@ -668,7 +668,7 @@ function sSummary(t) {
     txt(eff, cols[2], y, { size: 21, weight: 700, color: C.red, alpha: kr });
     txt(who, cols[3], y, { size: 21, weight: 700, alpha: kr });
   });
-  txt('체감 지연 ≈ RTT + 틱 대기 + 틱 처리 + 보간 + 프레임', W / 2, 780, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 3, .6)) });
+  txt('남이 보이는 지연 ≈ RTT + 틱 대기 + 틱 처리 + 보간 + 프레임 (같은 RTT 가정)', W / 2, 780, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 3, .6)) });
   txt('서버가 느리면 모두가 늦고, RTT가 느리면 나(와 나를 보는 사람)가 늦는다', W / 2, 850, { size: 25, color: C.dim, align: 'center', alpha: eo(p(u, 3.8, .6)) });
   ctx.restore();
 }
@@ -677,9 +677,9 @@ function sSummary(t) {
 //  OUTRO — summary strip + tagline (last ~5.5s)
 // ═════════════════════════════════════════════════════════════
 const OUTRO = {
-  nodes: [[C.server, '틱 처리시간', '< 틱 간격'], [C.server, '틱 대기', '틱 간격의 절반'], [C.proto, 'RTT', '거리 · 회선'], [C.pub, '지터', '보간 버퍼'], [C.bot, '체감 지연', '모두의 합']],
+  nodes: [[C.server, '틱 처리시간', '< 틱 간격'], [C.server, '틱 대기', '틱 간격의 절반'], [C.proto, 'RTT', '거리 · 회선'], [C.pub, '지터', '보간 버퍼'], [C.bot, '남이 보이는 지연', '모두의 합']],
   tagline: ['서버가', '느리면', '모두가,', 'RTT가', '느리면', '내가', '늦는다.'], taglineColors: [C.server, null, null, C.proto, null, C.client, null],
-  footer: 'Tick time < Tick interval · Perceived latency ≈ RTT + tick wait + processing + interpolation',
+  footer: 'Tick time < Tick interval · Seeing others ≈ RTT + tick wait + processing + interpolation (equal RTT)',
 };
 function sOutro(t) {
   const S = DURATION - 5.5; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
