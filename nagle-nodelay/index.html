@@ -117,7 +117,7 @@
 </article>
 <article data-ch="04">
 <p>패킷 하나가 손실됐을 때 Nagle이 어떻게 복구를 늦추는지 양쪽을 나란히 비교합니다. 둘 다 첫 패킷 A가 손실되고, 이어서 B, C, D를 보내려는 상황입니다. 수치는 예시로 RTT 30 ms, Linux의 최소 RTO 200 ms를 썼습니다.</p>
-<p>Nagle이 켜져 있으면 ACK를 받지 못한 작은 세그먼트가 하나 있는 동안 B, C, D는 송신 버퍼에 머뭅니다. 서버는 아무것도 받지 못했으니 중복 ACK(dup ACK)를 보낼 일이 없고, 클라는 손실을 알아챌 단서가 없습니다. 결국 RTO 타이머가 끝나는 200 ms 뒤에야 A를 재전송하고, B, C, D가 그 뒤를 따라 215 ms에 도착합니다.</p>
+<p>Nagle이 켜져 있으면 ACK를 받지 못한 작은 세그먼트가 하나 있는 동안 B, C, D는 송신 버퍼에 머뭅니다. 서버는 아무것도 받지 못했으니 중복 ACK(dup ACK)를 보낼 일이 없고, 클라는 손실을 알아챌 단서가 없습니다. 결국 RTO 타이머가 끝나는 200 ms 뒤에야 A를 재전송하고, A는 215 ms에 도착합니다. 재전송한 A도 아직 ACK를 받지 못한 작은 세그먼트라 B, C, D는 계속 보류됩니다. RTO 직후에는 cwnd도 1이라 A 하나만 나갈 수 있습니다. B, C, D는 A의 ACK가 돌아온 뒤에야 나가서, 서버가 ACK를 바로 보내면 245 ms, delayed ACK에 걸리면 285 ms쯤 도착합니다.</p>
 <p>TCP_NODELAY면 B, C, D가 바로 나가 서버에 먼저 도착합니다. 서버는 A가 빠졌다는 뜻으로 패킷마다 dup ACK를 돌려보내고, 클라는 dup ACK 3개를 받는 순간 RTO를 기다리지 않고 A를 다시 보냅니다(빠른 재전송). 이 예시에서는 75 ms에 A부터 D까지 모두 전달됩니다.</p>
 <p>다만 빠른 재전송은 뒤따르는 패킷이 있어야 동작합니다. 메시지가 드문 연결이면 NODELAY여도 dup ACK가 모자라 RTO까지 가는 경우가 있습니다. 재전송 자체는 <a href="https://jungrok5.github.io/motion-graphics/tcp-retransmission/">TCP 재전송 영상</a>에서 자세히 다룹니다.</p>
 </article>
@@ -127,7 +127,7 @@
 <p>코드 예: C/C++ <code>setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &amp;one, sizeof one)</code>, .NET <code>Socket.NoDelay = true</code>, Unreal <code>FSocket::SetNoDelay(true)</code>.</p>
 </article>
 <article data-ch="06">
-<p><code>TCP_NODELAY</code>만 켜고 서버가 메시지마다 <code>send()</code>를 부르면, 메시지 수만큼 패킷이 나갑니다. 예시 조건(5,000 CCU, 20 Hz 틱, 클라당 틱마다 30B 메시지 6개, 헤더 52B)에서 서버 송신은 초당 600,000 패킷, IP+TCP 헤더 포함 394 Mbps이고 그중 63%가 헤더입니다.</p>
+<p><code>TCP_NODELAY</code>만 켜고 서버가 메시지마다 <code>send()</code>를 부르면, 최악의 경우 메시지 수만큼 패킷이 나갑니다. 예시 조건(5,000 CCU, 20 Hz 틱, 클라당 틱마다 30B 메시지 6개, 헤더 52B)에서 서버 송신은 최악의 경우 초당 600,000 패킷, IP+TCP 헤더 포함 394 Mbps이고 그중 63%가 헤더입니다. Linux는 기본으로 <code>tcp_autocorking</code>이 켜져 있어, 앞 패킷이 아직 NIC 큐에 남아 있으면 이어진 작은 write를 합쳐 보냅니다. 그래서 부하가 걸린 서버에서는 실제 pps가 이보다 낮게 측정될 수 있습니다. <code>send()</code> 호출 수는 그대로 6배입니다.</p>
 <p>서버가 한 틱 동안 클라별로 메시지를 모아 <code>send()</code>를 한 번만 부르면 초당 100,000 패킷, 186 Mbps, 헤더 비율 22%가 됩니다. 메시지는 원래 틱 단위로 만들어지므로 모아서 보내도 추가 대기는 거의 없습니다.</p>
 <p>Nagle을 켜 둬도 패킷은 모이지만, 언제 보낼지가 ACK 도착에 달려 있어 03의 보류가 생깁니다. 두 방식 모두 대기 없이 보내는 조건에서 비교하면, 차이는 패킷 수와 헤더 비율입니다. pps 비용은 NIC · 커널 처리량이 병목일 때 커집니다.</p>
 </article>
@@ -344,7 +344,7 @@ const HEAD = [
   [30.0, 44.0, '03', 'Delayed ACK', '받는 쪽이 ACK를 늦추면 보류 시간이 그만큼 길어진다'],
   [44.0, 58.0, '04', '손실 나면: 재전송', 'Nagle이면 빠른 재전송 대신 RTO를 기다린다'],
   [58.0, 70.0, '05', 'TCP_NODELAY', '소켓 옵션 하나로 send() 즉시 전송'],
-  [70.0, 84.0, '06', '패킷 수 비용', 'NODELAY만 켜면 메시지마다 패킷이 하나씩 나간다'],
+  [70.0, 84.0, '06', '패킷 수 비용', 'NODELAY만 켜면 메시지마다 패킷이 하나씩 나갈 수 있다'],
   [84.0, 96.0, '07', '확인할 지표', '지연 ACK · 재전송 · pps를 서버에서 직접 확인'],
 ];
 function headers(t) {
@@ -647,9 +647,9 @@ function sDelayed(t) {
 // ═════════════════════════════════════════════════════════════
 function sLoss(t) {
   const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
-  const u = t - S, ms = clamp((u - 1.2) / 7.5) * 240;
+  const u = t - S, ms = clamp((u - 1.2) / 8.2) * 280;
   ctx.save(); ctx.globalAlpha = a;
-  const Y0 = 330, PY = 1.9, y = m => Y0 + m * PY;
+  const Y0 = 325, PY = 1.85, y = m => Y0 + m * PY;
   const seg = (t0, t1) => clamp((ms - t0) / (t1 - t0));
   [[120, 'Nagle 켜짐', C.red], [980, 'TCP_NODELAY', C.bot]].forEach(([X, title, col], side) => {
     const k = eo(p(u, .2 + side * .3, .6)); if (k <= 0) return;
@@ -659,9 +659,9 @@ function sLoss(t) {
     [[cx, 'Client', C.client], [sx, 'Server', C.server]].forEach(([x, lab, c2]) => {
       txt(lab, x, 300, { size: 20, weight: 800, color: c2, align: 'center', alpha: k });
       ctx.save(); ctx.globalAlpha *= .45 * k; ctx.setLineDash([6, 8]); ctx.strokeStyle = c2; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(x, 312); ctx.lineTo(x, y(240)); ctx.stroke(); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(x, 312); ctx.lineTo(x, y(280)); ctx.stroke(); ctx.restore();
     });
-    for (let m = 0; m <= 240; m += 40) txt(m + ' ms', X + 24, y(m) + 6, { size: 15, color: C.faint, mono: true, alpha: k });
+    for (let m = 0; m <= 280; m += 40) txt(m + ' ms', X + 24, y(m) + 6, { size: 15, color: C.faint, mono: true, alpha: k });
     if (u < 1.2) return;
     // A is lost on both sides
     const mid = .45, ka = seg(0, 15);
@@ -669,8 +669,8 @@ function sLoss(t) {
     txt('A', cx - 24, y(0) + 6, { size: 18, weight: 800, mono: true, color: C.client, align: 'right' });
     if (ka >= mid) txt('✕ 손실', lerp(cx, sx, mid) + 14, y(15 * mid) + 8, { size: 20, weight: 800, color: C.red });
     if (side === 0) {
-      // B, C, D wait in the send buffer: A is still unACKed
-      if (ms > 10) hatch(cx - 14, y(10), 28, y(Math.min(ms, 200)) - y(10), C.red);
+      // B, C, D wait in the send buffer until A's ACK returns (the retransmitted A is still unACKed, cwnd 1)
+      if (ms > 10) hatch(cx - 14, y(10), 28, y(Math.min(ms, 230)) - y(10), C.red);
       [['B', 10], ['C', 20], ['D', 30]].forEach(([n, m]) => { if (ms > m) txt(n + ' 보류', cx - 24, y(m) + 6, { size: 17, weight: 700, color: C.red, align: 'right' }); });
       if (ms > 40) { txt('dup ACK 없음', sx + 20, y(60), { size: 18, weight: 800, color: C.dim }); txt('받은 게 없으니', sx + 20, y(60) + 26, { size: 16, color: C.dim }); }
       // RTO timer
@@ -681,8 +681,15 @@ function sLoss(t) {
         txt('최소 200 ms', cx + 52, y(100) + 26, { size: 17, mono: true, color: C.red, alpha: clamp((ms - 20) / 10) });
       }
       arrow(cx, y(200), sx, y(215), seg(200, 215), C.client, { lw: 4 });
-      if (ms > 202) txt('A 재전송 → B·C·D가 뒤따름', (cx + sx) / 2, y(205) - 14, { size: 18, weight: 800, color: C.client, align: 'center' });
-      if (ms > 216) chip('215 ms에 도착', sx - 10, y(215) + 36, C.red, { align: 'right', size: 18 });
+      if (ms > 202) txt('A만 재전송 · B·C·D는 계속 보류', (cx + sx) / 2, y(205) - 14, { size: 18, weight: 800, color: C.client, align: 'center' });
+      if (ms > 216) chip('A 215 ms', sx + 14, y(215), C.client, { size: 16 });
+      // A's ACK comes back, then B·C·D finally leave
+      arrow(sx, y(215), cx, y(230), seg(215, 230), C.pub, { dash: [8, 6], lw: 2 });
+      if (ms > 229) txt('A의 ACK 도착', cx - 24, y(218) + 4, { size: 16, weight: 800, color: C.pub, align: 'right', alpha: clamp((ms - 229) / 4) });
+      arrow(cx, y(230), sx, y(245), seg(230, 245), C.client, { lw: 4 });
+      if (ms > 231) txt('B·C·D', cx - 24, y(230) + 12, { size: 18, weight: 800, mono: true, color: C.client, align: 'right' });
+      if (ms > 246) chip('B·C·D 245 ms', sx + 14, y(245), C.red, { size: 16 });
+      if (ms > 252) txt('delayed ACK에 걸리면 ≈285 ms', sx - 10, y(268), { size: 16, color: C.dim, align: 'right' });
     } else {
       // B, C, D go out right away and arrive out of order
       [['B', 10], ['C', 20], ['D', 30]].forEach(([n, m]) => {
@@ -781,7 +788,7 @@ function sCost(t) {
     ctx.restore();
   };
   const LANES = [
-    { y: 230, col: C.red, title: 'TCP_NODELAY만', sub: '메시지마다 send() 6번 → 패킷 6개', dash: [8, 8], batched: false },
+    { y: 230, col: C.red, title: 'TCP_NODELAY만', sub: '메시지마다 send() 6번 → 패킷 최대 6개', dash: [8, 8], batched: false },
     { y: 560, col: C.bot, title: 'TCP_NODELAY + 틱 배칭', sub: '틱마다 send() 1번 → 패킷 1개', dash: null, batched: true },
   ];
   LANES.forEach((L, i) => {
@@ -835,6 +842,7 @@ function sCost(t) {
       txt(v, SX + 36 + 340 * f + 16, by + 27, { size: 23, weight: 800, color: col, mono: true, alpha: ks });
     });
   });
+  txt('빨강은 최악의 경우: send()마다 패킷 1개', SX + 36, 828, { size: 18, color: C.red, alpha: eo(p(u, 5.6, .6)) });
   ctx.restore();
   txt('Nagle을 켜 두면 패킷은 모이지만 ACK 대기가 생긴다. 모으는 일은 서버 코드가 틱 단위로 한다.', 120, 940, { size: 27, weight: 700, alpha: eo(p(u, 7.6, .7)) });
   txt('* 수치는 예시: 20Hz 틱, 클라당 틱마다 메시지 6개 × 30B, 헤더 52B', 120, 988, { size: 18, color: C.dim, alpha: eo(p(u, 3, .6)) });

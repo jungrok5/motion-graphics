@@ -90,7 +90,7 @@
 <h2><span class="n">04</span>손실 나면: 재전송</h2>
 <p class="sub">Nagle이면 빠른 재전송 대신 RTO를 기다린다 · <a class="scene" href="index.html#ch04">▶ 이 장면 보기</a></p>
 <p>패킷 하나가 손실됐을 때 Nagle이 어떻게 복구를 늦추는지 양쪽을 나란히 비교합니다. 둘 다 첫 패킷 A가 손실되고, 이어서 B, C, D를 보내려는 상황입니다. 수치는 예시로 RTT 30 ms, Linux의 최소 RTO 200 ms를 썼습니다.</p>
-<p>Nagle이 켜져 있으면 ACK를 받지 못한 작은 세그먼트가 하나 있는 동안 B, C, D는 송신 버퍼에 머뭅니다. 서버는 아무것도 받지 못했으니 중복 ACK(dup ACK)를 보낼 일이 없고, 클라는 손실을 알아챌 단서가 없습니다. 결국 RTO 타이머가 끝나는 200 ms 뒤에야 A를 재전송하고, B, C, D가 그 뒤를 따라 215 ms에 도착합니다.</p>
+<p>Nagle이 켜져 있으면 ACK를 받지 못한 작은 세그먼트가 하나 있는 동안 B, C, D는 송신 버퍼에 머뭅니다. 서버는 아무것도 받지 못했으니 중복 ACK(dup ACK)를 보낼 일이 없고, 클라는 손실을 알아챌 단서가 없습니다. 결국 RTO 타이머가 끝나는 200 ms 뒤에야 A를 재전송하고, A는 215 ms에 도착합니다. 재전송한 A도 아직 ACK를 받지 못한 작은 세그먼트라 B, C, D는 계속 보류됩니다. RTO 직후에는 cwnd도 1이라 A 하나만 나갈 수 있습니다. B, C, D는 A의 ACK가 돌아온 뒤에야 나가서, 서버가 ACK를 바로 보내면 245 ms, delayed ACK에 걸리면 285 ms쯤 도착합니다.</p>
 <p>TCP_NODELAY면 B, C, D가 바로 나가 서버에 먼저 도착합니다. 서버는 A가 빠졌다는 뜻으로 패킷마다 dup ACK를 돌려보내고, 클라는 dup ACK 3개를 받는 순간 RTO를 기다리지 않고 A를 다시 보냅니다(빠른 재전송). 이 예시에서는 75 ms에 A부터 D까지 모두 전달됩니다.</p>
 <p>다만 빠른 재전송은 뒤따르는 패킷이 있어야 동작합니다. 메시지가 드문 연결이면 NODELAY여도 dup ACK가 모자라 RTO까지 가는 경우가 있습니다. 재전송 자체는 <a href="https://jungrok5.github.io/motion-graphics/tcp-retransmission/">TCP 재전송 영상</a>에서 자세히 다룹니다.</p>
 </section>
@@ -103,8 +103,8 @@
 </section>
 <section id="ch06">
 <h2><span class="n">06</span>패킷 수 비용</h2>
-<p class="sub">NODELAY만 켜면 메시지마다 패킷이 하나씩 나간다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
-<p><code>TCP_NODELAY</code>만 켜고 서버가 메시지마다 <code>send()</code>를 부르면, 메시지 수만큼 패킷이 나갑니다. 예시 조건(5,000 CCU, 20 Hz 틱, 클라당 틱마다 30B 메시지 6개, 헤더 52B)에서 서버 송신은 초당 600,000 패킷, IP+TCP 헤더 포함 394 Mbps이고 그중 63%가 헤더입니다.</p>
+<p class="sub">NODELAY만 켜면 메시지마다 패킷이 하나씩 나갈 수 있다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
+<p><code>TCP_NODELAY</code>만 켜고 서버가 메시지마다 <code>send()</code>를 부르면, 최악의 경우 메시지 수만큼 패킷이 나갑니다. 예시 조건(5,000 CCU, 20 Hz 틱, 클라당 틱마다 30B 메시지 6개, 헤더 52B)에서 서버 송신은 최악의 경우 초당 600,000 패킷, IP+TCP 헤더 포함 394 Mbps이고 그중 63%가 헤더입니다. Linux는 기본으로 <code>tcp_autocorking</code>이 켜져 있어, 앞 패킷이 아직 NIC 큐에 남아 있으면 이어진 작은 write를 합쳐 보냅니다. 그래서 부하가 걸린 서버에서는 실제 pps가 이보다 낮게 측정될 수 있습니다. <code>send()</code> 호출 수는 그대로 6배입니다.</p>
 <p>서버가 한 틱 동안 클라별로 메시지를 모아 <code>send()</code>를 한 번만 부르면 초당 100,000 패킷, 186 Mbps, 헤더 비율 22%가 됩니다. 메시지는 원래 틱 단위로 만들어지므로 모아서 보내도 추가 대기는 거의 없습니다.</p>
 <p>Nagle을 켜 둬도 패킷은 모이지만, 언제 보낼지가 ACK 도착에 달려 있어 03의 보류가 생깁니다. 두 방식 모두 대기 없이 보내는 조건에서 비교하면, 차이는 패킷 수와 헤더 비율입니다. pps 비용은 NIC · 커널 처리량이 병목일 때 커집니다.</p>
 </section>

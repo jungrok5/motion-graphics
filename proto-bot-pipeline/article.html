@@ -83,9 +83,9 @@
 <section id="ch03">
 <h2><span class="n">03</span>항상 동기화</h2>
 <p class="sub">봇도 같은 생성 코드를 쓰니까, 패킷이 낡지 않습니다 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
-<p>같은 화면에서 <code>.proto</code>의 <code>EnterDungeonReq</code>에 <code>int32 difficulty = 3;</code> 한 줄이 초록색으로 추가되고 버전 칩이 <code>v1.3</code>에서 <code>v1.4</code>로 바뀐다. 펄스가 <code>protoc</code>를 지나 세 카드에 동시에 도착하면 Client에는 <code>Difficulty</code> 속성, Server에는 <code>difficulty()</code> 접근자, 봇에는 <code>Difficulty = 3,</code> 줄이 생기고 세 카드 모두 <code>v1.4</code>와 체크 배지를 단다.</p>
-<p>왼쪽 아래에는 비교 대상으로 빨간 점선의 "손으로 짠 봇 패킷" 카드가 나온다. 버전은 <code>v1.3</code>에 머물러 있고 "difficulty 누락 → 서버는 기본값 0으로 처리", "→ 테스트 결과를 믿을 수 없음"이라는 문구와 함께 X 표시가 붙는다.</p>
-<p>문구는 "필드를 추가해도 재생성 한 번이면 끝", "봇 패킷이 클라 · 서버와 자동으로 같이 갱신"이다. 봇을 별도로 손으로 유지하면 스키마가 바뀔 때마다 누군가 따라 고쳐야 하고, 그걸 놓치면 봇이 실제 클라와 다른 패킷을 보내게 된다.</p>
+<p>같은 화면에서 <code>.proto</code>의 <code>EnterDungeonReq</code>에 <code>int32 difficulty = 3;</code> 한 줄이 초록색으로 추가되고 버전 칩이 <code>v1.3</code>에서 <code>v1.4</code>로 바뀐다. 펄스가 <code>protoc</code>를 지나 세 카드에 동시에 도착하면 Client에는 <code>Difficulty</code> 속성, Server에는 <code>difficulty()</code> 접근자, 봇에는 같은 <code>Difficulty</code> 속성이 생긴다. 봇 카드의 <code>Difficulty = 3,</code> 줄에는 "시나리오에서 값 지정" 라벨이 붙는다. 재생성은 구조만 만들고, 값을 넣는 시나리오 코드는 사람이 쓰기 때문이다. 세 카드 모두 <code>v1.4</code>와 체크 배지를 단다.</p>
+<p>왼쪽 아래에는 비교 대상으로 빨간 점선의 "손으로 짠 봇 패킷" 카드가 나온다. 버전은 <code>v1.3</code>에 머물러 있고 "번호 · 타입 수동 관리 → 어긋나면 서버가 잘못 파싱", "→ 테스트 결과를 믿을 수 없음"이라는 문구와 함께 X 표시가 붙는다.</p>
+<p>문구는 "필드를 추가해도 재생성 · 재빌드 한 번이면 끝", "봇 패킷 구조가 클라 · 서버와 자동으로 같이 갱신"이다. 봇 · 클라 · 서버를 같은 <code>.proto</code> 리비전으로 다시 빌드해야 하므로 보통 CI에서 재생성을 강제한다. 봇을 별도로 손으로 유지하면 스키마가 바뀔 때마다 누군가 따라 고쳐야 하고, 그걸 놓치면 봇이 실제 클라와 다른 패킷을 보내게 된다.</p>
 </section>
 <section id="ch04">
 <h2><span class="n">04</span>서버가 먼저</h2>
@@ -108,7 +108,7 @@
 <p>이어지는 부하 대시보드에서 동시 접속 봇 수가 0에서 6,000까지 올라간다. 가운데에는 LB, Game Server, DB의 CPU 게이지가 있고, 오른쪽 "CPU 사용률 vs 동시 접속(Game Server · 1대)" 그래프에는 "임계 70%" 선이 그어져 있다. 곡선이 동접 5,000 지점에서 70%에 닿으면 "서버 1대 ≈ 동접 5,000" 마커가 뜬다. 아래 칩에는 <code>RPS</code>, <code>p99 지연</code>, <code>DB QPS</code>가 동접에 따라 함께 오른다.</p>
 <p>결과 카드는 두 장이다.</p>
 <ul>
-<li><strong>장비 스펙 산정</strong>: 대당 동접 5,000(CPU 70% 기준), 목표 동접 50,000 → 서버 10대 + 여유분.</li>
+<li><strong>장비 스펙 산정</strong>: 대당 동접 5,000(CPU 70% 기준), 목표 동접 50,000 → 게임 서버 10대 + 여유분. DB · LB 같은 공유 자원은 따로 측정한다.</li>
 <li><strong>라이브 인프라 테스트</strong>: 실서비스 환경에 같은 봇으로 부하를 넣어 LB · 네트워크 · DB 병목을 오픈 전에 확인한다.</li>
 </ul>
 <p>화면 하단에 "수치는 설명을 위한 예시입니다"라고 표기되어 있다. 위 숫자는 모두 예시이며 실제 산정은 각 게임의 측정값으로 해야 한다.</p>

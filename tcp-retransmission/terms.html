@@ -68,14 +68,14 @@
 <dt>Fast Retransmit</dt><dd>Dup ACK 3개를 받으면 타이머를 기다리지 않고 바로 재전송하는 방식이다. 지연은 대략 1 RTT 수준이다.</dd>
 <dt>Head-of-Line 블로킹</dt><dd>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.</dd>
 <dt>MTU 블랙홀</dt><dd>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.</dd>
-<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.</dd>
+<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_missed</code>, <code>rx_fifo</code> 계열 카운터(<code>ethtool -S</code>)가 오른다.</dd>
 <dt>RTO (Retransmission Timeout)</dt><dd>ACK를 기다리는 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값은 200ms이고 실패할 때마다 두 배로 늘어난다.</dd>
 <dt>RTT / SRTT / RTTVAR</dt><dd>RTT는 패킷이 갔다가 응답이 돌아오는 왕복 시간이다. SRTT는 커널이 평활화한 RTT 평균, RTTVAR는 그 변동폭이며 RTO 계산에 쓰인다.</dd>
 <dt>Seq / ACK</dt><dd>Seq는 세그먼트의 순번, ACK는 수신측이 "여기까지 받았고 다음은 이 번호가 필요하다"고 알려 주는 응답이다.</dd>
 <dt>Slow Start</dt><dd>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.</dd>
 <dt>tail drop</dt><dd>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.</dd>
 <dt>TCP_USER_TIMEOUT</dt><dd>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.</dd>
-<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.</dd>
+<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 손실 뒤 다음 패킷이 늦게 나가 RTO에 의존하기 쉽다.</dd>
 </dl>
 <footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
 <script>

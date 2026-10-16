@@ -106,14 +106,14 @@
 <ul>
 <li>혼잡, 라우터 큐 넘침: 트래픽이 몰려 장비 큐가 가득 차면 뒤에 온 패킷을 버린다(<code>tail drop</code>).</li>
 <li>무선, 모바일 구간: 와이파이 간섭이나 기지국 핸드오버 순간에 패킷이 사라진다.</li>
-<li>버퍼, NIC 오버플로: 커널이 NIC 수신 링 버퍼를 제때 비우지 못하면 넘친 패킷이 버려지고 <code>rx_dropped</code>가 증가한다.</li>
-<li>ACK 유실, MTU 블랙홀: 데이터는 도착했는데 ACK가 중간에 사라지거나, 경로 MTU 문제로 큰 패킷만 버려진다.</li>
+<li>버퍼, NIC 오버플로: 커널이 NIC 수신 링 버퍼를 제때 비우지 못하면 넘친 패킷이 버려지고 <code>ethtool -S</code>의 <code>rx_missed</code>, <code>rx_fifo</code> 계열 카운터가 증가한다.</li>
+<li>ACK 유실, MTU 블랙홀: 데이터는 도착했는데 마지막 ACK가 중간에 사라지거나(ACK는 누적이라 뒤 ACK가 있으면 덮어 준다), 경로 MTU 문제로 큰 패킷만 버려진다.</li>
 </ul>
 </article>
 <article data-ch="03">
 <p>위 줄은 패킷이 20ms 간격으로 촘촘하게 나가는 경우다. 100ms 지점의 패킷이 손실되면 바로 뒤 패킷들이 Dup ACK 3개를 만들고, 송신측이 즉시 재전송한다. 정지는 약 100ms, 대략 1 RTT 수준이다.</p>
-<p>아래 줄은 패킷이 띄엄띄엄 나가는 경우다. 손실 뒤 다음 패킷이 늦게 오므로 Dup ACK가 1개뿐이고 Fast Retransmit 조건이 채워지지 않는다. 송신측은 RTO 타이머를 기다린다. 첫 재전송은 <code>RTO 200ms</code> 뒤에 나가지만 이것도 손실되고, 타이머가 2배로 늘어 <code>RTO 400ms</code> 뒤에야 재전송이 성공한다. 이 예에서 정지는 620ms다.</p>
-<p>게임 트래픽은 작고 간격이 넓어서 Dup ACK 3개가 잘 모이지 않고 RTO로 빠지기 쉽다. 리눅스에서 RTO 최솟값은 200ms이고 실패할 때마다 200, 400, 800, 1600ms로 두 배씩 늘어난다.</p>
+<p>아래 줄은 패킷이 띄엄띄엄 나가는 경우다. 손실 뒤 다음 패킷이 RTO보다 늦게 나가므로 손실을 알려 줄 ACK가 없다. 송신측은 RTO 타이머를 기다린다. 첫 재전송은 <code>RTO 200ms</code> 뒤에 나가지만 이것도 손실되고, 타이머가 2배로 늘어 <code>RTO 400ms</code> 뒤에야 재전송이 성공한다. 이 예에서 정지는 620ms다.</p>
+<p>게임 트래픽은 작고 간격이 넓어서, 손실 뒤 다음 패킷이 RTO 전에 나가지 않으면 RTO로 빠진다. 리눅스에서 RTO 최솟값은 200ms이고 실패할 때마다 200, 400, 800, 1600ms로 두 배씩 늘어난다.</p>
 <p>재전송 뒤에는 혼잡 윈도우(cwnd)도 줄어든다. 영상은 Fast Retransmit이면 줄이고(Reno는 절반, 리눅스 기본 CUBIC은 0.7배), RTO면 1부터 Slow Start로 다시 시작한다고 설명하며, 그만큼 처리량이 급감한다.</p>
 </article>
 <article data-ch="04">
@@ -138,7 +138,7 @@
 <article data-ch="06">
 <p>왼쪽은 확인 방법이다.</p>
 <ul>
-<li><code>ss -ti dst :7777</code>: 소켓별 <code>rtt</code>, <code>rto</code>, <code>cwnd</code>, <code>retrans</code>를 본다. 화면의 예시 출력은 <code>rtt:182/90 rto:1200 cwnd:4 retrans:0/37</code>이다.</li>
+<li><code>ss -ti '( sport = :7777 )'</code>: 서버 기준으로 소켓별 <code>rtt</code>, <code>rto</code>, <code>cwnd</code>, <code>retrans</code>를 본다. 화면의 예시 출력은 <code>rtt:182/90 rto:1200 cwnd:4 retrans:0/37</code>이다.</li>
 <li><code>nstat -az TcpRetransSegs TcpExtTCPTimeouts</code>: 호스트 전체의 재전송 세그먼트 수와 RTO 타임아웃 횟수를 본다.</li>
 <li>Prometheus(node_exporter): <code>rate(node_netstat_Tcp_RetransSegs[1m]) / rate(node_netstat_Tcp_OutSegs[1m])</code>로 재전송률을 구한다.</li>
 <li>Wireshark: <code>tcp.analysis.retransmission</code> 필터로 재전송 패킷만 골라 본다.</li>
@@ -165,10 +165,10 @@
 <dt>Slow Start</dt><dd>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.</dd>
 <dt>Head-of-Line 블로킹</dt><dd>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.</dd>
 <dt>tail drop</dt><dd>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.</dd>
-<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.</dd>
+<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_missed</code>, <code>rx_fifo</code> 계열 카운터(<code>ethtool -S</code>)가 오른다.</dd>
 <dt>MTU 블랙홀</dt><dd>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.</dd>
 <dt>재전송률</dt><dd>전체 송신 세그먼트 중 재전송된 비율이다. <code>TcpRetransSegs / OutSegs</code>로 계산한다.</dd>
-<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.</dd>
+<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 손실 뒤 다음 패킷이 늦게 나가 RTO에 의존하기 쉽다.</dd>
 <dt>TCP_USER_TIMEOUT</dt><dd>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.</dd>
 </dl>
 </section>
@@ -508,8 +508,8 @@ function sSeqAck(t) {
 const CAUSES = [
   { title: '혼잡 · 라우터 큐 넘침', desc: '트래픽이 몰려 장비 큐가 가득 → 뒤에 온 패킷 버림', col: C.proto },
   { title: '무선 · 모바일 구간', desc: '와이파이 간섭, 기지국 핸드오버 순간의 손실', col: C.client },
-  { title: '버퍼 · NIC 오버플로', desc: '수신 링 버퍼를 커널이 못 비움 → rx drop', col: C.server },
-  { title: 'ACK 유실 · MTU 블랙홀', desc: '데이터는 갔는데 ACK가 사라짐 · 큰 패킷만 버려짐', col: C.pub },
+  { title: '버퍼 · NIC 오버플로', desc: '링 버퍼 넘침 → rx_missed/fifo 증가(ethtool -S)', col: C.server },
+  { title: 'ACK 유실 · MTU 블랙홀', desc: '마지막 ACK가 사라짐(뒤 ACK가 못 덮을 때) · 큰 패킷만 버려짐', col: C.pub },
 ];
 function sCauses(t) {
   const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
@@ -541,13 +541,13 @@ function sCauses(t) {
       const n = 16, fill = Math.min(n, Math.floor(v * 3.2));
       for (let s2 = 0; s2 < n; s2++) { const an = s2 / n * Math.PI * 2 - Math.PI / 2; ctx.fillStyle = s2 < fill ? rgba(fill >= n ? C.red : c.col, .7) : 'rgba(148,163,184,0.15)'; ctx.beginPath(); ctx.arc(x + 180 + Math.cos(an) * 56, ly + Math.sin(an) * 56, 9, 0, 7); ctx.fill(); }
       txt('NIC 링 버퍼', x + 180, ly + 96, { size: 16, color: C.dim, align: 'center' });
-      chip(fill >= n ? 'rx_dropped 증가' : 'softirq 처리 중', x + 320, ly, fill >= n ? C.red : C.bot, { size: 17 });
+      chip(fill >= n ? 'rx_missed 증가' : 'softirq 처리 중', x + 320, ly, fill >= n ? C.red : C.bot, { size: 17 });
     } else {
       arrow(x + 80, ly - 30, x + 760, ly - 30, eo(p(v, .3, .8)), C.proto);
       txt('데이터', x + 420, ly - 44, { size: 16, color: C.proto, align: 'center' }); check(x + 790, ly - 30, 24, C.bot, eo(p(v, 1.1, .3)));
       const kb = p(v, 1.3, .8); arrow(x + 760, ly + 30, x + 80, ly + 30, Math.min(kb, .5), C.server, { dash: [7, 6] });
       if (kb > .5) cross(lerp(x + 760, x + 80, .5), ly + 30, 26, C.red);
-      txt('ACK', x + 600, ly + 64, { size: 16, color: C.server, align: 'center' });
+      txt('마지막 ACK', x + 600, ly + 64, { size: 16, color: C.server, align: 'center' });
     }
     ctx.restore();
   });
@@ -590,7 +590,7 @@ function sTwoKinds(t) {
   // insight
   const ki = eo(p(u, 6.6, .6));
   panel(120, 690, 1680, 160, { alpha: ki, stroke: rgba(C.red, .5), fill: rgba(C.red, .05) });
-  txt('게임 트래픽은 작고 띄엄띄엄 → Dup ACK 3개가 안 모임 → RTO로 빠짐 → 수백 ms 정지', 160, 752, { size: 28, weight: 800, alpha: ki });
+  txt('게임 트래픽은 작고 띄엄띄엄 → 다음 패킷이 RTO 전에 안 가면 → RTO로 빠짐 → 수백 ms 정지', 160, 752, { size: 28, weight: 800, alpha: ki });
   txt('RTO는 최소 200ms(리눅스), 실패할 때마다 2배: 200 → 400 → 800 → 1600ms …', 160, 806, { size: 22, color: C.dim, alpha: ki });
   txt('재전송 뒤 혼잡 윈도우(cwnd): Fast → 줄임(Reno 절반 · CUBIC 0.7배), RTO → 1부터 다시(Slow Start) → 처리량 급감', 120, 920, { size: 22, color: C.dim, alpha: eo(p(u, 8, .6)) });
   ctx.restore();
@@ -674,7 +674,7 @@ function sSymptoms(t) {
 //  06 · check & mitigate
 // ═════════════════════════════════════════════════════════════
 const CMDS = [
-  '$ ss -ti dst :7777', '  rtt:182/90 rto:1200 cwnd:4 retrans:0/37', '',
+  "$ ss -ti '( sport = :7777 )'", '  rtt:182/90 rto:1200 cwnd:4 retrans:0/37', '',
   '$ nstat -az TcpRetransSegs TcpExtTCPTimeouts', '  TcpRetransSegs        48211', '  TcpExtTCPTimeouts      1932', '',
   '# Prometheus · node_exporter', 'rate(node_netstat_Tcp_RetransSegs[1m])', '  / rate(node_netstat_Tcp_OutSegs[1m])', '',
   '# Wireshark 필터', 'tcp.analysis.retransmission',

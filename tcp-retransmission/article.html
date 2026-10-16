@@ -75,16 +75,16 @@
 <ul>
 <li>혼잡, 라우터 큐 넘침: 트래픽이 몰려 장비 큐가 가득 차면 뒤에 온 패킷을 버린다(<code>tail drop</code>).</li>
 <li>무선, 모바일 구간: 와이파이 간섭이나 기지국 핸드오버 순간에 패킷이 사라진다.</li>
-<li>버퍼, NIC 오버플로: 커널이 NIC 수신 링 버퍼를 제때 비우지 못하면 넘친 패킷이 버려지고 <code>rx_dropped</code>가 증가한다.</li>
-<li>ACK 유실, MTU 블랙홀: 데이터는 도착했는데 ACK가 중간에 사라지거나, 경로 MTU 문제로 큰 패킷만 버려진다.</li>
+<li>버퍼, NIC 오버플로: 커널이 NIC 수신 링 버퍼를 제때 비우지 못하면 넘친 패킷이 버려지고 <code>ethtool -S</code>의 <code>rx_missed</code>, <code>rx_fifo</code> 계열 카운터가 증가한다.</li>
+<li>ACK 유실, MTU 블랙홀: 데이터는 도착했는데 마지막 ACK가 중간에 사라지거나(ACK는 누적이라 뒤 ACK가 있으면 덮어 준다), 경로 MTU 문제로 큰 패킷만 버려진다.</li>
 </ul>
 </section>
 <section id="ch03">
 <h2><span class="n">03</span>두 가지 재전송</h2>
 <p class="sub">Fast Retransmit은 짧고, RTO 타임아웃은 길다 · <a class="scene" href="index.html#ch03">▶ 이 장면 보기</a></p>
 <p>위 줄은 패킷이 20ms 간격으로 촘촘하게 나가는 경우다. 100ms 지점의 패킷이 손실되면 바로 뒤 패킷들이 Dup ACK 3개를 만들고, 송신측이 즉시 재전송한다. 정지는 약 100ms, 대략 1 RTT 수준이다.</p>
-<p>아래 줄은 패킷이 띄엄띄엄 나가는 경우다. 손실 뒤 다음 패킷이 늦게 오므로 Dup ACK가 1개뿐이고 Fast Retransmit 조건이 채워지지 않는다. 송신측은 RTO 타이머를 기다린다. 첫 재전송은 <code>RTO 200ms</code> 뒤에 나가지만 이것도 손실되고, 타이머가 2배로 늘어 <code>RTO 400ms</code> 뒤에야 재전송이 성공한다. 이 예에서 정지는 620ms다.</p>
-<p>게임 트래픽은 작고 간격이 넓어서 Dup ACK 3개가 잘 모이지 않고 RTO로 빠지기 쉽다. 리눅스에서 RTO 최솟값은 200ms이고 실패할 때마다 200, 400, 800, 1600ms로 두 배씩 늘어난다.</p>
+<p>아래 줄은 패킷이 띄엄띄엄 나가는 경우다. 손실 뒤 다음 패킷이 RTO보다 늦게 나가므로 손실을 알려 줄 ACK가 없다. 송신측은 RTO 타이머를 기다린다. 첫 재전송은 <code>RTO 200ms</code> 뒤에 나가지만 이것도 손실되고, 타이머가 2배로 늘어 <code>RTO 400ms</code> 뒤에야 재전송이 성공한다. 이 예에서 정지는 620ms다.</p>
+<p>게임 트래픽은 작고 간격이 넓어서, 손실 뒤 다음 패킷이 RTO 전에 나가지 않으면 RTO로 빠진다. 리눅스에서 RTO 최솟값은 200ms이고 실패할 때마다 200, 400, 800, 1600ms로 두 배씩 늘어난다.</p>
 <p>재전송 뒤에는 혼잡 윈도우(cwnd)도 줄어든다. 영상은 Fast Retransmit이면 줄이고(Reno는 절반, 리눅스 기본 CUBIC은 0.7배), RTO면 1부터 Slow Start로 다시 시작한다고 설명하며, 그만큼 처리량이 급감한다.</p>
 </section>
 <section id="ch04">
@@ -115,7 +115,7 @@
 <p class="sub">지표로 확인하고, 구조로 피한다 · <a class="scene" href="index.html#ch06">▶ 이 장면 보기</a></p>
 <p>왼쪽은 확인 방법이다.</p>
 <ul>
-<li><code>ss -ti dst :7777</code>: 소켓별 <code>rtt</code>, <code>rto</code>, <code>cwnd</code>, <code>retrans</code>를 본다. 화면의 예시 출력은 <code>rtt:182/90 rto:1200 cwnd:4 retrans:0/37</code>이다.</li>
+<li><code>ss -ti '( sport = :7777 )'</code>: 서버 기준으로 소켓별 <code>rtt</code>, <code>rto</code>, <code>cwnd</code>, <code>retrans</code>를 본다. 화면의 예시 출력은 <code>rtt:182/90 rto:1200 cwnd:4 retrans:0/37</code>이다.</li>
 <li><code>nstat -az TcpRetransSegs TcpExtTCPTimeouts</code>: 호스트 전체의 재전송 세그먼트 수와 RTO 타임아웃 횟수를 본다.</li>
 <li>Prometheus(node_exporter): <code>rate(node_netstat_Tcp_RetransSegs[1m]) / rate(node_netstat_Tcp_OutSegs[1m])</code>로 재전송률을 구한다.</li>
 <li>Wireshark: <code>tcp.analysis.retransmission</code> 필터로 재전송 패킷만 골라 본다.</li>
