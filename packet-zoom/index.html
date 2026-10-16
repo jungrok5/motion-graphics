@@ -1,0 +1,964 @@
+<meta charset="utf-8">
+<title>Packet Zoom</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #0b0c0d; --surface: #151719; --line: #2c3034; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #b5e853; --live: #8fd14f; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(181,232,83,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(181,232,83,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="이동 패킷 하나를 데이터센터에서 DRAM 셀까지 따라가는 연속 줌인 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:50</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../one-byte/">본편 영상</a><a href="../one-byte/article.html">설명 읽기</a><a href="../one-byte/terms.html">용어집</a></nav>
+</div>
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Packet Zoom — style C: one continuous "powers of ten" dive.
+//  Hall → rack → server → NIC/DMA → DIMM → DRAM chip → die → cell array → the payload's cells → one cell → back out.
+//  Each level is modelled at near-unit size in its own units and nested inside its parent by a fixed transform.
+//  Every frame the world is re-rooted on the level the camera is in (doubles on the CPU), so float precision and the
+//  depth buffer (near/far scaled to the camera distance) only ever see ~3 orders of magnitude. Every frame is a pure function of t.
+//  Facts follow ../one-byte/: the extreme 8 B movement entry = 64 bits (slot 12b, x 14b, y 14b, z 8b, 방향 6b, 상태 4b, Δt 6b).
+//  Layouts, field values and cell positions are illustrative.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 50;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+const LIME = '#b5e853';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const ss = u => u * u * u * (u * (u * 6 - 15) + 10);
+const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ── the payload: the 8 B movement entry from ../one-byte (field values are an example) ──
+const FIELDS = [['슬롯', 12, 1234], ['x', 14, 9021], ['y', 14, 4410], ['z', 8, 37], ['방향', 6, 45], ['상태', 4, 3], ['Δt', 6, 17]];
+const BITS = (() => { let w = 0n, s = 0n; for (const [, b, v] of FIELDS) { w |= BigInt(v) << s; s += BigInt(b); } return [...Array(64)].map((_, i) => Number((w >> BigInt(i)) & 1n)); })();
+const CHIP = 2;                                    // this DRAM chip holds byte 2 (lane → chip mapping illustrative)
+const MYBITS = BITS.slice(CHIP * 8, CHIP * 8 + 8);
+const ONE_K = (() => { let best = 0, bd = 9; MYBITS.forEach((b, k) => { if (b && Math.abs(k - 3.5) < bd) { bd = Math.abs(k - 3.5); best = k; } }); return best; })();
+
+// ── timeline ─────────────────────────────────────────────────
+// [start, end, number, chapter label]
+const HEAD = [
+  [0.0, 4.0, '01', '데이터센터 홀'], [4.0, 8.0, '02', '랙 하나'], [8.0, 12.6, '03', '게임 서버'], [12.6, 18.0, '04', 'NIC → DMA'],
+  [18.0, 22.6, '05', 'DIMM'], [22.6, 26.6, '06', 'DRAM 칩'], [26.6, 30.4, '07', '다이 · 뱅크'], [30.4, 33.8, '08', '셀 어레이'],
+  [33.8, 38.4, '09', '패킷의 바이트'], [38.4, 42.0, '10', '셀 하나'], [42.0, 46.4, '11', '다시 홀로'],
+];
+const END = 46.4;
+// bottom-left captions: [start, end, TITLE, SUBTITLE, 한국어 한 줄, footnote]
+const CAP = [
+  [0.3, 3.9, 'DATACENTER HALL', 'ROWS OF RACKS · COLD AISLE IN FRONT, HOT AISLE BEHIND · ILLUSTRATIVE LAYOUT', '데이터센터 홀 — 랙이 줄지어 서 있고, 랙 앞쪽 통로로 찬 공기가 들어온다'],
+  [4.0, 7.9, 'ONE RACK', '42U · GAME SERVERS STACKED · TOP-OF-RACK SWITCH', '랙 하나 — 높이 약 2 m에 서버가 층층이 꽂혀 있고, 맨 위 스위치가 네트워크를 잇는다'],
+  [8.0, 12.5, 'ONE GAME SERVER', '1U · LID OFF · 2 CPUs · 16 DIMMs · NIC · ILLUSTRATIVE LAYOUT', '게임 서버 한 대 — 뚜껑을 열면 CPU 2개, 메모리 모듈(DIMM) 16개, 네트워크 카드(NIC)가 있다'],
+  [12.6, 17.9, 'PACKET IN → DMA', 'NIC → PCIe → MEMORY CONTROLLER IN THE CPU → DIMM', 'NIC가 받은 패킷을 DMA로 메인 메모리에 쓴다. CPU 코어가 한 바이트씩 옮기지 않는다'],
+  [18.0, 22.5, 'ONE DIMM', 'DDR4 RDIMM · 64-BIT DATA BUS · 8 DATA CHIPS (x8) + ECC · ILLUSTRATIVE', '8바이트는 데이터 칩 8개에 1바이트씩 나뉘어 저장된다'],
+  [22.6, 26.5, 'ONE DRAM CHIP', 'PACKAGE OPENED · ONE SILICON DIE INSIDE · ILLUSTRATIVE', 'DRAM 칩 하나 — 검은 몰딩 아래에 실리콘 다이가 들어 있다'],
+  [26.6, 30.3, 'DRAM DIE', '16 BANKS IN 4 BANK GROUPS · GENERIC FLOORPLAN · ILLUSTRATIVE', 'DDR4 다이는 뱅크 16개로 나뉘고, 뱅크는 다시 작은 셀 어레이(매트) 여러 개로 나뉜다'],
+  [30.4, 33.7, 'CELL ARRAY', 'WORD LINES (ROWS) × BIT LINES (COLUMNS) · ILLUSTRATIVE', '워드 라인(행)과 비트 라인(열)이 엇갈리는 자리마다 셀이 하나씩 있다'],
+  [33.8, 38.3, "THE PACKET'S BYTES", '8-BYTE MOVEMENT PAYLOAD = 64 BITS = 64 CELLS', '이동 정보 8바이트 = 셀 64개. 이 칩에는 그중 1바이트, 셀 8개가 있다',
+    '* 헤더(이더넷 · IP · UDP 42B)까지 합친 패킷 전체는 이보다 크다 · 셀 위치와 비트 순서는 예시'],
+  [38.4, 41.9, 'ONE CELL', '1 TRANSISTOR + 1 CAPACITOR · EVERY ROW REFRESHED WITHIN 64 MS · ILLUSTRATIVE', '비트 하나 = 커패시터 하나의 전하. 전하가 조금씩 새기 때문에 주기적으로 다시 채운다',
+    '* 충전 = 1은 예시 · 실제 커패시터는 이보다 훨씬 가늘고 높다'],
+  [42.0, 46.0, 'BACK OUT', 'CELL → DIE → CHIP → DIMM → SERVER → RACK → HALL', '같은 길을 거꾸로 — 셀에서 홀까지'],
+];
+
+// ── three.js setup ───────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const ANISO = renderer.capabilities.getMaxAnisotropy();
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0c0d');
+scene.fog = new THREE.Fog(0x0b0c0d, 10, 100);
+const camera = new THREE.PerspectiveCamera(35, W / H, .1, 1000);
+scene.add(camera);
+const hemi = new THREE.HemisphereLight('#e2e0dc', '#3a3734', 1.7);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff4e6', 3.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun, sun.target);
+const LDIR = V3(-.5, 1, .62).normalize();
+
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .55, .45, .92);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ── builders ─────────────────────────────────────────────────
+function canvasTex(w, h, draw, { rep = [1, 1], srgb = true } = {}) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); draw(g, w, h);
+  const tx = new THREE.CanvasTexture(c);
+  if (srgb) tx.colorSpace = THREE.SRGBColorSpace;
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rep[0], rep[1]); tx.anisotropy = ANISO;
+  return tx;
+}
+// box with a vertical gradient baked into vertex colours (cheap ambient occlusion: darker toward the base)
+function boxAO(w, h, d, lo = .5) {
+  const g = new THREE.BoxGeometry(w, h, d); const pos = g.attributes.position; const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) { const k = lo + (1 - lo) * Math.pow(clamp((pos.getY(i) + h / 2) / h), .7); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
+}
+const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: .72, metalness: .12, vertexColors: true, ...o });
+const MP = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: .72, metalness: .12, ...o });   // no vertex colours
+function mesh(parent, geo, mat, x = 0, y = 0, z = 0, { cast = true, recv = true } = {}) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = recv; parent.add(m); return m;
+}
+function box(parent, w, h, d, x, y, z, mat, lo, o) { return mesh(parent, boxAO(w, h, d, lo), mat, x, y, z, o); }
+const _o = new THREE.Object3D();
+function inst(parent, geo, mat, list, { cast = true, recv = true } = {}) {
+  const im = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
+  list.forEach((it, i) => {
+    _o.position.set(it[0], it[1], it[2]); _o.rotation.set(it[6] || 0, it[7] || 0, it[8] || 0);
+    _o.scale.set(it[3] ?? 1, it[4] ?? 1, it[5] ?? 1); _o.updateMatrix(); im.setMatrixAt(i, _o.matrix);
+    if (it[9] !== undefined) im.setColorAt(i, new THREE.Color().setScalar(it[9]));
+  });
+  im.count = list.length; im.castShadow = cast; im.receiveShadow = recv; im.computeBoundingSphere(); parent.add(im); return im;
+}
+const limeMat = k => new THREE.MeshBasicMaterial({ color: new THREE.Color(LIME).multiplyScalar(k), toneMapped: true });
+function polyTube(points, r, segs = 400, rad = 6) {
+  const path = new THREE.CurvePath();
+  for (let i = 0; i < points.length - 1; i++) path.add(new THREE.LineCurve3(points[i], points[i + 1]));
+  const g = new THREE.TubeGeometry(path, segs, r, rad, false); g.userData = { segs, rad }; return g;
+}
+function setTubeRange(g, a, b) {   // show the tube between path fractions a..b
+  const { segs, rad } = g.userData; const i0 = Math.floor(clamp(a) * segs), i1 = Math.ceil(clamp(b) * segs);
+  g.setDrawRange(i0 * rad * 6, Math.max(0, i1 - i0) * rad * 6);
+}
+
+// ── levels: each one is modelled in its own units and nested in its parent ──
+// local(t): matrix child → parent. unit: metres per local unit.
+const LV = [];
+function compose(pos, rot, s) {
+  return new THREE.Matrix4().compose(V3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), V3(s, s, s));
+}
+function level(name, unit, parent, local) {
+  const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g);
+  const L = { name, unit, parent, local, g, ph: null }; LV.push(L); return L;
+}
+const SLIDE = t => eio(p(t, 7.3, 1.9)) * (1 - eio(p(t, 45.0, .8)));          // server slides out of the rack (and back on the way out)
+const LIDK = t => eio(p(t, 8.9, 1.6)) * (1 - eio(p(t, 44.75, .6)));
+const SINKK = t => eio(p(t, 10.1, 1.3)) * (1 - eio(p(t, 44.7, .6)));
+const FANK = t => eio(p(t, 10.0, 1.2)) * (1 - eio(p(t, 44.7, .6)));
+const DLIFT = t => eio(p(t, 17.5, 1.3)) * (1 - eio(p(t, 44.45, .5)));             // target DIMM lifts out of its slot
+const MOLDK = t => eio(p(t, 23.7, 1.6)) * (1 - eio(p(t, 44.15, .45)));
+
+// bank / mat geometry shared by L4 (texture) and L5 (3D mats) so the grids line up
+const MAT_PX = .27, MAT_PZ = .21;                  // mat pitch in L4 units (0.1 mm): 27 µm × 21 µm
+const BANK_NX = 52, BANK_NZ = 93;
+const BANK_W = BANK_NX * MAT_PX, BANK_H = BANK_NZ * MAT_PZ;
+const BANK_X0 = c => -29.73 + c * 15.14;
+const BANK_Z0 = [-43.53, -23.73, 4.2, 24.0];
+const TBANK = [1, 1];                              // target bank: column 1, row 1 (next to the spine)
+const TMAT = [26, 46];
+const MX = BANK_X0(TBANK[0]) + TMAT[0] * MAT_PX + .125, MZ = BANK_Z0[TBANK[1]] + TMAT[1] * MAT_PZ + .09;
+
+const L0 = level('hall', 1, -1, () => new THREE.Matrix4());
+const L1 = level('rack', .1, 0, () => compose([2.4, 0, -.9], [0, 0, 0], .1));
+const L2 = level('server', .01, 1, () => compose([.8, 9.4455, 0], [0, 0, 0], .1));
+const L3 = level('dimm', .001, 2, t => compose([19.8, .9 + 4.5 * DLIFT(t), -34 + 6.6675 + 75 * SLIDE(t)], [0, Math.PI / 2, 0], .1));
+const L4 = level('chip', 1e-4, 3, () => compose([35, 17, .635], [Math.PI / 2, 0, 0], .1));
+const L5 = level('mat', 1e-6, 4, () => compose([MX, 4.01, MZ], [0, 0, 0], .01));
+const L6 = level('cells', 1e-8, 5, () => compose([0, .5, 0], [0, 0, 0], .01));
+
+// ═════ L0 · HALL (1 unit = 1 m) ═════════════════════════════
+let HALL_ROWB;
+const RACK_FRONT = (() => {
+  const r = rng(7); const blank = [...Array(42)].map(() => r() < .12), blue = [...Array(42)].map(() => r() < .7);
+  const draw = (g, w, h, led) => {
+    g.fillStyle = led ? '#000' : '#1e2022'; g.fillRect(0, 0, w, h);
+    const u = (h - 24) / 42;
+    for (let i = 0; i < 42; i++) {
+      const y = 12 + i * u;
+      if (!led) { g.fillStyle = blank[i] ? '#18191b' : '#383b3f'; g.fillRect(8, y + 1, w - 16, u - 2);
+        if (!blank[i]) { g.fillStyle = '#4a4e53'; for (let k = 0; k < 6; k++) g.fillRect(16 + k * 15, y + 3, 11, u - 6); } }
+      else if (!blank[i]) { g.fillStyle = blue[i] ? '#9cc3e6' : '#e8e6df'; g.fillRect(w - 16, y + u / 2 - .6, 1.4, 1.2); }
+    }
+  };
+  return { map: canvasTex(128, 420, (g, w, h) => draw(g, w, h, false)), emi: canvasTex(128, 420, (g, w, h) => draw(g, w, h, true)) };
+})();
+{
+  const g = L0.g;
+  const floorTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#3a3c3f'; c.fillRect(0, 0, w, h); c.fillStyle = '#2a2b2e'; c.fillRect(0, 0, w, 3); c.fillRect(0, 0, 3, h); }, { rep: [80 / .6, 70 / .6] });
+  const floor = mesh(g, new THREE.PlaneGeometry(80, 70), MP('#ffffff', { map: floorTex, roughness: .85 }), -5, 0, 0, { cast: false });
+  floor.rotation.x = -Math.PI / 2;
+  const perfTex = canvasTex(64, 64, (c, w, h) => { c.fillStyle = '#3a3c3e'; c.fillRect(0, 0, w, h); c.fillStyle = '#25272a';
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) c.fillRect(4 + i * 7.5, 4 + j * 7.5, 3, 3); c.fillStyle = '#1d1e20'; c.fillRect(0, 0, w, 2); c.fillRect(0, 0, 2, h); }, { rep: [31.2 / .6, 3] });
+  const ZC = [-10.8, -5.4, 0, 5.4, 10.8], XB = [-20.4, -9.6, 1.2];
+  for (const zc of ZC) { const m = mesh(g, new THREE.PlaneGeometry(31.2, 1.8), MP('#ffffff', { map: perfTex, roughness: .8 }), -4.8, .003, zc, { cast: false }); m.rotation.x = -Math.PI / 2; }
+  const side = M('#3d4043', { roughness: .55, metalness: .3 }), top = M('#33363a'), back = M('#2a2c2f');
+  const front = MP('#ffffff', { map: RACK_FRONT.map, emissiveMap: RACK_FRONT.emi, emissive: '#ffffff', emissiveIntensity: .9, roughness: .5, metalness: .3 });
+  const rackGeo = boxAO(.6, 2, 1.2, .55);
+  const racks = [], rowB = [];
+  for (const x0 of XB) for (const zc of ZC) for (let i = 0; i < 16; i++) {
+    const x = x0 + i * .6 + .3;
+    if (!(x0 === 1.2 && zc === 0 && i === 2)) racks.push([x, 1, zc - 1.5, 1, 1, 1, 0, 0, 0]);
+    (zc === 0 ? rowB : racks).push([x, 1, zc + 1.5, 1, 1, 1, 0, Math.PI, 0]);
+  }
+  inst(g, rackGeo, [side, side, top, top, front, back], racks);
+  HALL_ROWB = inst(g, rackGeo, [side, side, top, top, front, back], rowB);
+  // overhead cable trays and light strips
+  const tray = M('#3b3e42', { metalness: .5, roughness: .5 });
+  const trays = []; for (const zc of ZC) { trays.push([-4.8, 2.55, zc - 1.5], [-4.8, 2.55, zc + 1.5]); }
+  inst(g, boxAO(31.2, .07, .32, .7), tray, trays, { recv: false });
+  const strip = new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfd6dc').multiplyScalar(.45) });
+  inst(g, new THREE.BoxGeometry(31.2, .02, .05), strip, ZC.flatMap(zc => [[-4.8, 4.2, zc - .5], [-4.8, 4.2, zc + .5]]), { cast: false, recv: false });
+  // far walls
+  const wall = MP('#17181a', { roughness: .9 });
+  mesh(g, new THREE.PlaneGeometry(80, 8), wall, -5, 4, -16, { cast: false });
+  const w2 = mesh(g, new THREE.PlaneGeometry(70, 8), wall, -24, 4, 0, { cast: false }); w2.rotation.y = Math.PI / 2;
+}
+
+// ═════ L1 · RACK (1 unit = 10 cm), front face at z = 0, x 0..6, y 0..20 ═════
+const SERVER_FRONT = (() => {
+  const draw = (g, w, h, led) => {
+    g.fillStyle = led ? '#000' : '#3e4145'; g.fillRect(0, 0, w, h);
+    if (!led) {
+      g.fillStyle = '#3c3f43'; g.fillRect(0, 0, 22, h); g.fillRect(w - 22, 0, 22, h);
+      for (let k = 0; k < 10; k++) { g.fillStyle = '#4d5156'; g.fillRect(40 + k * 34, 8, 30, h - 16); g.fillStyle = '#25272a'; g.fillRect(43 + k * 34, h / 2 - 2, 24, 4); }
+      g.fillStyle = '#232527'; for (let i = 0; i < 18; i++) for (let j = 0; j < 4; j++) g.fillRect(392 + i * 5.5, 9 + j * 9, 3, 5);
+    } else { g.fillStyle = '#a8cdee'; g.fillRect(30, h / 2 - 2, 4, 4); g.fillStyle = '#e6e3da'; g.fillRect(w - 32, h / 2 - 2, 4, 4); }
+  };
+  return { map: canvasTex(512, 50, (g, w, h) => draw(g, w, h, false)), emi: canvasTex(512, 50, (g, w, h) => draw(g, w, h, true)) };
+})();
+const srvFrontMat = MP('#ffffff', { map: SERVER_FRONT.map, emissiveMap: SERVER_FRONT.emi, emissive: '#ffffff', emissiveIntensity: .8, roughness: .5, metalness: .35 });
+const srvSide = M('#4c4f53', { metalness: .45, roughness: .5 });
+{
+  const g = L1.g;
+  const frame = M('#2e3033', { metalness: .4, roughness: .55 });
+  for (const [x, z] of [[.2, -.2], [5.8, -.2], [.2, -11.8], [5.8, -11.8]]) box(g, .4, 20, .4, x, 10, z, frame, .6);
+  box(g, .12, 20, 11.2, .06, 10, -6, frame, .6); box(g, .12, 20, 11.2, 5.94, 10, -6, frame, .6);
+  box(g, 6, .25, 12, 3, 20.12, -6, frame, .8); box(g, 6, .9, 12, 3, .45, -6, frame, .5);
+  box(g, 6, 20, .1, 3, 10, -12, frame, .5);
+  const Uy = u => 1.0 + (u - 1) * .4445 + .2222;
+  const list = [];
+  for (let u = 1; u <= 39; u++) if (u !== 20 && u !== 33 && u !== 34) list.push([3, Uy(u), -3.5]);
+  const sGeo = boxAO(4.4, .43, 7.0, .7);
+  inst(g, sGeo, [srvSide, srvSide, srvSide, srvSide, srvFrontMat, srvSide], list);
+  inst(g, boxAO(4.4, .4, .1, .8), M('#151617'), [[3, Uy(33), -.05], [3, Uy(34), -.05]]);
+  L1.ph = mesh(g, sGeo, [srvSide, srvSide, srvSide, srvSide, srvFrontMat, srvSide], 3, Uy(20), -3.5);
+  // top-of-rack switch (U41)
+  const swTex = canvasTex(512, 50, (c, w, h) => { c.fillStyle = '#26282b'; c.fillRect(0, 0, w, h); c.fillStyle = '#121314';
+    for (let i = 0; i < 24; i++) for (let j = 0; j < 2; j++) c.fillRect(60 + i * 16, 8 + j * 18, 12, 14); c.fillStyle = '#3c3f43'; c.fillRect(0, 0, 22, h); c.fillRect(w - 22, 0, 22, h); });
+  const swMat = MP('#ffffff', { map: swTex, roughness: .5, metalness: .3 });
+  mesh(g, boxAO(4.4, .43, 5, .7), [srvSide, srvSide, srvSide, srvSide, swMat, srvSide], 3, Uy(41), -2.5);
+  // patch cables from switch ports into the side cable manager
+  const cab = MP('#2f3c4a', { roughness: .55 });
+  for (let k = 0; k < 9; k++) {
+    const x = 1.44 + k * .62, y = Uy(41) + (k % 2 ? -.06 : .08);
+    const c = new THREE.CatmullRomCurve3([V3(x, y, .02), V3(x, y - .3, .35), V3(lerp(x, 5.55, .6), y - 1.0 - k * .08, .32), V3(5.55, y - 2.2 - k * .12, .2), V3(5.6, 3 + k * .3, .15)]);
+    mesh(g, new THREE.TubeGeometry(c, 40, .045, 6), cab, 0, 0, 0, { recv: false });
+  }
+}
+
+// ═════ L2 · SERVER (1 unit = 1 cm), front face at z = 0, x 0..44, y 0..4.3, depth 70 ═════
+const srv = new THREE.Group(); L2.g.add(srv);
+const PULSE = {};
+const LID = new THREE.Group(), SINKS = [], FANS = new THREE.Group();
+{
+  const g = srv;
+  const steel = M('#5c6064', { metalness: .55, roughness: .45 });
+  box(g, 44, .1, 70, 22, .05, -35, steel, .9);
+  box(g, .1, 4.3, 70, .05, 2.15, -35, steel, .6); box(g, .1, 4.3, 70, 43.95, 2.15, -35, steel, .6);
+  mesh(g, boxAO(44, 4.3, .4, .8), [srvSide, srvSide, srvSide, srvSide, srvFrontMat, srvSide], 22, 2.15, -.2);
+  box(g, 44, 4.3, .2, 22, 2.15, -69.9, steel, .6);
+  // lid (lifts away)
+  g.add(LID); box(LID, 44, .12, 70.2, 0, 0, 0, M('#666a6f', { metalness: .55, roughness: .42 }), .9);
+  // motherboard
+  const pcbTex = canvasTex(512, 680, (c, w, h) => {
+    const r = rng(3); c.fillStyle = '#28322e'; c.fillRect(0, 0, w, h); c.strokeStyle = '#36433d'; c.lineWidth = 1.5;
+    for (let i = 0; i < 260; i++) { let x = r() * w, y = r() * h; c.beginPath(); c.moveTo(x, y); for (let k = 0; k < 3; k++) { r() < .5 ? x += (r() - .5) * 160 : y += (r() - .5) * 160; c.lineTo(x, y); } c.stroke(); }
+    c.fillStyle = '#3c4843'; for (let i = 0; i < 400; i++) c.fillRect(r() * w, r() * h, 3, 3);
+  });
+  box(g, 42, .16, 56, 22, .55, -38, MP('#ffffff', { map: pcbTex, roughness: .6 }), 1);
+  // fans
+  g.add(FANS);
+  const fanH = [], fanD = [];
+  for (let i = 0; i < 6; i++) { fanH.push([3.7 + i * 7.3, 2.25, -13]); fanD.push([3.7 + i * 7.3, 2.25, -11.05, 1, 1, 1, Math.PI / 2, 0, 0]); }
+  inst(FANS, boxAO(6.8, 3.9, 3.8, .6), M('#35373a', { roughness: .6 }), fanH);
+  inst(FANS, new THREE.CylinderGeometry(1.75, 1.75, .12, 28), MP('#3b3d40', { metalness: .3, roughness: .5 }), fanD);
+  inst(FANS, new THREE.CylinderGeometry(.6, .6, .2, 16), MP('#55585c', { metalness: .4 }), fanD.map(f => [f[0], f[1], f[2] + .05, 1, 1, 1, Math.PI / 2]));
+  // CPU sockets, heat spreaders, heatsinks
+  for (const cx of [12, 32]) {
+    box(g, 7.8, .5, 6.4, cx, .88, -34, M('#3a3c40'), .7);
+    box(g, 5.6, .35, 4.6, cx, 1.3, -34, M('#a2a3a1', { metalness: .75, roughness: .32 }), .9);
+    const hs = new THREE.Group(); g.add(hs); SINKS.push(hs);
+    box(hs, 9, .5, 9, cx, 1.75, -34, M('#8d8f91', { metalness: .65, roughness: .35 }), .8);
+    const fins = []; for (let k = 0; k < 36; k++) fins.push([cx - 4.3 + k * .245, 3.0, -34]);
+    inst(hs, boxAO(.06, 2.0, 8.6, .55), M('#9a9c9e', { metalness: .65, roughness: .35 }), fins);
+    // VRM chokes and caps around the socket
+    const vrm = []; for (let k = 0; k < 8; k++) vrm.push([cx - 4.2 + k * 1.2, .95, -39.2]);
+    inst(g, boxAO(.8, .65, .8, .6), M('#3a3c3f', { metalness: .3 }), vrm);
+    const caps = []; for (let k = 0; k < 10; k++) caps.push([cx - 4.5 + k * 1.0, .9, -40.6, 1, 1, 1]);
+    inst(g, new THREE.CylinderGeometry(.28, .28, .55, 10), MP('#6c6f73', { metalness: .6, roughness: .4 }), caps);
+  }
+  // DIMM slots and DIMMs (8 per CPU); the target DIMM (CPU 1, outer slot x = 19.8) is level L3
+  const DX = [5.4, 6.2, 7.0, 7.8];
+  const slots = [], dimms = [], chips = [];
+  const CHIPZ = [9, 22, 35, 48, 61, 87, 100, 113, 126].map(v => -34 + 6.6675 - v / 10);
+  for (const cx of [12, 32]) for (const s of [-1, 1]) for (const dx of DX) {
+    const x = cx + s * dx; slots.push([x, .93, -34]);
+    if (Math.abs(x - 19.8) > .01) { dimms.push([x, .9 + 1.5625, -34]); for (const z of CHIPZ) for (const f of [-1, 1]) chips.push([x + f * .125, 2.6, z]); }
+  }
+  inst(g, boxAO(.7, .62, 14.4, .6), M('#151617'), slots);
+  const dimmGeo = boxAO(.127, 3.125, 13.335, .6), dimmMat = M('#363f3a', { roughness: .55 });
+  inst(g, dimmGeo, dimmMat, dimms);
+  inst(g, boxAO(.12, 1.1, .8, .8), M('#2c2d30', { roughness: .45 }), chips);
+  L2.ph = mesh(g, dimmGeo, dimmMat, 19.8, .9 + 1.5625, -34);
+  // PSUs
+  const psu = M('#505357', { metalness: .45, roughness: .5 });
+  box(g, 7.4, 4.0, 18, 31.9, 2.1, -61, psu, .6); box(g, 7.4, 4.0, 18, 39.6, 2.1, -61, psu, .6);
+  // NIC (OCP-style mezzanine card at the rear) + SFP cages + cable
+  const nicPcb = M('#2f3e37', { roughness: .55 });
+  box(g, 7.6, .12, 11.5, 6.8, 1.2, -64.25, nicPcb, 1);
+  box(g, .8, .55, 2.2, 6.8, .9, -59.6, M('#151617'), .7);
+  box(g, 2.2, .25, 2.2, 6.8, 1.38, -62, M('#2a2b2d', { roughness: .4 }), 1);
+  const nf = []; for (let k = 0; k < 10; k++) nf.push([5.8 + k * .22, 1.9, -62]);
+  inst(g, boxAO(.05, .8, 2.4, .6), M('#8f9193', { metalness: .6, roughness: .35 }), nf);
+  const cage = M('#8c8f92', { metalness: .7, roughness: .35 });
+  box(g, 1.45, 1.0, 5.0, 4.8, 1.85, -67.5, cage, .7); box(g, 1.45, 1.0, 5.0, 8.4, 1.85, -67.5, cage, .7);
+  const cable = new THREE.CatmullRomCurve3([V3(4.8, 1.85, -66), V3(4.8, 1.85, -74), V3(4.8, 1.6, -88), V3(4.6, .6, -104), V3(4.2, -1.2, -118)]);
+  mesh(g, new THREE.TubeGeometry(cable, 60, .28, 10), MP('#2e3640', { roughness: .5 }), 0, 0, 0, { recv: false });
+  mesh(g, boxAO(.7, .7, 3.2, .8), MP('#5a5e63', { metalness: .6, roughness: .4 }), 4.8, 1.85, -71.2);
+  // packet path: cable → port → NIC controller → PCIe traces → memory controller in CPU 1 → DIMM slot
+  const P = [V3(4.8, 1.85, -112), V3(4.8, 1.85, -66), V3(6.8, 1.6, -62.6), V3(6.8, .66, -59.4), V3(6.8, .66, -49), V3(10.2, .66, -45.6),
+    V3(10.2, .66, -37.4), V3(12, 1.55, -34.6), V3(15.4, 1.45, -34), V3(19.8, 1.45, -34), V3(19.8, 1.3, -34)];
+  const lens = [0]; for (let i = 1; i < P.length; i++) lens.push(lens[i - 1] + P[i].distanceTo(P[i - 1]));
+  const tot = lens[lens.length - 1]; PULSE.f = lens.map(l => l / tot);
+  PULSE.trail = mesh(g, polyTube(P, .09, 500, 6), limeMat(1.4), 0, 0, 0, { cast: false, recv: false });
+  PULSE.head = mesh(g, polyTube(P, .2, 500, 8), limeMat(5), 0, 0, 0, { cast: false, recv: false });
+  PULSE.P = P;
+}
+
+// ═════ L3 · DIMM (1 unit = 1 mm), x 0..133.35 along the module, y 0..31.25, chips on +z ═════
+const DCHIP_X = [9, 22, 35, 48, 87, 100, 113, 126];       // data chips D0..D7 (front); ECC at 61, register (RCD) at 74
+const DCHIPS = [], SPLIT = [];
+{
+  const g = L3.g;
+  box(g, 133.35, 31.25, 1.27, 66.675, 15.625, 0, M('#363f3a', { roughness: .55 }), .75);
+  const fingTex = canvasTex(1024, 16, (c, w, h) => { c.fillStyle = '#363f3a'; c.fillRect(0, 0, w, h); c.fillStyle = '#a58a55';
+    for (let i = 0; i < 144; i++) c.fillRect(8 + i * 7, 0, 4.6, h); }, { srgb: true });
+  for (const s of [-1, 1]) { const m = mesh(g, new THREE.PlaneGeometry(128, 3.6), MP('#ffffff', { map: fingTex, metalness: .75, roughness: .35 }), 66.7, 1.9, s * .64, { cast: false }); if (s < 0) m.rotation.y = Math.PI; }
+  const chipGeo = boxAO(8, 11, 1.2, .7);
+  const chipMat = () => M('#2b2c2f', { roughness: .45, metalness: .15, emissive: new THREE.Color(LIME), emissiveIntensity: 0 });
+  DCHIP_X.forEach((x, k) => { const m = mesh(g, chipGeo, chipMat(), x, 17, .635 + .6); DCHIPS.push(m); if (k === CHIP) L3.ph = m; });
+  mesh(g, chipGeo, chipMat(), 61, 17, .635 + .6);                     // ECC chip
+  box(g, 7, 9, 1.0, 74, 17, .635 + .5, M('#303135', { roughness: .4 }), .7);   // register (RCD)
+  const back = [...DCHIP_X, 61].map(x => [x, 17, -.635 - .6]);
+  inst(g, chipGeo, M('#2b2c2f', { roughness: .45 }), back);
+  const smd = []; const r = rng(11);
+  for (let i = 0; i < 46; i++) smd.push([4 + i * 2.85, 6.4 + (i % 2) * 1.4, .635 + .2]);
+  for (let i = 0; i < 30; i++) smd.push([6 + r() * 120, 26.5 + r() * 2, .635 + .2]);
+  inst(g, boxAO(1.0, .5, .4, .8), M('#6e6a63', { metalness: .4, roughness: .45 }), smd);
+  // lime data lines: from the edge contacts to each data chip (8 lanes → 8 chips)
+  DCHIP_X.forEach(x => { const geo = polyTube([V3(66.7, 2.6, .9), V3(x, 2.6, .9), V3(x, 11.4, .9)], .32, 300, 6); SPLIT.push(mesh(g, geo, limeMat(3), 0, 0, 0, { cast: false, recv: false })); });
+}
+
+// ═════ L4 · DRAM PACKAGE + DIE (1 unit = 0.1 mm), package 8 × 11 mm, die top at y = 4.0 ═════
+const MOLD = new THREE.Group(); let BANK_FRAME;
+{
+  const g = L4.g;
+  box(g, 80, 2.5, 110, 0, 1.25, 0, M('#35433b', { roughness: .6 }), .7);
+  const balls = []; for (let i = 0; i < 9; i++) for (let j = 0; j < 13; j++) if (i < 3 || i > 5) balls.push([-32 + i * 8, -.8, -48 + j * 8]);
+  inst(g, new THREE.SphereGeometry(2.2, 12, 8), MP('#9fa1a3', { metalness: .8, roughness: .3 }), balls);
+  box(g, 62, 1.5, 90, 0, 3.25, 0, M('#6c605c', { roughness: .4, metalness: .2 }), .8);
+  const peri = canvasTex(620, 900, (c, w, h) => {
+    const r = rng(5); c.fillStyle = '#857671'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) { c.fillStyle = r() < .5 ? '#7a6c67' : '#91827c'; c.fillRect(r() * w, r() * h, 2 + r() * 14, 2 + r() * 6); }
+    c.fillStyle = '#6f625d'; c.fillRect(0, h / 2 - 40, w, 80);
+  }, { rep: [1, 1] });
+  const pt = mesh(g, new THREE.PlaneGeometry(62, 90), MP('#ffffff', { map: peri, roughness: .45, metalness: .15 }), 0, 4.002, 0, { cast: false }); pt.rotation.x = -Math.PI / 2;
+  const bankTex = canvasTex(BANK_NX * 20, BANK_NZ * 16, (c, w, h) => {
+    const r = rng(9); c.fillStyle = '#c3b2a8'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < BANK_NX; i++) { c.fillStyle = '#7b6c66'; c.fillRect(i * 20 + 18.5, 0, 1.5, h); }
+    for (let i = 0; i < BANK_NX; i++) for (let j = 0; j < BANK_NZ; j++) { const v = 150 + (r() * 10 | 0); c.fillStyle = `rgb(${v + 6},${v - 18},${v - 26})`; c.fillRect(i * 20, j * 16, 18.5, 13.7); }
+  }, { rep: [1, 1] });
+  bankTex.wrapS = bankTex.wrapT = THREE.ClampToEdgeWrapping;
+  const bankMat = MP('#ffffff', { map: bankTex, roughness: .5, metalness: .12 });
+  for (let c = 0; c < 4; c++) for (const z0 of BANK_Z0) {
+    const m = mesh(g, new THREE.PlaneGeometry(BANK_W, BANK_H), bankMat, BANK_X0(c) + BANK_W / 2, 4.006, z0 + BANK_H / 2, { cast: false }); m.rotation.x = -Math.PI / 2;
+  }
+  const pads = []; for (let k = 0; k < 40; k++) for (const z of [-1.5, 1.5]) pads.push([-27.3 + k * 1.4, 4.03, z]);
+  inst(g, new THREE.BoxGeometry(.8, .05, .8), MP('#c9c2b6', { metalness: .7, roughness: .3 }), pads);
+  // lime frame around the target bank
+  BANK_FRAME = new THREE.Group(); g.add(BANK_FRAME);
+  const fm = limeMat(2.2); const bx = BANK_X0(TBANK[0]), bz = BANK_Z0[TBANK[1]];
+  for (const [w, d, x, z] of [[BANK_W + .3, .15, bx + BANK_W / 2, bz], [BANK_W + .3, .15, bx + BANK_W / 2, bz + BANK_H], [.15, BANK_H, bx, bz + BANK_H / 2], [.15, BANK_H, bx + BANK_W, bz + BANK_H / 2]])
+    mesh(BANK_FRAME, new THREE.BoxGeometry(w, .04, d), fm, x, 4.03, z, { cast: false, recv: false });
+  // mould compound (lifts off)
+  g.add(MOLD); box(MOLD, 80, 9.5, 110, 0, 7.25, 0, M('#2b2c2e', { roughness: .7, transparent: true }), .75);
+  mesh(MOLD, new THREE.CylinderGeometry(2.2, 2.2, .1, 20), MP('#141515', { roughness: .5 }), -31, 12.02, -44, { cast: false });
+}
+
+// ═════ L5 · MATS (1 unit = 1 µm), origin at the target mat centre on the bank surface ═════
+let MAT_FRAME, MAT_WL;
+{
+  const g = L5.g;
+  const cellTex = canvasTex(64, 64, (c, w, h) => { c.fillStyle = '#a99086'; c.fillRect(0, 0, w, h); c.fillStyle = '#987f77';
+    for (let j = 0; j < 8; j++) c.fillRect(0, j * 8 + 3, w, 2); c.fillStyle = '#6a5852';
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { c.beginPath(); c.arc(i * 8 + 4, j * 8 + 4, 1.8, 0, 7); c.fill(); } }, { rep: [25 / .32, 18 / .32] });
+  const saTex = canvasTex(64, 16, (c, w, h) => { c.fillStyle = '#c6b4a9'; c.fillRect(0, 0, w, h); c.fillStyle = '#a99689'; for (let i = 0; i < 16; i++) c.fillRect(i * 4, 2, 2, h - 4); }, { rep: [25 / 1.28, 1] });
+  const mats = [], sas = [], wls = [], xs = [];
+  for (let a = -10; a <= 10; a++) for (let b = -10; b <= 10; b++) {
+    mats.push([a * 27, .25, b * 21]); sas.push([a * 27, .175, b * 21 + 10.5]); wls.push([a * 27 + 13.5, .175, b * 21]); xs.push([a * 27 + 13.5, .175, b * 21 + 10.5]);
+  }
+  inst(g, boxAO(25, .5, 18, .95), MP('#ffffff', { map: cellTex, roughness: .5, metalness: .1, vertexColors: true }), mats);
+  inst(g, boxAO(25, .35, 3, .8), MP('#ffffff', { map: saTex, roughness: .45, metalness: .2, vertexColors: true }), sas);
+  inst(g, boxAO(2, .35, 18, .8), M('#7a6a64', { roughness: .5 }), wls);
+  inst(g, boxAO(2, .35, 3, .8), M('#6b5d58', { roughness: .5 }), xs);
+  MAT_FRAME = new THREE.Group(); g.add(MAT_FRAME);
+  const fm = limeMat(2.2);
+  for (const [w, d, x, z] of [[25.6, .3, 0, -9.15], [25.6, .3, 0, 9.15], [.3, 18.3, -12.65, 0], [.3, 18.3, 12.65, 0]]) mesh(MAT_FRAME, new THREE.BoxGeometry(w, .08, d), fm, x, .56, z, { cast: false, recv: false });
+  MAT_WL = mesh(g, new THREE.BoxGeometry(25, .05, .06), limeMat(4), 0, .53, 0, { cast: false, recv: false });
+}
+
+// ═════ L6 · CELLS (1 unit = 10 nm), origin on the activated word line, centred on the 8 cells ═════
+const NI = 96, NJ = 64, PITCH = 4, PILLAR_H = 12;
+const cx = i => (i - (NI / 2 - .5)) * PITCH, cz = j => (j - NJ / 2) * PITCH;
+const TJ = NJ / 2, TI0 = NI / 2 - 4;                         // target row, first of the 8 target cells
+const CELLS = {};
+{
+  const g = L6.g;
+  CELLS.wl = inst(g, boxAO(NI * PITCH, .4, 1.4, .8), M('#4d4a49', { metalness: .5, roughness: .4 }),
+    [...Array(NJ)].map((_, j) => [0, .2, cz(j)]).filter((_, j) => j !== TJ));
+  CELLS.wlT = mesh(g, boxAO(NI * PITCH, .4, 1.4, .8), M('#4d4a49', { metalness: .5, roughness: .4, emissive: new THREE.Color(LIME), emissiveIntensity: 0 }), 0, .2, 0);
+  CELLS.bl = inst(g, boxAO(1.0, .5, NJ * PITCH, .8), M('#77726d', { metalness: .5, roughness: .4 }), [...Array(NI)].map((_, i) => [cx(i) + 2, .65, -2]));
+  const pg = new THREE.CylinderGeometry(1.3, 1.3, 1, 16); pg.translate(0, .5, 0);
+  CELLS.geo = pg;
+  CELLS.list = []; CELLS.fall = [];
+  for (let j = 0; j < NJ; j++) for (let i = 0; i < NI; i++) {
+    if (j === TJ && i >= TI0 && i < TI0 + 8) continue;
+    const x = cx(i), z = cz(j); CELLS.list.push([x, z]);
+    const e = Math.hypot(x / (NI * PITCH / 2), z / (NJ * PITCH / 2));
+    CELLS.fall.push(1 - sstep(.55, .98, e));
+  }
+  CELLS.pillars = new THREE.InstancedMesh(pg, MP('#b8aca5', { roughness: .32, metalness: .45 }), CELLS.list.length);
+  CELLS.pillars.castShadow = CELLS.pillars.receiveShadow = true; g.add(CELLS.pillars);
+  CELLS.ones = []; CELLS.zeros = [];
+  CELLS.oneMat = MP('#b4ada6', { roughness: .3, metalness: .3, emissive: new THREE.Color(LIME), emissiveIntensity: 0 });
+  CELLS.zeroMat = MP('#b4ada6', { roughness: .4, metalness: .3, emissive: new THREE.Color(LIME), emissiveIntensity: 0 });
+  CELLS.mine = MYBITS.map((b, k) => { const m = mesh(g, pg, b ? CELLS.oneMat : CELLS.zeroMat, cx(TI0 + k), .9, 0); m.scale.set(1, PILLAR_H, 1); return m; });
+  // one-cell detail: storage-node contact, access transistor source/drain, bit-line contact, charge
+  CELLS.detail = new THREE.Group(); g.add(CELLS.detail);
+  const x1 = cx(TI0 + ONE_K);
+  mesh(CELLS.detail, new THREE.CylinderGeometry(1.05, 1.05, .5, 16), MP('#cfc8bd', { metalness: .6, roughness: .3 }), x1, .7, 0);
+  mesh(CELLS.detail, boxAO(1.6, .5, 1.2, .8), MP('#8a8a7c', { metalness: .4 }), x1, .25, 1.7);
+  mesh(CELLS.detail, boxAO(1.6, .5, 1.2, .8), MP('#8a8a7c', { metalness: .4 }), x1, .25, -1.7);
+  mesh(CELLS.detail, new THREE.CylinderGeometry(.4, .4, .9, 10), MP('#d0d0c6', { metalness: .6 }), x1 + 2, .65, 1.7);
+  CELLS.charge = new THREE.InstancedMesh(new THREE.SphereGeometry(.16, 8, 6), limeMat(2.2), 40); CELLS.detail.add(CELLS.charge);
+  CELLS.x1 = x1;
+}
+let _cellKey = -1;
+function growCells(gw, cut) {
+  const key = Math.round(gw * 400) * 1000 + Math.round(cut * 400); if (key === _cellKey) return; _cellKey = key;
+  CELLS.list.forEach(([x, z], k) => { const inCut = z > 0 && z < 30 && Math.abs(x - CELLS.x1) < 26;
+    const h = Math.max(.001, PILLAR_H * gw * CELLS.fall[k] * (inCut ? 1 - cut : 1)), rr = Math.max(.001, Math.min(1, CELLS.fall[k] * 1.5) * (.55 + .45 * gw)); _o.position.set(x, .9, z); _o.rotation.set(0, 0, 0); _o.scale.set(rr, h, rr); _o.updateMatrix(); CELLS.pillars.setMatrixAt(k, _o.matrix); });
+  CELLS.pillars.instanceMatrix.needsUpdate = true; CELLS.pillars.computeBoundingSphere();
+  CELLS.mine.forEach(m => m.scale.set(1, Math.max(.001, PILLAR_H * gw), 1));
+  for (const m of [CELLS.wl, CELLS.wlT, CELLS.bl]) m.scale.set(1, Math.max(.001, gw), 1);
+}
+
+// ── camera path ──────────────────────────────────────────────
+// [t, level, target, distance (level units), yaw, pitch, vertical fov]
+const K = [
+  [0.0, 0, [1.6, .8, 1.0], 36, .62, .5, 35],
+  [3.8, 0, [2.7, 1.25, -.9], 4.0, 1.25, .26, 42],
+  [6.0, 1, [3.0, 10.4, 0], 26, .35, .1, 45],
+  [7.4, 1, [3.0, 9.6, 1.5], 19, .5, .2, 45],
+  [9.4, 2, [22, 2, 40], 62, .55, .72, 35],
+  [12.2, 2, [22, 2, 38], 56, .75, .82, 35],
+  [13.8, 2, [6.5, 1.3, 11], 15, .62, .62, 35],
+  [15.6, 2, [11, 1, 24], 34, .8, .95, 35],
+  [17.4, 2, [19.8, 5.6, 41], 21, 1.45, .32, 35],
+  [19.4, 3, [66, 16, 0], 128, .12, .22, 35],
+  [21.8, 3, [35, 16.5, 1.2], 34, .1, .3, 35],
+  [23.4, 4, [0, 6, 0], 150, .15, 1.05, 35],
+  [25.6, 4, [0, 4.3, 0], 122, .25, .95, 35],
+  [28.0, 4, [BANK_X0(TBANK[0]) + BANK_W / 2, 4.0, BANK_Z0[TBANK[1]] + BANK_H / 2], 22, .2, .85, 35],
+  [29.8, 5, [0, 0, 0], 260, .25, .9, 35],
+  [31.8, 5, [0, .5, 0], 30, .2, .75, 35],
+  [33.4, 6, [0, 0, 0], 300, .3, .7, 35],
+  [35.0, 6, [0, 4, 0], 85, .35, .55, 35],
+  [37.8, 6, [0, 4, 0], 78, .55, .5, 35],
+  [39.6, 6, [CELLS.x1, 4.5, 0], 21, .32, .4, 35],
+  [41.6, 6, [CELLS.x1, 4.5, 0], 20, .5, .36, 35],
+  // pull-back chain (one constant-rate zoom-out in log distance)
+  [42.4, 6, [0, 4, 0], 260, .6, .7, 35],
+  [43.0, 5, [0, 0, 0], 150, .4, .85, 35],
+  [43.6, 4, [0, 4.3, 0], 160, .2, 1.0, 35],
+  [44.1, 3, [66, 16, 0], 160, .1, .3, 35],
+  [44.7, 2, [22, 2, 20], 90, .5, .6, 35],
+  [45.3, 1, [3, 10, 0], 32, .4, .15, 42],
+  [46.4, 0, [1.0, .8, .8], 34, .55, .55, 35],
+  [50.0, 0, [.6, .8, .8], 31, .62, .5, 35],
+].map(([t, L, T, d, yaw, pitch, fov]) => ({ t, L, T: V3(...T), d, fov, dir: V3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)) }));
+const PB0 = K.findIndex(k => k.t === 41.6), PB1 = K.findIndex(k => k.t === 46.4);
+
+function chain(L, t) { let m = LV[L].local(t).clone(), q = LV[L].parent; while (q >= 0) { m.premultiply(LV[q].local(t)); q = LV[q].parent; } return m; }
+function rel(a, b, t) { return chain(a, t).invert().multiply(chain(b, t)); }   // level b coords → level a coords
+function keyIn(k, D, t) {
+  const Mx = rel(D, k.L, t);
+  return { T: k.T.clone().applyMatrix4(Mx), dir: k.dir.clone().transformDirection(Mx), up: V3(0, 1, 0).transformDirection(Mx), d: k.d * Mx.getMaxScaleOnAxis(), fov: k.fov };
+}
+function blend(a, b, u, t) {
+  const D = Math.max(a.L, b.L), A = keyIn(a, D, t), B = keyIn(b, D, t);
+  const d = Math.exp(lerp(Math.log(A.d), Math.log(B.d), u));
+  const w = Math.abs(Math.log(A.d / B.d)) < .15 ? 1 - u : (d - B.d) / (A.d - B.d);
+  return { R: D, T: B.T.clone().add(A.T.clone().sub(B.T).multiplyScalar(w)), dir: A.dir.clone().lerp(B.dir, u).normalize(),
+    up: A.up.clone().lerp(B.up, u).normalize(), d, fov: lerp(A.fov, B.fov, u) };
+}
+const logM = (k, t) => Math.log(k.d * LV[k.L].unit);
+function camAt(t) {
+  if (t >= K[PB0].t && t < K[PB1].t) {                    // pull-back: constant rate in log(distance in metres)
+    const g = eio(p(t, K[PB0].t, K[PB1].t - K[PB0].t));
+    const target = lerp(logM(K[PB0], t), logM(K[PB1], t), g);
+    for (let i = PB0; i < PB1; i++) {
+      const a = logM(K[i], t), b = logM(K[i + 1], t);
+      if (target <= b || i === PB1 - 1) return blend(K[i], K[i + 1], clamp((target - a) / (b - a)), t);
+    }
+  }
+  let i = 0; while (i < K.length - 2 && t >= K[i + 1].t) i++;
+  return blend(K[i], K[i + 1], ss(p(t, K[i].t, K[i + 1].t - K[i].t)), t);
+}
+
+// ── background / fog per scale ───────────────────────────────
+const BG = [[1.7, '#0a0b0c'], [.3, '#0b0c0d'], [-.4, '#0f1011'], [-1.2, '#121313'], [-1.9, '#171616'], [-2.6, '#231f1e'], [-3.4, '#3a3230'], [-4.6, '#4a3f3c'], [-6.2, '#4c4240'], [-8, '#4c4240']].map(([l, c]) => [l, new THREE.Color(c)]);
+function bgAt(lf) { for (let i = 0; i < BG.length - 1; i++) if (lf <= BG[i][0] && lf >= BG[i + 1][0]) return BG[i][1].clone().lerp(BG[i + 1][1], (BG[i][0] - lf) / (BG[i][0] - BG[i + 1][0])); return (lf > BG[0][0] ? BG[0] : BG[BG.length - 1])[1].clone(); }
+
+// ── animate the parts (pure function of t) ───────────────────
+function animate(t, fovM) {
+  srv.position.z = 75 * SLIDE(t);
+  const lk = LIDK(t); LID.position.set(22, 4.36 + 18 * lk, -35 - 34 * lk); LID.rotation.x = -.28 * lk; LID.visible = lk < .995;
+  SINKS[0].position.y = 6 * SINKK(t); SINKS[1].position.y = 6 * SINKK(t) * (t < 30 ? 1 - eio(p(t, 16.4, .9)) : 1);   // CPU 2's heatsink drops back before the camera passes over it FANS.position.y = 2.6 * FANK(t);
+  // pulse: cable → port → NIC chip → PCIe → CPU → DIMM
+  const F = PULSE.f, kt = [[13.9, 0], [14.9, F[1]], [15.3, F[3]], [16.5, F[7]], [17.2, 1]];
+  let f = 0; for (let i = 0; i < kt.length - 1; i++) if (t >= kt[i][0]) f = lerp(kt[i][1], kt[i + 1][1], eio(p(t, kt[i][0], kt[i + 1][0] - kt[i][0])));
+  const on = t > 13.9 && t < 22.6;
+  PULSE.head.visible = on && f < 1; PULSE.trail.visible = on;
+  setTubeRange(PULSE.head.geometry, f - .05, f); setTubeRange(PULSE.trail.geometry, 0, f);
+  // DIMM: 8 lanes split to the 8 data chips
+  const fs = eio(p(t, 19.6, 1.3));
+  SPLIT.forEach(m => { m.visible = t > 19.6 && t < 42; setTubeRange(m.geometry, 0, fs); m.material.color.set(LIME).multiplyScalar(lerp(3, 1.3, p(t, 21, 1))); });
+  DCHIPS.forEach((m, k) => m.material.emissiveIntensity = (k === CHIP ? .12 : 0) * eo(p(t, 20.6, .6)) * (t < 42.6 ? 1 : 0));
+  // package opens
+  const mk = MOLDK(t); MOLD.position.set(0, 45 * mk, -70 * mk); MOLD.children[0].material.opacity = 1 - p(mk, .55, .4); MOLD.visible = mk < .97;
+  BANK_FRAME.visible = t > 27.0 && t < 42.6; BANK_FRAME.children.forEach(c => c.material.color.set(LIME).multiplyScalar(2.2 * eo(p(t, 27, .6))));
+  MAT_FRAME.visible = t > 30.6 && t < 42.6; MAT_WL.visible = t > 31.4 && t < 42.6;
+  // cells grow out of the mat as the field of view drops below ~5 µm
+  const gw = sstep(Math.log10(5e-6), Math.log10(1.6e-6), Math.log10(fovM));
+  growCells(gw, eio(p(t, 38.4, .9)) * (1 - eio(p(t, 41.7, .5)))); const show6 = gw > .01; [CELLS.pillars, ...CELLS.mine].forEach(m => m.visible = show6);
+  [CELLS.wl, CELLS.wlT, CELLS.bl].forEach(m => m.visible = gw > .35);   // full-length lines would outline the patch while it is still flat
+  if (gw > .02) { MAT_WL.visible = false; MAT_FRAME.visible = MAT_FRAME.visible && gw < .3; }   // the mat-level highlights are 50 nm thick slabs at cell scale
+  const act = eo(p(t, 34.0, .8)) * (t < 42.6 ? 1 : 1 - p(t, 42.6, .5));
+  CELLS.wlT.material.emissiveIntensity = lerp(.9, .35, p(t, 38.2, 1)) * act;
+  CELLS.oneMat.color.set('#b4ada6').lerp(new THREE.Color(LIME), .85 * act); CELLS.oneMat.emissiveIntensity = lerp(.7, .28, p(t, 38.2, 1)) * act;
+  CELLS.zeroMat.color.set('#b4ada6').lerp(new THREE.Color('#3d4630'), act); CELLS.zeroMat.emissiveIntensity = .06 * act;
+  const dk = eo(p(t, 38.6, .8)) * (1 - p(t, 41.8, .5)); CELLS.detail.visible = dk > .01 && show6;
+  const r = rng(42);
+  for (let k = 0; k < 40; k++) {
+    const a = r() * 6.283 + t * (.3 + r() * .4), hh = 1.4 + r() * (PILLAR_H - 1.2), rr = 1.55 + Math.sin(t * 2 + k) * .08;
+    _o.position.set(CELLS.x1 + Math.cos(a) * rr, hh, Math.sin(a) * rr); _o.rotation.set(0, 0, 0); _o.scale.setScalar(Math.max(.001, dk)); _o.updateMatrix(); CELLS.charge.setMatrixAt(k, _o.matrix);
+  }
+  CELLS.charge.instanceMatrix.needsUpdate = true;
+}
+
+// ── 2D overlay ───────────────────────────────────────────────
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function txt(s, x, y, o = {}) {
+  const { size = 24, weight = 500, color = '#e9e7e2', align = 'left', mono = false, alpha = 1, ls = 0, base = 'alphabetic' } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono); ctx.letterSpacing = ls + 'px';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false, ls = 0) { font(size, weight, mono); ctx.letterSpacing = ls + 'px'; const w = ctx.measureText(s).width; ctx.letterSpacing = '0px'; return w; }
+function fmtLen(m) {
+  const units = [[1, 'm'], [.01, 'cm'], [1e-3, 'mm'], [1e-6, 'µm'], [1e-9, 'nm']];
+  let [u, n] = units.find(([u]) => m >= u) || units[4]; let v = m / u;
+  if (n === 'cm' && v >= 100) { v /= 100; n = 'm'; }
+  const sig = m < 1e-5 ? 2 : 3;
+  return '≈ ' + Number(v.toPrecision(sig)).toString() + ' ' + n;
+}
+const RULER = { x: 1838, y0: 172, step: 70, top: 2 };    // 100 m at y0, one decade per step
+const rulerY = m => RULER.y0 + (RULER.top - Math.log10(m)) * RULER.step;
+function ruler(fovM, a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt('FIELD OF VIEW (화면 폭)', RULER.x + 6, 126, { size: 15, weight: 600, color: 'rgba(233,231,226,.62)', align: 'right', ls: 1.5 });
+  ctx.fillStyle = 'rgba(233,231,226,.28)'; ctx.fillRect(RULER.x, rulerY(100), 1.5, rulerY(1e-8) - rulerY(100));
+  const labs = ['100 m', '10 m', '1 m', '10 cm', '1 cm', '1 mm', '100 µm', '10 µm', '1 µm', '100 nm', '10 nm'];
+  labs.forEach((l, i) => { const y = RULER.y0 + i * RULER.step; ctx.fillStyle = 'rgba(233,231,226,.5)'; ctx.fillRect(RULER.x - 9, y, 10, 1.5);
+    for (let k = 2; k < 10 && i < 10; k++) { const yy = y + Math.log10(10 / k) * RULER.step; ctx.fillStyle = 'rgba(233,231,226,.16)'; ctx.fillRect(RULER.x - 4, yy, 5, 1); }
+    txt(l, RULER.x - 16, y + 5, { size: 14, color: 'rgba(233,231,226,.5)', align: 'right', mono: true }); });
+  const y = rulerY(clamp(fovM, 1.2e-8, 99));
+  ctx.fillStyle = LIME; ctx.fillRect(RULER.x - 22, y - 1.5, 30, 3);
+  ctx.shadowColor = 'rgba(181,232,83,.6)'; ctx.shadowBlur = 10; ctx.fillRect(RULER.x - 22, y - 1.5, 30, 3); ctx.shadowBlur = 0;
+  txt(fmtLen(fovM), RULER.x - 116, y + 8, { size: 22, weight: 600, mono: true, align: 'right', color: '#f2f0ea' });
+  ctx.restore();
+}
+function caption(t) {
+  for (const [s, e, title, sub, ko, foot] of CAP) {
+    const a = win(t, s, e, .5); if (a <= 0) continue;
+    const k = eo(p(t, s, .8)), k2 = eo(p(t, s + .25, .8)), dx = (1 - k) * -24;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.fillStyle = LIME; ctx.fillRect(96 + dx, H - 272, 44 * k, 3);
+    txt(title, 94 + dx, H - 196, { size: 60, weight: 700, ls: 2.5, color: '#f2f0ea', alpha: k });
+    txt(sub, 96 + dx * .6, H - 148, { size: 20, weight: 500, ls: 3, color: 'rgba(233,231,226,.66)', alpha: k2 });
+    txt(ko, 96 + dx * .4, H - 104, { size: 27, weight: 500, color: '#e9e7e2', alpha: k2 });
+    if (foot) txt(foot, 96, H - 64, { size: 18, color: 'rgba(233,231,226,.55)', alpha: eo(p(t, s + .8, .6)) });
+    ctx.restore();
+  }
+}
+// callouts: [start, end, level, point, label, sublabel, dx, dy]
+const CALL = [
+  [1.0, 3.7, 0, [2.7, 2.05, -1.5], 'Rack', '랙', 40, -110],
+  [1.3, 3.7, 0, [5.5, 0, 0], 'Cold aisle', '찬 공기 통로', 70, -60],
+  [4.6, 7.6, 1, [3, 19.3, 0], 'Top-of-rack switch', '랙 스위치', 120, -50],
+  [5.0, 7.6, 1, [3, 9.67, 0], 'Game server · 1U', '게임 서버', 240, 30],
+  [10.8, 12.4, 2, [12, 1.6, 41], 'CPU', '메모리 컨트롤러 내장', -250, 70],
+  [10.9, 12.4, 2, [19.8, 4, 34], 'DIMM', '메인 메모리', 120, -110],
+  [11.0, 12.4, 2, [6.8, 2.2, 13], 'NIC', '네트워크 카드', -230, -60],
+  [11.1, 12.4, 2, [22, 6.4, 62], 'Fans', '팬', 120, -60],
+  [11.2, 12.4, 2, [36, 4.2, 14], 'PSU', '전원 공급 장치', 120, -60],
+  [14.1, 15.4, 2, [4.8, 2.4, 9], 'Port', '패킷이 들어오는 곳', -260, -60],
+  [15.4, 16.8, 2, [8.5, .7, 21], 'PCIe', 'NIC ↔ CPU', -220, 40],
+  [16.6, 17.9, 3, [100, 31.2, 0], 'Main memory', '패킷이 쓰이는 곳', 130, -90],
+  [20.4, 22.4, 3, [35, 22.5, 1.9], 'DRAM chip', '이 칩에 1바이트', -70, -120],
+  [20.6, 22.4, 3, [61, 22.5, 1.9], 'ECC chip', '오류 검출용', 40, -120],
+  [20.8, 22.4, 3, [74, 12.5, 1.6], 'Register (RCD)', '명령 · 주소 버퍼', 80, 70],
+  [19.8, 21.4, 3, [100, 2, .7], 'Edge contacts', '288핀', 90, 70],
+  [23.6, 24.8, 4, [30, 12, -30], 'Mold compound', '몰딩', 120, -40],
+  [25.0, 26.4, 4, [26, 4.1, 30], 'DRAM die', '실리콘 다이', 120, 20],
+  [25.0, 26.4, 4, [36, 2.5, 40], 'Substrate', '기판', 110, 40],
+  [27.4, 30.2, 4, [BANK_X0(1) + BANK_W, 4.05, BANK_Z0[1] + 3], 'Bank', '뱅크 (16개 중 하나)', 160, -40],
+  [27.6, 30.2, 4, [16, 4.05, 1.5], 'Pads · periphery', '입출력 · 주변 회로', 130, 60],
+  [30.8, 33.6, 5, [12.6, .6, -6], 'Cell array (mat)', '셀 어레이', 150, -70],
+  [31.0, 33.6, 5, [0, .4, 10.5], 'Sense amplifiers', '센스 앰프', 160, 60],
+  [31.2, 33.6, 5, [-13.5, .4, -4], 'Word-line drivers', '워드 라인 드라이버', -300, -40],
+  [35.2, 38.2, 6, [-40, .5, 0], 'Word line (row)', '워드 라인 — 행 선택', -280, 50],
+  [35.4, 38.2, 6, [cx(TI0 + 9) + 2, 1, 10], 'Bit line (column)', '비트 라인 — 열', 70, 90],
+  [39.0, 41.8, 6, [CELLS.x1 - 1.3, 9, 0], 'Capacitor', '전하를 담는다 · 충전 = 1', 170, -60],
+  [39.2, 41.8, 6, [CELLS.x1, .5, 1.7], 'Access transistor', '워드 라인이 켜면 열린다', -330, 60],
+  [39.4, 41.8, 6, [CELLS.x1 + 2, .9, 5.5], 'Bit line', '전하를 읽고 쓴다', 130, 80],
+];
+const _v = new THREE.Vector3();
+function project(R, L, pt, t) { _v.set(...pt).applyMatrix4(rel(R, L, t)).project(camera); return { x: (_v.x + 1) / 2 * W, y: (1 - _v.y) / 2 * H, ok: _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1 }; }
+function callouts(t, R) {
+  for (const [s, e, L, pt, lab, sub, dx, dy] of CALL) {
+    const a = win(t, s, e, .35); if (a <= 0 || L < R - 2 || L > R + 1) continue;
+    const q = project(R, L, pt, t); if (!q.ok) continue;
+    const bw = Math.max(tw(lab, 18, 700), tw(sub, 15, 500)) + 26, bh = 56;
+    let bx = q.x + dx, by = q.y + dy; bx = clamp(bx, 30, 1640 - bw); by = clamp(by, 60, H - 330);
+    const ex = q.x < bx ? bx : q.x > bx + bw ? bx + bw : q.x, ey = by + bh / 2;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.strokeStyle = 'rgba(233,231,226,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.fillStyle = LIME; ctx.fillRect(q.x - 3, q.y - 3, 6, 6);
+    ctx.fillStyle = 'rgba(16,17,18,.78)'; ctx.strokeStyle = 'rgba(233,231,226,.22)';
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill(); ctx.stroke();
+    txt(lab, bx + bw / 2, by + 24, { size: 18, weight: 700, align: 'center', color: '#f2f0ea' });
+    txt(sub, bx + bw / 2, by + 45, { size: 15, align: 'center', color: 'rgba(233,231,226,.7)' });
+    ctx.restore();
+  }
+}
+// bit labels above the 8 cells + the 64-bit panel
+function bitsOverlay(t, R) {
+  const a = win(t, 35.0, 41.7, .4); if (a <= 0 || R !== 6) return;
+  ctx.save(); ctx.globalAlpha = a;
+  MYBITS.forEach((b, k) => { const q = project(R, 6, [cx(TI0 + k), PILLAR_H + 3.2, 0], t); if (!q.ok) return;
+    txt(String(b), q.x, q.y, { size: 26, weight: 700, mono: true, align: 'center', color: b ? LIME : 'rgba(233,231,226,.6)' }); });
+  ctx.restore();
+  const pa = win(t, 35.6, 38.3, .45); if (pa <= 0) return;
+  const x0 = 1268, y0 = 300, cs = 30, gap = 6;
+  ctx.save(); ctx.globalAlpha = pa;
+  ctx.fillStyle = 'rgba(14,15,16,.8)'; ctx.strokeStyle = 'rgba(233,231,226,.2)'; ctx.beginPath(); ctx.roundRect(x0 - 26, y0 - 70, 486, 440, 6); ctx.fill(); ctx.stroke();
+  txt('8 B = 64 bit = 셀 64개', x0, y0 - 32, { size: 22, weight: 700, color: '#f2f0ea' });
+  const rowsF = r => FIELDS.reduce((acc, [n, b], i) => { const st = FIELDS.slice(0, i).reduce((s, f) => s + f[1], 0); if (st < r * 8 + 8 && st + b > r * 8) acc.push(n); return acc; }, []);
+  for (let r = 0; r < 8; r++) {
+    const y = y0 + r * (cs + gap), mine = r === CHIP;
+    txt(`칩 ${r}`, x0, y + 21, { size: 15, weight: mine ? 700 : 500, color: mine ? LIME : 'rgba(233,231,226,.55)', mono: true });
+    for (let k = 0; k < 8; k++) {
+      const b = BITS[r * 8 + k], x = x0 + 52 + k * (cs + 2);
+      ctx.globalAlpha = pa * (mine ? 1 : .55);
+      if (b) { ctx.fillStyle = LIME; ctx.fillRect(x, y, cs, cs); } else { ctx.strokeStyle = 'rgba(181,232,83,.7)'; ctx.lineWidth = 1.5; ctx.strokeRect(x + .75, y + .75, cs - 1.5, cs - 1.5); }
+    }
+    ctx.globalAlpha = pa;
+    txt(rowsF(r).join(' · '), x0 + 52 + 8 * (cs + 2) + 10, y + 21, { size: 15, color: 'rgba(233,231,226,.6)' });
+  }
+  txt('채움 = 1 · 빈칸 = 0 · 필드 값은 예시', x0, y0 + 8 * (cs + gap) + 22, { size: 15, color: 'rgba(233,231,226,.55)' });
+  ctx.restore();
+}
+function vignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * .45, W / 2, H / 2, H * 1.05);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const b = ctx.createLinearGradient(0, H - 380, 0, H); b.addColorStop(0, 'rgba(0,0,0,0)'); b.addColorStop(1, 'rgba(0,0,0,.5)'); ctx.fillStyle = b; ctx.fillRect(0, H - 380, W, 380);
+}
+function endCard(t) {
+  const a = eo(p(t, END, 1.0)); if (a <= 0) return;
+  ctx.fillStyle = `rgba(8,9,10,${.72 * a})`; ctx.fillRect(0, 0, W, H);
+  const k1 = eo(p(t, END + .3, .8)), k2 = eo(p(t, END + .8, .8)), k3 = eo(p(t, END + 1.4, .8));
+  txt('이동 정보 8바이트는', W / 2, 452 + (1 - k1) * 20, { size: 64, weight: 700, align: 'center', alpha: k1, color: '#f2f0ea' });
+  const l1 = 'DRAM ', l2 = '셀 64개', l3 = '에 담긴다';
+  const w1 = tw(l1, 64, 800), w2 = tw(l2, 64, 800), w3 = tw(l3, 64, 800), x = W / 2 - (w1 + w2 + w3) / 2, y = 548 + (1 - k2) * 20;
+  txt(l1, x, y, { size: 64, weight: 800, alpha: k2, color: '#f2f0ea' }); txt(l2, x + w1, y, { size: 64, weight: 800, alpha: k2, color: LIME }); txt(l3, x + w1 + w2, y, { size: 64, weight: 800, alpha: k2, color: '#f2f0ea' });
+  txt('헤더(이더넷 · IP · UDP 42B)까지 합친 패킷 하나는 셀 수백 개 이상', W / 2, 630, { size: 26, align: 'center', alpha: k3, color: 'rgba(233,231,226,.75)' });
+  txt('jungrok5.github.io/motion-graphics/one-byte', W / 2, 760, { size: 20, align: 'center', mono: true, alpha: k3, color: 'rgba(233,231,226,.45)' });
+}
+
+// only the current level and the one inside it cast shadows (a parent level is 10-100x larger and would shade everything)
+let _shadowR = -1;
+function setShadowCasters(R) {
+  if (R === _shadowR) return; _shadowR = R;
+  LV.forEach((L, i) => L.g.traverse(o => { if (o.isMesh) { if (o.userData.cast === undefined) o.userData.cast = o.castShadow; o.castShadow = o.userData.cast && (i === R || i === R + 1); } }));
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  t = clamp(t, 0, DURATION);
+  const c = camAt(t), R = c.R;
+  LV.forEach((L, i) => { const vis = i >= R - 2 && i <= R + 1; L.g.visible = vis; if (vis) { L.g.matrix.copy(rel(R, i, t)); L.g.matrixWorldNeedsUpdate = true; } });
+  const fovPre = 2 * c.d * Math.tan(THREE.MathUtils.degToRad(c.fov) / 2) * (W / H) * LV[R].unit;
+  setShadowCasters(R);
+  if (R === 4 && fovPre > 1.4e-3) L5.g.visible = false;
+  LV.forEach((L, i) => { if (L.ph) L.ph.visible = !(LV[i + 1] && LV[i + 1].g.visible); });
+  camera.fov = c.fov; camera.near = c.d * .04; camera.far = c.d * 400;
+  camera.position.copy(c.T).addScaledVector(c.dir, c.d); camera.up.copy(c.up); camera.lookAt(c.T); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  const ch = camera.position.clone().applyMatrix4(rel(0, R, t)); HALL_ROWB.visible = !(ch.z > .7 && ch.y < 2.7);
+  const fovM = 2 * c.d * Math.tan(THREE.MathUtils.degToRad(c.fov) / 2) * (W / H) * LV[R].unit;
+  animate(t, fovM);
+  const bg = bgAt(Math.log10(fovM)); scene.background.copy(bg); scene.fog.color.copy(bg);
+  scene.fog.near = c.d * (R === 0 ? 1.4 : 1.6); scene.fog.far = c.d * (R === 0 ? 7 : 9);
+  sun.target.position.copy(c.T); sun.position.copy(c.T).addScaledVector(LDIR, c.d * 4);
+  const sc = sun.shadow.camera, S = c.d * 1.5; sc.left = -S; sc.right = S; sc.top = S; sc.bottom = -S; sc.near = c.d * .5; sc.far = c.d * 9; sc.updateProjectionMatrix();
+  sun.shadow.bias = -.0004; sun.shadow.normalBias = c.d * .0015;
+  bloom.strength = R === 6 ? .3 : .55;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  vignette();
+  const ov = 1 - eo(p(t, END, .8));
+  ctx.save(); ctx.globalAlpha = ov;
+  callouts(t, R); bitsOverlay(t, R); caption(t);
+  txt('이동 패킷 하나를 끝까지 따라가기', 96, 96, { size: 18, weight: 600, color: 'rgba(233,231,226,.55)', ls: .5 });
+  txt('* 배치 · 크기 · 값은 이해를 돕기 위한 예시', 96, 124, { size: 15, color: 'rgba(233,231,226,.38)' });
+  ctx.restore();
+  ruler(fovM, ov * eo(p(t, .1, .6)));
+  endCard(t);
+  const fo = p(t, DURATION - .5, .5); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  renderAt(0);
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [...HEAD.map(h => [h[0], h[2], h[3]]), [END, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 36.4;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>

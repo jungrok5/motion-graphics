@@ -77,6 +77,7 @@
 | 3D 유리 패널 | 내 스킬 하나가 상대 화면에 뜨기까지 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
 | 빛 입자 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glow/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glow.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
 | 3D 유리 패널 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+| 연속 줌인 | 이동 패킷 하나를 끝까지 따라가기 (데이터센터 → DRAM 셀) | [가로 (PC)](https://jungrok5.github.io/motion-graphics/packet-zoom/) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
 
 ## 한 주제의 세 페이지
 
