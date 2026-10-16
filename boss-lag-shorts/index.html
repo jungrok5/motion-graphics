@@ -292,9 +292,9 @@ function words(ws, cx, y, t, t0, o = {}) {
 // ═════════════════════════════════════════════════════════════
 const fmt = n => Math.round(n).toLocaleString('en-US');
 // ── vertical layout (shorts) ─────────────────────────────────
-// Safe area: shorts apps draw their own UI over the top ~180px, the bottom ~380px and a column on the right.
-// Content stays in x 80–1000 (centered), y 200–1530; keep text out of the lower-right corner (x > 900, y > 1100). Header y 220–380, stage y 420–1330, caption y 1380–1520.
-const X0 = 80, X1 = 1000, CX = (X0 + X1) / 2;   // symmetric: centered on 540
+// Full-bleed frame; only text keeps a light margin from the shorts app's own UI (top ~110px, bottom ~280px).
+// Header y 100–340, picture y 370–1470, caption y 1500–1640. Side margins 60, centered on 540.
+const X0 = 60, X1 = 1020, CX = (X0 + X1) / 2;
 
 // [start, end, number, title, subtitle]
 const HEAD = [
@@ -308,27 +308,27 @@ function headers(t) {
     const a = win(t, s, e, .4); if (a <= 0) continue;
     const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
     ctx.save(); ctx.globalAlpha = a;
-    chip(n, X0 - (1 - k) * 30, 236, C.proto, { size: 30, alpha: k });
-    txt(title, X0 - (1 - k) * 30, 330, { size: 68, weight: 800, alpha: k });
-    txt(sub, X0, 392, { size: 34, weight: 500, color: C.dim, alpha: k2 });
+    chip(n, X0 - (1 - k) * 30, 168, C.proto, { size: 32, alpha: k });
+    txt(title, X0 - (1 - k) * 30, 262, { size: 80, weight: 800, alpha: k });
+    txt(sub, X0, 330, { size: 40, weight: 500, color: C.dim, alpha: k2 });
     ctx.restore();
   }
 }
 function progress(t) {   // thin bar only; the shorts app shows its own timeline
   const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .8; if (a <= 0) return;
   ctx.save(); ctx.globalAlpha = a;
-  ctx.fillStyle = 'rgba(148,163,184,0.18)'; ctx.fillRect(X0, 196, X1 - X0, 4);
-  ctx.fillStyle = C.proto; ctx.fillRect(X0, 196, (X1 - X0) * clamp(t / DURATION), 4);
+  ctx.fillStyle = 'rgba(148,163,184,0.18)'; ctx.fillRect(X0, 110, X1 - X0, 4);
+  ctx.fillStyle = C.proto; ctx.fillRect(X0, 110, (X1 - X0) * clamp(t / DURATION), 4);
   ctx.restore();
 }
 function caption(lines, u, t0, col = C.text) {
-  lines.forEach((l, i) => txt(l, CX, 1430 + i * 64, { size: 46, weight: 800, align: 'center', color: i ? C.dim : col, alpha: eo(p(u, t0 + i * .5, .5)) }));
+  lines.forEach((l, i) => txt(l, CX, 1550 + i * 70, { size: i ? 44 : 54, weight: 800, align: 'center', color: i ? C.dim : col, alpha: eo(p(u, t0 + i * .5, .5)) }));
 }
 // deterministic crowd
 const RC = rng(42);
 const CROWD = Array.from({ length: 200 }, (_, i) => {
   const ang = RC() * Math.PI * 2, rad = Math.sqrt(RC());
-  return { sx: X0 + 30 + RC() * (X1 - X0 - 60), sy: 470 + RC() * 820, tx: CX + Math.cos(ang) * 300 * rad, ty: 900 + Math.sin(ang) * 260 * rad, near: i < 20, d: RC() };
+  return { sx: X0 + 30 + RC() * (X1 - X0 - 60), sy: 410 + RC() * 1020, tx: CX + Math.cos(ang) * 380 * rad, ty: 940 + Math.sin(ang) * 330 * rad, near: i < 20, d: RC() };
 });
 
 // ═════════════════════════════════════════════════════════════
@@ -337,12 +337,12 @@ const CROWD = Array.from({ length: 200 }, (_, i) => {
 function sTitle(t) {
   const a = win(t, 0, 4.9, .5); if (a <= 0) return;
   ctx.save(); ctx.globalAlpha = a;
-  txt('MMO · BOSS FIGHT', CX, 640, { size: 30, weight: 600, color: C.dim, align: 'center', mono: true, ls: 6, alpha: eo(p(t, .1, .6)) });
-  words(['보스가', '뜨면'], CX, 800, t, .3, { size: 120, colors: [C.pub, null] });
-  words(['왜', '렉이', '걸릴까?'], CX, 950, t, .7, { size: 120, colors: [null, C.red, null] });
+  txt('MMO · BOSS FIGHT', CX, 600, { size: 36, weight: 600, color: C.dim, align: 'center', mono: true, ls: 6, alpha: eo(p(t, .1, .6)) });
+  words(['보스가', '뜨면'], CX, 790, t, .3, { size: 136, colors: [C.pub, null] });
+  words(['왜', '렉이', '걸릴까?'], CX, 960, t, .7, { size: 136, colors: [null, C.red, null] });
   const k = eo(p(t, 1.6, .8));
-  dot(CX, 1180, 26 * k, C.pub, k, 60);
-  CROWD.slice(0, 60).forEach((q, i) => { const kk = eo(p(t, 1.8 + q.d, 1.2)); if (kk <= 0) return; dot(lerp(q.sx, CX + (q.tx - CX) * .55, kk), lerp(q.sy * .4 + 900, 1180 + (q.ty - 900) * .45, kk), 6, C.client, kk * .9, 6); });
+  dot(CX, 1240, 30 * k, C.pub, k, 60);
+  CROWD.slice(0, 60).forEach((q, i) => { const kk = eo(p(t, 1.8 + q.d, 1.2)); if (kk <= 0) return; dot(lerp(q.sx, CX + (q.tx - CX) * .55, kk), lerp(q.sy * .4 + 900, 1240 + (q.ty - 940) * .45, kk), 6, C.client, kk * .9, 6); });
   ctx.restore();
 }
 
@@ -352,14 +352,14 @@ function sTitle(t) {
 function sCrowd(t) {
   const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  panel(X0, 430, X1 - X0, 880, { alpha: eo(p(u, .1, .5)) });
+  panel(X0, 370, X1 - X0, 1100, { alpha: eo(p(u, .1, .5)) });
   const g = eio(p(u, 1.5, 4));
   const n = Math.round(20 + 180 * g);
-  CROWD.forEach((q, i) => { if (!q.near && g <= 0) return; const kk = q.near ? 1 : clamp(g * 1.6 - q.d * .6); dot(lerp(q.sx, q.tx, q.near ? g : kk), lerp(q.sy, q.ty, q.near ? g : kk), 7, C.client, eo(p(u, .3, .5)), 6); });
-  dot(CX, 900, 34, C.pub, eo(p(u, .2, .5)), 60);
-  txt('보스', CX, 912, { size: 30, weight: 800, align: 'center', alpha: eo(p(u, .2, .5)) });
-  txt('보스 주변', X0 + 40, 500, { size: 30, weight: 700, color: C.dim, alpha: eo(p(u, .3, .5)) });
-  txt(n + '명', X0 + 40, 580, { size: 76, weight: 800, mono: true, color: n > 100 ? C.red : C.client, alpha: eo(p(u, .3, .5)) });
+  CROWD.forEach((q, i) => { if (!q.near && g <= 0) return; const kk = q.near ? 1 : clamp(g * 1.6 - q.d * .6); dot(lerp(q.sx, q.tx, q.near ? g : kk), lerp(q.sy, q.ty, q.near ? g : kk), 8, C.client, eo(p(u, .3, .5)), 6); });
+  dot(CX, 940, 42, C.pub, eo(p(u, .2, .5)), 60);
+  txt('보스', CX, 953, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, .2, .5)) });
+  txt('보스 주변', X0 + 40, 440, { size: 36, weight: 700, color: C.dim, alpha: eo(p(u, .3, .5)) });
+  txt(n + '명', X0 + 40, 534, { size: 92, weight: 800, mono: true, color: n > 100 ? C.red : C.client, alpha: eo(p(u, .3, .5)) });
   caption(['인원은 20명 → 200명, 10배', '* 수치는 예시'], u, 6.2, C.client);
   ctx.restore();
 }
@@ -371,28 +371,28 @@ function sSquare(t) {
   const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   // one player's update fans out to everyone who sees them
-  const k = eo(p(u, .2, .6)), M = 12, cy = 640, R = 210;
-  panel(X0, 430, X1 - X0, 430, { alpha: k });
+  const k = eo(p(u, .2, .6)), M = 12, cy = 630, R = 230;
+  panel(X0, 370, X1 - X0, 540, { alpha: k });
   const src = [CX, cy + 20];
   for (let i = 0; i < M; i++) {
-    const an = -Math.PI / 2 + (i + .5) / M * Math.PI * 2, x = CX + Math.cos(an) * R * 1.75, y = cy + 20 + Math.sin(an) * R * .6;
+    const an = -Math.PI / 2 + (i + .5) / M * Math.PI * 2, x = CX + Math.cos(an) * R * 1.8, y = cy + 20 + Math.sin(an) * R * .72;
     ctx.save(); ctx.globalAlpha *= k * .35; ctx.strokeStyle = C.server; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(src[0], src[1]); ctx.lineTo(x, y); ctx.stroke(); ctx.restore();
     const f = (u * .9 + i * .05) % 1; if (u > 1) dot(lerp(src[0], x, f), lerp(src[1], y, f), 6, C.server, k * Math.sin(f * Math.PI), 10);
-    dot(x, y, 12, C.client, k, 8);
+    dot(x, y, 15, C.client, k, 8);
   }
-  dot(CX, cy + 20, 18, C.server, k, 30);
-  txt('내가 한 걸음 움직이면', CX, 478, { size: 30, weight: 700, color: C.dim, align: 'center', alpha: k });
-  txt('보는 사람 모두에게 한 번씩', CX, 840, { size: 30, weight: 700, color: C.server, align: 'center', alpha: eo(p(u, 1.2, .5)) });
+  dot(CX, cy + 20, 22, C.server, k, 30);
+  txt('내가 한 걸음 움직이면', CX, 424, { size: 36, weight: 700, color: C.dim, align: 'center', alpha: k });
+  txt('보는 사람 모두에게 한 번씩', CX, 884, { size: 36, weight: 700, color: C.server, align: 'center', alpha: eo(p(u, 1.2, .5)) });
   // formula + bars
   const kf = eo(p(u, 2.6, .6));
-  txt('N × (N − 1)', CX, 960, { size: 84, weight: 800, mono: true, align: 'center', color: C.text, alpha: kf });
-  txt('틱당 갱신 수 (이동만)', CX, 1010, { size: 28, color: C.dim, align: 'center', alpha: kf });
+  txt('N × (N − 1)', CX, 1020, { size: 104, weight: 800, mono: true, align: 'center', color: C.text, alpha: kf });
+  txt('틱당 갱신 수 (이동만)', CX, 1076, { size: 34, color: C.dim, align: 'center', alpha: kf });
   const BW = X1 - X0 - 80;
-  [[20, 380, C.client, 1080], [200, 39800, C.red, 1220]].forEach(([n, v, col, y], i) => {
+  [[20, 380, C.client, 1170], [200, 39800, C.red, 1340]].forEach(([n, v, col, y], i) => {
     const kk = eo(p(u, 3.6 + i * 1.6, 1.4)); if (kk <= 0) return;
-    txt(n + '명', X0 + 40, y, { size: 40, weight: 800, color: col, alpha: clamp(kk * 2) });
-    ctx.save(); ctx.globalAlpha *= clamp(kk * 2); rr(X0 + 40, y + 20, Math.max(6, BW * v / 39800 * kk), 40, 8); ctx.fillStyle = rgba(col, .65); ctx.fill(); ctx.restore();
-    txt(fmt(Math.round(v * kk)), X1 - 40, y, { size: 44, weight: 800, mono: true, color: col, align: 'right', alpha: clamp(kk * 2) });
+    txt(n + '명', X0 + 40, y, { size: 50, weight: 800, color: col, alpha: clamp(kk * 2) });
+    ctx.save(); ctx.globalAlpha *= clamp(kk * 2); rr(X0 + 40, y + 24, Math.max(8, BW * v / 39800 * kk), 54, 10); ctx.fillStyle = rgba(col, .65); ctx.fill(); ctx.restore();
+    txt(fmt(Math.round(v * kk)), X1 - 40, y, { size: 54, weight: 800, mono: true, color: col, align: 'right', alpha: clamp(kk * 2) });
   });
   caption(['인원 10배 → 갱신 약 100배', '20명 380 · 200명 39,800 (틱당)'], u, 8.2, C.red);
   ctx.restore();
@@ -402,19 +402,21 @@ function sSquare(t) {
 //  03 · view radius
 // ═════════════════════════════════════════════════════════════
 const RF = rng(9);
-const FIELD = Array.from({ length: 140 }, () => ({ x: X0 + 30 + RF() * (X1 - X0 - 60), y: 450 + RF() * 840 }));
+const FIELD = Array.from({ length: 180 }, () => ({ x: X0 + 30 + RF() * (X1 - X0 - 60), y: 500 + RF() * 950 }));
 function sRadius(t) {
   const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
-  const k = eo(p(u, .1, .5)), cy = 870;
-  panel(X0, 430, X1 - X0, 880, { alpha: k });
-  const r = lerp(150, 300, eio(p(u, 3, 1.6)));
+  const k = eo(p(u, .1, .5)), cy = 950;
+  panel(X0, 370, X1 - X0, 1100, { alpha: k });
+  const r = lerp(180, 360, eio(p(u, 3, 1.6)));
   let inside = 0;
-  FIELD.forEach(q => { const d = Math.hypot(q.x - CX, q.y - cy), on = d < r; if (on) inside++; dot(q.x, q.y, 7, on ? C.server : C.faint, k, on ? 8 : 0); });
+  FIELD.forEach(q => { const d = Math.hypot(q.x - CX, q.y - cy), on = d < r; if (on) inside++; dot(q.x, q.y, 9, on ? C.server : C.faint, k, on ? 8 : 0); });
   ctx.save(); ctx.globalAlpha *= k; ctx.strokeStyle = C.server; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.arc(CX, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-  dot(CX, cy, 16, C.client, k, 20);
-  txt(u < 3 ? '시야 반경 r' : '반경 2r', CX, cy - r - 18, { size: 32, weight: 800, color: C.server, align: 'center', alpha: k });
-  txt('보이는 인원 ' + inside + '명', X0 + 40, 500, { size: 40, weight: 800, mono: true, color: inside > 30 ? C.red : C.server, alpha: k });
+  dot(CX, cy, 20, C.client, k, 20);
+  { const lab = u < 3 ? '시야 반경 r' : '반경 2r'; font(32, 700, true); const lw = ctx.measureText(lab).width + 44;
+    ctx.save(); ctx.globalAlpha *= k; rr(CX - lw / 2, cy - r - 26, lw, 52, 26); ctx.fillStyle = C.panel; ctx.fill(); ctx.restore();
+    chip(lab, CX, cy - r, C.server, { size: 32, align: 'center', alpha: k }); }
+  txt('보이는 인원 ' + inside + '명', X0 + 40, 446, { size: 50, weight: 800, mono: true, color: inside > 40 ? C.red : C.server, alpha: k });
   caption(['밀도가 고르면 보이는 인원 약 4배', '받을 갱신도 그만큼 늘어난다'], u, 5.6, C.server);
   ctx.restore();
 }
@@ -429,10 +431,10 @@ function sFix(t) {
    ['시야 인원에 상한', '가까운 N명만 자세히 보낸다', C.bot],
    ['채널 · 인스턴스 사본으로 나누기', '한곳에 모이는 인원 자체를 줄인다', C.proto]].forEach(([ti, de, col], i) => {
     const k = eo(p(u, .3 + i * .7, .6)); if (k <= 0) return;
-    const y = 450 + i * 280;
-    panel(X0, y + (1 - k) * 30, X1 - X0, 240, { alpha: k, stroke: rgba(col, .55) });
-    txt(ti, X0 + 40, y + 100, { size: 44, weight: 800, color: col, alpha: k });
-    txt(de, X0 + 40, y + 165, { size: 32, color: C.dim, alpha: k });
+    const y = 380 + i * 365;
+    panel(X0, y + (1 - k) * 30, X1 - X0, 320, { alpha: k, stroke: rgba(col, .55) });
+    txt(ti, X0 + 44, y + 135, { size: 54, weight: 800, color: col, alpha: k });
+    txt(de, X0 + 44, y + 215, { size: 40, color: C.dim, alpha: k });
   });
   caption(['보내는 양을 줄이거나, 인원을 나눈다', '전용 서버는 격리일 뿐 인원은 그대로'], u, 3.2, C.bot);
   ctx.restore();
@@ -445,11 +447,11 @@ const OUTRO = { link: 'jungrok5.github.io/motion-graphics/boss-lag' };
 function sOutro(t) {
   const S = HEAD[3][1] - .3; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
   const v = t - S; ctx.save(); ctx.globalAlpha = a;
-  words(['모이는', '인원은', 'N,'], CX, 820, t, S + .3, { size: 96, colors: [null, null, C.client] });
-  words(['갱신은', 'N².'], CX, 960, t, S + .8, { size: 96, colors: [null, C.red] });
+  words(['모이는', '인원은', 'N,'], CX, 820, t, S + .3, { size: 116, colors: [null, null, C.client] });
+  words(['갱신은', 'N².'], CX, 990, t, S + .8, { size: 116, colors: [null, C.red] });
   const k = eo(p(v, 2, .6));
-  txt('전체 영상 · 설명 · 용어집', CX, 1160, { size: 34, weight: 700, color: C.dim, align: 'center', alpha: k });
-  txt(OUTRO.link, CX, 1220, { size: 30, weight: 600, mono: true, color: C.proto, align: 'center', alpha: k });
+  txt('전체 영상 · 설명 · 용어집', CX, 1210, { size: 40, weight: 700, color: C.dim, align: 'center', alpha: k });
+  txt(OUTRO.link, CX, 1280, { size: 34, weight: 600, mono: true, color: C.proto, align: 'center', alpha: k });
   ctx.restore();
 }
 

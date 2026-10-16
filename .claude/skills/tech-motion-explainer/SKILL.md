@@ -109,10 +109,10 @@ Pick 3–4 ideas that carry the topic's main message and redraw them for a phone
 
 - Base: copy `boss-lag-shorts/index.html` (1080×1920 engine, vertical `headers()` / `progress()` / `caption()`, player sized 9:16).
   Name it `<slug>-shorts/`. Keep the numbers and claims identical to the reviewed full video.
-- Safe area: shorts apps draw over the top ~180px, the bottom ~380px and buttons in the lower-right corner. Keep content
-  centered in x 80–1000 (equal side margins; a lopsided margin makes the video look shifted left) and y 200–1530:
-  header y 220–400, picture y 420–1330, a two-line caption y 1380–1520. No text in the lower-right corner (x > 900, y > 1100).
-- Type: title 68, caption 46, labels ≥ 28. One idea per screen; the caption states it in one line.
+- Fill the frame: background and pictures run edge to edge. Only text keeps a light margin from the shorts app's own UI
+  (top ~110px, bottom ~280px; avoid the lower-right corner where the like/comment buttons sit). Side margins 60, centered on 540.
+  Header y 100–340, picture y 370–1470, two-line caption y 1500–1640.
+- Type: title 80, caption 54 / 44, picture labels ≥ 34, key numbers 90+. Give labels that sit over dots a dark backing. One idea per screen; the caption states it in one line.
 - End card: the takeaway in two short lines and the full video's link (`jungrok5.github.io/motion-graphics/<slug>`).
 - The player nav links to the full video's 영상 · 설명 · 용어집; shorts have no notes of their own.
 - Verify the same way (stills, `check-player`), then bake the MP4 to upload: `node scripts/render.mjs <slug>-shorts/index.html out/<slug>-shorts.mp4`.
