@@ -334,7 +334,7 @@ const VRING = [0, 1].map(k => { const R = rng(61 + k), pb = new PB(); for (let i
 const SEG = 8;
 const LINKVS = `
 uniform vec3 uP[${NP}];
-uniform float uPx, uFocus, uAperture, uGain, uTime, uN, uFar, uK, uCh, uLift, uView, uViewR, uVM;
+uniform float uPx, uFocus, uAperture, uGain, uTime, uN, uFar, uK, uCh, uLift, uView, uViewR, uVM, uThin;
 attribute vec4 aM;   // s, rand, kNear, sameChannel
 varying vec3 vC;
 void main() {
@@ -355,10 +355,10 @@ void main() {
   float kF = mix(1.0, mix(.015, 2.2, aM.z), uK);
   float chF = mix(1.0, aM.w * 1.8, uCh);
   float ph = fract(uTime * .7 + aM.y * 17.0);
-  float pl = exp(-pow((s - ph) * 6.0, 2.0));
+  float pl = exp(-pow((s - ph) * mix(6.0, 9.0, uThin), 2.0));
   float viewF = mix(1.0, (i == int(uView) && length((b - a).xz) < uViewR) ? 14.0 : .3, uVM);
   vec3 col = aM.y < .5 ? vec3(1.0, .66, .48) : aM.y < .74 ? vec3(1.0, .48, .42) : aM.y < .88 ? vec3(1.0, .86, .74) : vec3(.6, .5, 1.0);
-  vC = col * uGain * vis * farF * kF * chF * viewF * (.32 + 2.6 * pl) / (1.0 + coc * .1);
+  vC = col * uGain * vis * farF * kF * chF * viewF * (mix(.32, .12, uThin) + 2.6 * pl) / (1.0 + coc * .1);   // thinner steady core at 200 so threads read (anti-haze)
   gl_Position = projectionMatrix * mv;
   if (vis <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }`;
@@ -379,7 +379,7 @@ const LINKS = (() => {
   g.setAttribute('aM', new THREE.BufferAttribute(m, 4));
   const uP = { value: Array.from({ length: NP }, () => new THREE.Vector3()) };
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...U, uGain: { value: 0 }, uP, uN: { value: 0 }, uFar: { value: 0 }, uK: { value: 0 }, uCh: { value: 0 }, uLift: { value: .26 }, uView: { value: CI }, uViewR: { value: 0 }, uVM: { value: 0 } },
+    uniforms: { ...U, uGain: { value: 0 }, uP, uN: { value: 0 }, uFar: { value: 0 }, uK: { value: 0 }, uCh: { value: 0 }, uLift: { value: .26 }, uView: { value: CI }, uViewR: { value: 0 }, uVM: { value: 0 }, uThin: { value: 0 } },
     vertexShader: LINKVS, fragmentShader: LFS, ...blendOpts,
   });
   const o = new THREE.LineSegments(g, mat); o.frustumCulled = false; scene.add(o);
@@ -461,7 +461,8 @@ function update3D(t) {
   Lu.uK.value = eio(p(t, T_K, .7)) * (1 - eio(p(t, T_CH + .5, .9)));
   Lu.uCh.value = eio(p(t, T_CH, .8));
   Lu.uViewR.value = vr; Lu.uVM.value = vOn;
-  const nn = Math.max(NSUB, nL), dens = Math.min(1, Math.pow(NSUB * (NSUB - 1) / (nn * (nn - 1)), .62));          // keep the full mesh from washing out
+  Lu.uThin.value = eio(p(t, T_GROW, 1.9));
+  const nn = Math.max(NSUB, nL), dens = Math.min(1, Math.pow(NSUB * (NSUB - 1) / (nn * (nn - 1)), .66));          // keep the full mesh from washing out
   const lg = eo(p(t, T_SUB, .8)) * dens * lerp(1, 1.5, Lu.uK.value) * lerp(1, 1.9, Lu.uCh.value) * .07;
   setGain(LINKS, lg);
 
@@ -622,11 +623,9 @@ function renderAt(t) {
     caption(['가까운 K명만'], t, T_K + .1, T_CH + .05);
     caption(['채널로 나눈다'], t, T_CH + .1, CREAM_AT + .1);
     header(t, true);
-    const fl = p(t, CREAM_AT - .35, .4);
-    if (fl > 0) {   // light opening out from the arena center
-      const P = proj(V(0, 0, 0)), r = lerp(60, 2300, eio(fl)), g = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, r);
-      g.addColorStop(0, 'rgba(255,248,240,1)'); g.addColorStop(.55, `rgba(255,236,220,${.9 * eo(fl)})`); g.addColorStop(1, 'rgba(255,220,200,0)');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const fl = eio(p(t, CREAM_AT - .3, .35));
+    if (fl > 0) {   // even warm lift over the whole frame (no radial disc), then the cream crossfade takes over
+      ctx.fillStyle = `rgba(255,238,224,${(.4 * fl).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
     }
   }
   if (cream > 0) { ctx.save(); ctx.globalAlpha = eio(cream); endCard(t); ctx.restore(); }

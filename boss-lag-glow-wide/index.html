@@ -1,0 +1,742 @@
+<meta charset="utf-8">
+<title>Boss Lag Glow Wide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #050407; --surface: #120e10; --line: #2e2420; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #ffb48a; --live: #fff1e6; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(18,14,16,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(255,180,138,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(255,180,138,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="보스가 뜨면 왜 렉이 걸릴까 — 빛 입자 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../boss-lag/">전체 영상</a><a href="../boss-lag/article.html">설명</a><a href="../boss-lag/terms.html">용어집</a></nav>
+</div>
+<!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">{"imports": {"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}}</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Boss Lag Glow Wide — 보스가 뜨면 왜 렉이 걸릴까? (~21s, 1920×1080, PC landscape)
+//  Landscape recomposition of ../boss-lag-glow/ (same beats, timing, numbers, copy).
+//  Glowing particles + bloom + in-shader DOF. three.js renders offscreen,
+//  the 2D canvas #c composites it and draws header / counter / captions.
+//  Every frame is a pure function of time: renderAt(t).
+//  Facts follow ../boss-lag/index.html and ../boss-lag-shorts/index.html:
+//    updates per tick = N × (N − 1) (movement only, everyone visible, everyone moving)
+//    20 → 380, 200 → 39,800 (10× people → ~100× updates)
+//    view radius 2× → visible players ~4× (even density)
+//    cuts: far targets less often · nearest K only · channels / instances (dedicated server only isolates)
+//  The mesh draws every directed update i → j as one glowing arc: 200 players = 39,800 arcs.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 21;
+const FOV = 30;   // vertical fov; narrower than the 9:16 cut so the disc + dome fill the wide frame
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math ─────────────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const gauss = R => { let s = 0; for (let i = 0; i < 4; i++) s += R(); return (s - 2) / .577; };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── timeline ─────────────────────────────────────────────────
+// [start, end, number, title, subtitle] — chapters (progress bar + header)
+const HEAD = [
+  [0, 2.4, '01', '보스 등장', 'BOSS SPAWN'],
+  [2.4, 5.4, '02', '인원 집중', 'CROWD'],
+  [5.4, 10.6, '03', 'N × (N − 1)', 'UPDATES'],
+  [10.6, 14.2, '04', '시야 반경', 'VIEW RADIUS'],
+  [14.2, DURATION, '05', '줄이는 법', 'CUTS'],
+];
+const CREAM_AT = 18.5;   // flash → cream end card
+const T_BOSS = .6;                       // boss ignites
+const T_SUB = 5.6, T_GROW = 7.7;          // links among 20, then grow to 200
+const T_R1 = 10.9, T_R2 = 12.3;           // view ring r, then 2r
+const T_FAR = 14.3, T_K = 15.5, T_CH = 16.6;   // cuts
+
+// ── palette ──────────────────────────────────────────────────
+const COL = { peach: new THREE.Color('#ffc29a'), white: new THREE.Color('#fff2e6'), rose: new THREE.Color('#ff9a86'), lav: new THREE.Color('#9d8cff'), gold: new THREE.Color('#ffd69c'), ember: new THREE.Color('#ff7a4c') };
+const warm = R => { const r = R(); return r < .45 ? COL.peach : r < .72 ? COL.white : r < .86 ? COL.rose : r < .96 ? COL.gold : COL.lav; };
+
+// ── three setup ──────────────────────────────────────────────
+const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.setPixelRatio(1); gl.setSize(W, H, false);
+gl.setClearColor(0x030204, 1);
+gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .05, 400);
+const composer = new EffectComposer(gl);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .5, .4, .12);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const U = { uPx: { value: H / (2 * Math.tan(THREE.MathUtils.degToRad(FOV / 2))) }, uFocus: { value: 10 }, uAperture: { value: .12 }, uTime: { value: 0 }, uMax: { value: 80 } };
+const PVS = `
+attribute float size; attribute float alpha; attribute vec3 color; attribute float phase;
+uniform float uPx, uFocus, uAperture, uTime, uMax, uGain;
+varying vec3 vC; varying float vBok;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  float base = size * uPx / d;
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / d);
+  float s = min(sqrt(base * base + coc * coc), uMax);
+  float e = max(base, 1.4) / max(s, 1.4);
+  vBok = smoothstep(5.0, 16.0, coc);
+  float a = alpha * uGain * mix(e * e, 0.32 * e, vBok);
+  a *= 0.82 + 0.18 * sin(uTime * (1.3 + phase * 2.7) + phase * 40.0);
+  if (s < 1.6) a *= (s / 1.6) * (s / 1.6);
+  gl_PointSize = max(s, 1.6);
+  vC = color * a;
+  gl_Position = projectionMatrix * mv;
+  if (alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const PFS = `
+varying vec3 vC; varying float vBok;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0; float d = dot(c, c); if (d > 1.0) discard;
+  float core = exp(-d * 6.0) + 0.25 * exp(-d * 1.6);
+  float disc = smoothstep(1.0, 0.78, d) * (0.6 + 0.4 * d);
+  gl_FragColor = vec4(vC * mix(core, disc, vBok), 1.0);
+}`;
+const LVS = `
+attribute vec3 color; attribute float alpha;
+uniform float uPx, uFocus, uAperture, uGain;
+varying vec3 vC;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / d);
+  vC = color * alpha * uGain / (1.0 + coc * 0.12);
+  gl_Position = projectionMatrix * mv;
+}`;
+const LFS = `varying vec3 vC; void main() { gl_FragColor = vec4(vC, 1.0); }`;
+const blendOpts = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendEquation: THREE.AddEquation };
+const pMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: PVS, fragmentShader: PFS, ...blendOpts });
+const lMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: LVS, fragmentShader: LFS, ...blendOpts });
+
+class PB {   // point builder
+  constructor() { this.p = []; this.s = []; this.a = []; this.c = []; this.ph = []; }
+  add(v, size, alpha, col, ph = .5) { this.p.push(v.x, v.y, v.z); this.s.push(size); this.a.push(alpha); this.c.push(col.r, col.g, col.b); this.ph.push(ph); return this; }
+  get n() { return this.s.length; }
+  build(gain = 1) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(this.s, 1));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    g.setAttribute('phase', new THREE.Float32BufferAttribute(this.ph, 1));
+    const o = new THREE.Points(g, pMat(gain)); o.frustumCulled = false; o.userData.base = Float32Array.from(this.a); scene.add(o); return o;
+  }
+}
+class LB {   // line-segment builder
+  constructor() { this.p = []; this.a = []; this.c = []; }
+  add(v1, v2, a1, col, a2 = a1) { this.p.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z); this.a.push(a1, a2); this.c.push(col.r, col.g, col.b, col.r, col.g, col.b); return this; }
+  build(gain = 1) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    const o = new THREE.LineSegments(g, lMat(gain)); o.frustumCulled = false; o.userData.base = Float32Array.from(this.a); scene.add(o); return o;
+  }
+}
+const setGain = (o, g) => { o.material.uniforms.uGain.value = g; o.visible = g > .002; };
+
+// ═════════════════════════════════════════════════════════════
+//  WORLD
+// ═════════════════════════════════════════════════════════════
+const NP = 200, NSUB = 20, K = 6, NCH = 4;
+const BOSS = V(0, 2.3, 0);
+const ARENA = 5;                          // crowd disc radius (even areal density)
+const PL = (() => {
+  const R = rng(7), out = [];
+  for (let i = 0; i < NP; i++) {
+    const ra = ARENA * Math.sqrt(R()), aa = R() * Math.PI * 2;
+    const swarm = V(Math.cos(aa) * ra, gauss(R) * .1, Math.sin(aa) * ra);
+    const rs = 8 + 15 * Math.sqrt(R()), as = R() * Math.PI * 2;
+    out.push({ swarm, ra, aa, rs, as, ys: gauss(R) * 2.2 + 1, delay: R() * 1.7, ph: R() * 6.28, ph2: R() * 6.28, ch: i % NCH });
+  }
+  return out;
+})();
+// nearest K (directed, on the swarm layout)
+PL.forEach((a, i) => { a.knn = new Set(PL.map((b, j) => [a.swarm.distanceToSquared(b.swarm), j]).filter(x => x[1] !== i).sort((x, y) => x[0] - y[0]).slice(0, K).map(x => x[1])); });
+// the player whose view ring we draw: near (1.3, 0, .9)
+const CI = PL.map((a, i) => [a.swarm.distanceToSquared(V(1.3, 0, .9)), i]).sort((x, y) => x[0] - y[0])[0][1];
+const VR1 = 1.25, VR2 = 2.5;
+const insideCount = r => PL.filter((a, i) => i !== CI && Math.hypot(a.swarm.x - PL[CI].swarm.x, a.swarm.z - PL[CI].swarm.z) < r).length;
+const CNT1 = insideCount(VR1), CNT2 = insideCount(VR2);
+const CHS = .46;                                                                      // channel disc scale
+const CH_TH = .55 + .05 * 18, CH_GAP = 6.1;   // camera azimuth during the split; spacing along screen-right
+const CHO = [-1.5, -.5, .5, 1.5].map(k => V(Math.cos(CH_TH) * k * CH_GAP, 0, -Math.sin(CH_TH) * k * CH_GAP));   // 4 channels in a row across the wide frame
+
+// player position as a pure function of t
+const _v = new THREE.Vector3();
+function playerPos(i, t, out) {
+  const a = PL[i];
+  const k = eio(p(t, 2.2 + a.delay, 2.1));
+  // polar interpolation: scattered field → disc, with an inward swirl
+  const r = lerp(a.rs, a.ra, k), ang = lerp(a.as, a.aa, k) + (1 - k) * (.12 * t) + Math.sin(k * Math.PI) * .9;
+  const drift = 1 - k;
+  out.set(Math.cos(ang) * r + drift * .5 * Math.sin(t * .35 + a.ph), lerp(a.ys, a.swarm.y, k) + drift * .4 * Math.sin(t * .4 + a.ph2), Math.sin(ang) * r + drift * .5 * Math.cos(t * .3 + a.ph));
+  if (k >= 1) out.set(a.swarm.x, a.swarm.y, a.swarm.z);
+  // small movement in the crowd (everyone moving)
+  out.x += .07 * Math.sin(t * 1.3 + a.ph) * k; out.z += .07 * Math.cos(t * 1.1 + a.ph2) * k;
+  // channel split
+  const c = eio(p(t, T_CH, 1.3));
+  if (c > 0) { const o = CHO[a.ch]; out.x = lerp(out.x, o.x + a.swarm.x * CHS, c); out.z = lerp(out.z, o.z + a.swarm.z * CHS, c); }
+  return out;
+}
+
+// background dust + bokeh orbs
+{
+  const R = rng(11), pb = new PB();
+  for (let i = 0; i < 9000; i++) {
+    const r = 4 + Math.pow(R(), .6) * 30;
+    const d = V(gauss(R), gauss(R) * .6, gauss(R)).normalize().multiplyScalar(r);
+    pb.add(d.add(V(0, 1, 0)), .012 + Math.pow(R(), 3) * .05, .08 + R() * .3, warm(R), R());
+  }
+  var DUST = pb.build(1);
+  const ob = new PB();
+  for (let i = 0; i < 60; i++) {
+    const d = V(gauss(R), gauss(R) * .7, gauss(R)).normalize().multiplyScalar(6 + R() * 22);
+    const col = R() < .5 ? COL.peach : R() < .5 ? COL.lav : COL.rose;
+    ob.add(d, .08 + R() * .16, .35 + R() * .4, col, R());
+  }
+  var ORBS = ob.build(1);
+}
+
+// boss core: dense glowing cluster + radiating filaments
+const BOSSC = (() => {
+  const R = rng(17), pb = new PB(), lb = new LB();
+  for (let i = 0; i < 1600; i++) { const q = BOSS.clone().add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.28 * Math.pow(R(), .5))); pb.add(q, .02 + R() * .04, .4 + R() * .5, R() < .4 ? COL.white : R() < .6 ? COL.ember : COL.gold, R()); }
+  pb.add(BOSS, .35, 1.4, COL.white, .2); pb.add(BOSS, .9, .5, COL.ember, .6);
+  for (let k = 0; k < 90; k++) {
+    let pos = BOSS.clone(); const d = V(gauss(R), gauss(R), gauss(R)).normalize();
+    for (let s = 0; s < 6; s++) { d.add(V(gauss(R), gauss(R), gauss(R)).multiplyScalar(.25)).normalize(); const n = pos.clone().addScaledVector(d, .16 + R() * .1); lb.add(pos, n, .8 * (1 - s / 6), R() < .5 ? COL.ember : COL.gold, .8 * (1 - (s + 1) / 6)); pos = n; }
+  }
+  return { pts: pb.build(0), lines: lb.build(0) };
+})();
+// arena ring on the ground + 4 channel rings
+function ringPB(c, r, n, seed, alpha = .5) { const R = rng(seed), pb = new PB(); for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; pb.add(c.clone().add(V(Math.cos(a) * (r + gauss(R) * .03), -.05, Math.sin(a) * (r + gauss(R) * .03))), .028 + R() * .02, alpha * (.6 + R() * .4), R() < .5 ? COL.peach : COL.rose, R()); } return pb.build(0); }
+const ARENA_RING = ringPB(V(0, 0, 0), ARENA + .35, 900, 19, .55);
+const CH_RINGS = CHO.map((o, i) => ringPB(o, ARENA * CHS + .3, 420, 50 + i, .7));
+
+// players: core + soft halo + 6 trail ghosts each
+const GH = 6;
+const PLP = (() => {
+  const R = rng(29), pb = new PB();
+  for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), .075, 1, R() < .5 ? COL.white : COL.peach, R());
+  for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), .26, .28, COL.peach, R());
+  for (let g = 1; g <= GH; g++) for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), .05 * (1 - g / (GH + 2)), 0, COL.peach, R());
+  return pb.build(1);
+})();
+// view ring(s) around player CI
+const VRING_N = 420;
+const VRING = [0, 1].map(k => { const R = rng(61 + k), pb = new PB(); for (let i = 0; i < VRING_N; i++) pb.add(V(0, 0, 0), .035, .9, k ? COL.gold : COL.white, R()); return pb.build(0); });
+
+// ── links: every ordered pair (i → j) = one arc of SEG segments, evaluated in the vertex shader
+const SEG = 8;
+const LINKVS = `
+uniform vec3 uP[${NP}];
+uniform float uPx, uFocus, uAperture, uGain, uTime, uN, uFar, uK, uCh, uLift, uView, uViewR, uVM, uThin;
+attribute vec4 aM;   // s, rand, kNear, sameChannel
+varying vec3 vC;
+void main() {
+  int i = int(position.x + .5), j = int(position.y + .5);
+  vec3 a = uP[i], b = uP[j]; float s = aM.x;
+  vec3 d = b - a; float L = length(d);
+  vec3 side = normalize(cross(d + vec3(1e-4, 0.0, 1e-4), vec3(0.0, 1.0, 0.0)));
+  float bow = 4.0 * s * (1.0 - s);
+  float lift = uLift * (.35 + 1.3 * fract(aM.y * 7.31));
+  vec3 pos = mix(a, b, s) + vec3(0.0, 1.0, 0.0) * lift * L * bow + side * (fract(aM.y * 3.7) - .5) * .5 * L * bow;
+  vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+  float dz = max(-mv.z, 0.05);
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / dz);
+  float vis = clamp(uN - max(position.x, position.y), 0.0, 1.0);
+  float far = smoothstep(1.5, 2.2, position.z);
+  float blink = smoothstep(.0, .05, fract(uTime * .55 + aM.y * 13.0)) * (1.0 - smoothstep(.05, .22, fract(uTime * .55 + aM.y * 13.0)));
+  float farF = mix(1.0, mix(1.6, .015 + 2.0 * blink, far), uFar);
+  float kF = mix(1.0, mix(.015, 2.2, aM.z), uK);
+  float chF = mix(1.0, aM.w * 1.8, uCh);
+  float ph = fract(uTime * .7 + aM.y * 17.0);
+  float pl = exp(-pow((s - ph) * mix(6.0, 9.0, uThin), 2.0));
+  float viewF = mix(1.0, (i == int(uView) && length((b - a).xz) < uViewR) ? 14.0 : .3, uVM);
+  vec3 col = aM.y < .5 ? vec3(1.0, .66, .48) : aM.y < .74 ? vec3(1.0, .48, .42) : aM.y < .88 ? vec3(1.0, .86, .74) : vec3(.6, .5, 1.0);
+  vC = col * uGain * vis * farF * kF * chF * viewF * (mix(.32, .12, uThin) + 2.6 * pl) / (1.0 + coc * .1);   // thinner steady core at 200 so threads read (anti-haze)
+  gl_Position = projectionMatrix * mv;
+  if (vis <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const LINKS = (() => {
+  const R = rng(37), nArc = NP * (NP - 1), nV = nArc * SEG * 2;
+  const pos = new Float32Array(nV * 3), m = new Float32Array(nV * 4);
+  let v = 0;
+  for (let i = 0; i < NP; i++) for (let j = 0; j < NP; j++) {
+    if (i === j) continue;
+    const r = R(), kn = PL[i].knn.has(j) ? 1 : 0, sc = PL[i].ch === PL[j].ch ? 1 : 0, d0 = PL[i].swarm.distanceTo(PL[j].swarm);
+    for (let s = 0; s < SEG; s++) for (const ss of [s / SEG, (s + 1) / SEG]) {
+      pos[v * 3] = i; pos[v * 3 + 1] = j; pos[v * 3 + 2] = d0;
+      m[v * 4] = ss; m[v * 4 + 1] = r; m[v * 4 + 2] = kn; m[v * 4 + 3] = sc; v++;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aM', new THREE.BufferAttribute(m, 4));
+  const uP = { value: Array.from({ length: NP }, () => new THREE.Vector3()) };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { ...U, uGain: { value: 0 }, uP, uN: { value: 0 }, uFar: { value: 0 }, uK: { value: 0 }, uCh: { value: 0 }, uLift: { value: .26 }, uView: { value: CI }, uViewR: { value: 0 }, uVM: { value: 0 }, uThin: { value: 0 } },
+    vertexShader: LINKVS, fragmentShader: LFS, ...blendOpts,
+  });
+  const o = new THREE.LineSegments(g, mat); o.frustumCulled = false; scene.add(o);
+  return o;
+})();
+
+// ── camera (pure function of t): keyframes [t, radius, height, target] ──
+const CI_POS = PL[CI].swarm;
+const CK = [
+  [0, 30, 10, V(0, 1.2, 0)],
+  [2.2, 27, 8.5, V(0, 1.2, 0)],
+  [5.4, 17.5, 4.6, V(0, 1.15, 0)],
+  [10.4, 17, 4.6, V(0, 1.05, 0)],
+  [11.4, 11.5, 12.5, V(CI_POS.x * .6, -.2, CI_POS.z * .6)],
+  [14.0, 11, 12, V(CI_POS.x * .6, -.2, CI_POS.z * .6)],
+  [15.0, 17.5, 5.6, V(0, 1.0, 0)],
+  [16.6, 17.5, 5.6, V(0, 1.0, 0)],
+  [18.2, 23, 12, V(0, .6, 0)],
+  [21, 24, 12.5, V(0, .6, 0)],
+];
+function cameraAt(t) {
+  let i = 0; while (i < CK.length - 2 && t > CK[i + 1][0]) i++;
+  const [t0, r0, h0, g0] = CK[i], [t1, r1, h1, g1] = CK[i + 1], k = eio(p(t, t0, t1 - t0));
+  const r = lerp(r0, r1, k), h = lerp(h0, h1, k), tgt = g0.clone().lerp(g1, k);
+  const th = .55 + .05 * t;
+  camera.position.set(tgt.x + Math.sin(th) * r, tgt.y + h, tgt.z + Math.cos(th) * r);
+  camera.lookAt(tgt); camera.updateMatrixWorld();
+  U.uFocus.value = camera.position.distanceTo(tgt);
+}
+
+// ── crowd size helpers ───────────────────────────────────────
+const arrived = t => PL.reduce((n, a) => n + (p(t, 2.2 + a.delay, 2.1) > .85 ? 1 : 0), 0);
+const nLinked = t => t < T_SUB ? 0 : lerp(NSUB, NP, eio(p(t, T_GROW, 1.9)));
+const viewR = t => t < T_R1 ? 0 : lerp(0, VR1, eo(p(t, T_R1, .7))) + (VR2 - VR1) * eio(p(t, T_R2, .9));
+const viewOn = t => win(t, T_R1 - .1, 14.3, .4);
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE UPDATE
+// ═════════════════════════════════════════════════════════════
+function update3D(t) {
+  U.uTime.value = t;
+  cameraAt(t);
+  const v = new THREE.Vector3(), w = new THREE.Vector3();
+  setGain(DUST, lerp(1.5, .85, eio(p(t, 2, 3)))); setGain(ORBS, .75);
+
+  // boss
+  const ig = eo(p(t, T_BOSS, .6)), flash = t > T_BOSS ? Math.exp(-(t - T_BOSS) * 2.2) : 0;
+  const beat = 1 + .12 * Math.sin(t * 5.5);
+  const cutDim = 1 - .45 * eio(p(t, T_CH, 1));
+  setGain(BOSSC.pts, ig * (beat + 1.6 * flash) * cutDim); setGain(BOSSC.lines, ig * (.8 + 1.5 * flash) * cutDim);
+  setGain(ARENA_RING, eo(p(t, 1.6, 1.2)) * (1 - eio(p(t, T_CH, .8))) * .9);
+  CH_RINGS.forEach((o, i) => setGain(o, eo(p(t, T_CH + .7 + i * .12, .8))));
+
+  // players
+  const P = PLP.geometry.attributes, nL = nLinked(t), vOn = viewOn(t), vr = viewR(t);
+  const pos = LINKS.material.uniforms.uP.value;
+  for (let i = 0; i < NP; i++) {
+    playerPos(i, t, v); pos[i].copy(v);
+    const a = PL[i], mov = Math.sin(Math.PI * p(t, 2.2 + a.delay, 2.1));
+    let al = 1;
+    if (t > T_SUB && t < T_GROW + 2.2) al = i < nL ? 1.3 : .45;   // the linked crowd is brighter
+    if (vOn > 0) {
+      const inside = i !== CI && Math.hypot(v.x - pos[CI].x, v.z - pos[CI].z) < vr;
+      al = lerp(al, i === CI ? 2.6 : inside ? 1.9 : .35, vOn);
+    }
+    const sc = 1 - eio(p(t, 2.2 + a.delay, 2.1));
+    al *= 1 + .8 * sc; P.size.setX(i, .075 * (1 + .9 * sc)); P.size.setX(NP + i, .26 * (1 + .9 * sc));
+    P.position.setXYZ(i, v.x, v.y, v.z); P.alpha.setX(i, al);
+    P.position.setXYZ(NP + i, v.x, v.y, v.z); P.alpha.setX(NP + i, .28 * al);
+    for (let g = 1; g <= GH; g++) { playerPos(i, t - g * .06, w); P.position.setXYZ(NP * (1 + g) + i, w.x, w.y, w.z); P.alpha.setX(NP * (1 + g) + i, mov * .8 * (1 - g / (GH + 1))); }
+  }
+  P.position.needsUpdate = P.alpha.needsUpdate = P.size.needsUpdate = true;
+  setGain(PLP, 1);
+
+  // links
+  const Lu = LINKS.material.uniforms;
+  Lu.uN.value = nL;
+  Lu.uFar.value = eio(p(t, T_FAR, .7)) * (1 - eio(p(t, T_CH, .8)));
+  Lu.uK.value = eio(p(t, T_K, .7)) * (1 - eio(p(t, T_CH + .5, .9)));
+  Lu.uCh.value = eio(p(t, T_CH, .8));
+  Lu.uViewR.value = vr; Lu.uVM.value = vOn;
+  Lu.uThin.value = eio(p(t, T_GROW, 1.9));
+  const nn = Math.max(NSUB, nL), dens = Math.min(1, Math.pow(NSUB * (NSUB - 1) / (nn * (nn - 1)), .66));          // keep the full mesh from washing out
+  const lg = eo(p(t, T_SUB, .8)) * dens * lerp(1, 1.5, Lu.uK.value) * lerp(1, 1.9, Lu.uCh.value) * .07;
+  setGain(LINKS, lg);
+
+  // view rings
+  VRING.forEach((o, k) => {
+    const r = k ? vr : Math.min(vr, VR1), A = o.geometry.attributes.position, c = pos[CI];
+    for (let i = 0; i < VRING_N; i++) { const a = i / VRING_N * Math.PI * 2; A.setXYZ(i, c.x + Math.cos(a) * r, .02, c.z + Math.sin(a) * r); }
+    A.needsUpdate = true;
+    setGain(o, vOn * (k ? (t > T_R2 ? 1.2 : 0) : (t > T_R2 ? .55 : 1.2)));
+  });
+
+  bloom.strength = .5 + .5 * flash;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  2D OVERLAY
+// ═════════════════════════════════════════════════════════════
+const X0 = 80, X1 = 1840, CX = 960;
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#fff', align = 'left', alpha = 1, mono = false, ls = 0, blur = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (blur > .3) ctx.filter = `blur(${blur.toFixed(1)}px)`;
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false, ls = 0) { ctx.save(); ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; if (ls) ctx.letterSpacing = ls + 'px'; const w = ctx.measureText(s).width; ctx.restore(); return w; }
+function proj(v) { const q = v.clone().project(camera); return { x: (q.x + 1) / 2 * W, y: (1 - q.y) / 2 * H, behind: q.z > 1 }; }
+
+// caption: words fade + un-blur one by one
+function caption(lines, t, t0, t1, o = {}) {
+  const { size = 60, bottom = 1000, stagger = .12 } = o;
+  const y = bottom - (lines.length - 1) * size * 1.32;
+  const out = 1 - eio(p(t, t1 - .4, .4)); if (out <= 0 || t < t0) return;
+  let wi = 0;
+  lines.forEach((line, li) => {
+    const ws = line.split(' '), sp = size * .28, widths = ws.map(w => tw(w, size, 800));
+    let x = CX - (widths.reduce((a, b) => a + b, 0) + sp * (ws.length - 1)) / 2;
+    ws.forEach((w, i) => {
+      const k = eo(p(t, t0 + wi++ * stagger + li * .15, .5));
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 26;
+      txt(w, x, y + li * size * 1.32 + (1 - k) * 14, { size, weight: 800, color: li ? '#ffc9a8' : '#fff7f0', alpha: k * out, blur: (1 - k) * 16 });
+      ctx.restore(); x += widths[i] + sp;
+    });
+  });
+}
+function header(t, dark) {
+  const ink = dark ? 'rgba(255,240,228,.8)' : 'rgba(40,30,24,.72)', rule = dark ? 'rgba(255,220,200,.16)' : 'rgba(40,30,24,.16)';
+  const acc = dark ? '#ff9f7a' : '#d8613e';
+  let cur = HEAD[0]; for (const h of HEAD) if (t >= h[0]) cur = h;
+  const a = eo(p(t, .1, .6));
+  txt('WHY BOSS FIGHTS LAG', X0, 76, { size: 28, weight: 600, color: ink, ls: 3, alpha: a });
+  const k = eo(p(t, cur[0], .5));
+  txt(`${cur[2]} / 05 · ${cur[4]}`, X1, 76, { size: 28, weight: 600, color: ink, ls: 3, align: 'right', alpha: a * lerp(.2, 1, k) });
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = rule; ctx.fillRect(X0, 100, X1 - X0, 1.5);
+  ctx.fillStyle = acc; ctx.fillRect(X0, 100, (X1 - X0) * clamp(t / DURATION) * .999 + 1, 2);
+  ctx.restore();
+}
+// one counter block under the header: small label + big number
+function block(label, num, unit, a, o = {}) {
+  if (a <= 0) return;
+  const { numCol = '#fff3ea', unitCol = '#ffb48a', size = 108 } = o;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 20;
+  txt(label, X0, 172, { size: 34, weight: 700, color: '#ffc9a8', alpha: a });
+  txt(num, X0, 172 + size + 2, { size, weight: 700, mono: true, color: numCol, alpha: a, ls: -2 });
+  if (unit) txt(unit, X0 + tw(num, size, 700, true, -2) + 16, 172 + size + 2, { size: 42, weight: 700, color: unitCol, alpha: a });
+  ctx.restore();
+}
+function counter(t) {
+  // 02 crowd
+  { const a = win(t, 2.6, 5.5, .4), n = arrived(t); block('보스 주변', String(n), '명', a); }
+  // 03 updates per tick
+  {
+    const a = win(t, 5.6, 10.7, .4), n = Math.round(nLinked(t));
+    block(`${n}명 · 틱당 갱신`, fmt(n * (n - 1)), '', a, { numCol: n > 100 ? '#ffb08a' : '#fff3ea' });
+  }
+  // 04 visible players
+  {
+    const a = win(t, T_R1 + .2, 14.3, .4);
+    const vr = viewR(t), lab = vr < VR1 + .02 ? '시야 반경 r · 보이는 인원' : '시야 반경 2r · 보이는 인원';
+    const n = t < T_R2 ? CNT1 : insideCount(vr);
+    block(lab, String(n), '명', a, { numCol: t > T_R2 + .2 ? '#ffd69c' : '#fff3ea' });
+  }
+  // 05 cuts
+  block(`가까운 ${K}명만 · 200 × ${K}`, fmt(NP * K), '/ 틱', win(t, T_K + .2, T_CH + .1, .35));
+  block(`채널 ${NCH}개 · 채널당 50명`, fmt(50 * 49), '/ 틱', win(t, T_CH + .6, CREAM_AT + .3, .35));
+  // examples marker (once)
+  const ea = win(t, 5.8, CREAM_AT, .5);
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 16;
+  txt('* 수치는 예시', X1, 172, { size: 30, weight: 600, color: 'rgba(255,230,215,.6)', align: 'right', alpha: ea });
+  ctx.restore();
+}
+function ringTags(t) {   // "r" / "2r" tags on the view rings
+  const a = viewOn(t); if (a <= 0) return;
+  const c = LINKS.material.uniforms.uP.value[CI], vr = viewR(t);
+  const tag = (r, s, al) => { if (al <= 0 || r < .1) return; const P = proj(V(c.x + r * .72, 0, c.z - r * .72)); if (P.behind) return;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 14; txt(s, P.x + 10, P.y - 10, { size: 44, weight: 800, mono: true, color: '#ffe2c8', alpha: al }); ctx.restore(); };
+  tag(Math.min(vr, VR1), 'r', a * (t > T_R2 ? .6 : 1) * eo(p(t, T_R1 + .5, .4)));
+  tag(vr, '2r', a * eo(p(t, T_R2 + .7, .4)));
+}
+function vignette() {
+  const g = ctx.createRadialGradient(CX, H * .5, W * .22, CX, H * .5, W * .62);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const b = ctx.createLinearGradient(0, H * .72, 0, H); b.addColorStop(0, 'rgba(0,0,0,0)'); b.addColorStop(1, 'rgba(0,0,0,.6)');
+  ctx.fillStyle = b; ctx.fillRect(0, H * .72, W, H * .28);
+  const tp = ctx.createLinearGradient(0, 0, 0, 330); tp.addColorStop(0, 'rgba(0,0,0,.55)'); tp.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = tp; ctx.fillRect(0, 0, W, 330);
+}
+// ── end card (cream) ─────────────────────────────────────────
+function endCard(t) {   // wide layout: mesh mark on the left, copy left-aligned on the right
+  const v = t - CREAM_AT;
+  ctx.fillStyle = '#f2ece3'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(CX, 520, 0, CX, 520, 1300); g.addColorStop(0, 'rgba(255,253,249,.8)'); g.addColorStop(1, 'rgba(222,210,196,.7)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  header(t, false);
+  const mx = 560, my = 590, km = eback(p(v, .15, .7));
+  // mark: a small fully-connected mesh of 9 dots
+  ctx.save(); ctx.translate(mx, my); ctx.scale(km, km);
+  const halo = ctx.createRadialGradient(0, 0, 10, 0, 0, 230); halo.addColorStop(0, 'rgba(232,110,76,.28)'); halo.addColorStop(1, 'rgba(232,110,76,0)');
+  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, 230, 0, 7); ctx.fill();
+  const pts = Array.from({ length: 9 }, (_, i) => { const a = i / 9 * Math.PI * 2 - Math.PI / 2; return [Math.cos(a) * 150, Math.sin(a) * 150]; });
+  const kl = eo(p(v, .35, .8));
+  ctx.strokeStyle = 'rgba(216,97,62,.42)'; ctx.lineWidth = 2.5;
+  for (let i = 0; i < 9; i++) for (let j = i + 1; j < 9; j++) { ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(lerp(pts[i][0], pts[j][0], kl), lerp(pts[i][1], pts[j][1], kl)); ctx.stroke(); }
+  ctx.fillStyle = '#d8613e'; pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 16, 0, 7); ctx.fill(); });
+  ctx.beginPath(); ctx.arc(0, 0, 32, 0, 7); ctx.fill();
+  ctx.restore();
+  const TX = 860, kt = eo(p(v, .6, .7)), ks = eo(p(v, 1.1, .7)), ku = eo(p(v, 1.6, .7));
+  txt('보스가 뜨면', TX, 470 + (1 - kt) * 20, { size: 100, weight: 800, color: '#1d1714', alpha: kt, blur: (1 - kt) * 12, ls: -2 });
+  txt('렉이 생기는 이유', TX, 590 + (1 - kt) * 20, { size: 100, weight: 800, color: '#1d1714', alpha: kt, blur: (1 - kt) * 12, ls: -2 });
+  txt('인원 10배 → 갱신 약 100배', TX, 690, { size: 50, weight: 700, color: '#c4573a', alpha: ks, blur: (1 - ks) * 8 });
+  txt('N × (N − 1) · 이동만, 서로 다 보일 때', TX, 752, { size: 34, weight: 500, color: '#7a6b60', alpha: ks });
+  ctx.save(); ctx.globalAlpha = ku; ctx.fillStyle = 'rgba(216,97,62,.6)'; ctx.fillRect(TX, 860, 52, 1.5); ctx.restore();
+  txt('jungrok5.github.io/motion-graphics/boss-lag', TX + 72, 870, { size: 30, weight: 600, mono: true, color: '#c4573a', alpha: ku });
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  const cream = p(t, CREAM_AT, .45);
+  if (cream < 1) {
+    update3D(Math.min(t, CREAM_AT + .5));
+    composer.render();
+    ctx.drawImage(gl.domElement, 0, 0, W, H);
+    vignette();
+    ringTags(t);
+    counter(t);
+    caption(['보스가 뜨면'], t, .5, 2.6);
+    caption(['사람이 한곳에 몰린다'], t, 2.8, 5.5);
+    caption(['각자의 이동은', '보는 모두에게 간다'], t, 5.8, 8.1);
+    caption(['갱신은 N × (N − 1)로 는다', '인원 10배 → 갱신 약 100배'], t, 8.3, 10.7, { size: 58 });
+    caption(['시야가 2배면', '보이는 인원은 약 4배'], t, 10.9, 14.2);
+    caption(['먼 대상은 드물게'], t, T_FAR + .1, T_K + .05);
+    caption(['가까운 K명만'], t, T_K + .1, T_CH + .05);
+    caption(['채널로 나눈다'], t, T_CH + .1, CREAM_AT + .1);
+    header(t, true);
+    const fl = eio(p(t, CREAM_AT - .3, .35));
+    if (fl > 0) {   // even warm lift over the whole frame (no radial disc), then the cream crossfade takes over
+      ctx.fillStyle = `rgba(255,238,224,${(.4 * fl).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
+    }
+  }
+  if (cream > 0) { ctx.save(); ctx.globalAlpha = eio(cream); endCard(t); ctx.restore(); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+window.VIEWCOUNT = [CNT1, CNT2];
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = HEAD.map(h => [h[0], h[2], h[3]]);
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 9.6;   // full 200-player mesh, 39,800 counter
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
