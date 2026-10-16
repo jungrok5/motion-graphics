@@ -83,7 +83,7 @@ const tabs = cur => `<nav class="tabs" aria-label="같은 주제">${[['index.htm
 
 for (const v of VIDEOS) {
   const slug = v.path.replace(/\/$/, ''), src = `${slug}/index.html`;
-  if (!fs.existsSync(src)) continue;
+  if (v.vertical || !fs.existsSync(src)) continue;   // shorts share the full video's 설명 · 용어집
   const html = fs.readFileSync(src, 'utf8');
   const HEAD = Function(`return [${between(html, 'const HEAD = [', '\n];')}]`)();
   const notes = between(html, '<section class="notes" id="notes" hidden>', '</section>');

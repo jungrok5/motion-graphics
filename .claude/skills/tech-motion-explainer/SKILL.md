@@ -103,6 +103,21 @@ After the verify step, spawn a separate agent as a senior expert in the topic, u
   `node scripts/build-articles.mjs`, and tell the user in one or two lines what the review changed.
 - If a finding seems wrong to you, keep the text and say why in your summary instead of silently ignoring it.
 
+### Vertical shorts (9:16)
+When the user asks for a short (쇼츠 / 릴스 / 세로), make a separate 40–60s cut of an existing topic, not a full conversion.
+Pick 3–4 ideas that carry the topic's main message and redraw them for a phone screen.
+
+- Base: copy `boss-lag-shorts/index.html` (1080×1920 engine, vertical `headers()` / `progress()` / `caption()`, player sized 9:16).
+  Name it `<slug>-shorts/`. Keep the numbers and claims identical to the reviewed full video.
+- Safe area: shorts apps draw over the top ~180px, the bottom ~380px and a right-side column. Keep content in
+  x 60–900, y 200–1530: header y 220–400, picture y 420–1330, a two-line caption y 1380–1520.
+- Type: title 68, caption 46, labels ≥ 28. One idea per screen; the caption states it in one line.
+- End card: the takeaway in two short lines and the full video's link (`jungrok5.github.io/motion-graphics/<slug>`).
+- The player nav links to the full video's 영상 · 설명 · 용어집; shorts have no notes of their own.
+- Verify the same way (stills, `check-player`), then bake the MP4 to upload: `node scripts/render.mjs <slug>-shorts/index.html out/<slug>-shorts.mp4`.
+- Gallery entry: `{ path: '<slug>-shorts/', vertical: true, mp4: 'out/<slug>-shorts.mp4', full: '<slug>/', … }`;
+  add a `세로 쇼츠` link to the full video's player nav.
+
 ### 6. Deliver
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
   `{"article.html": "<slug>/article.html", "terms.html": "<slug>/terms.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.

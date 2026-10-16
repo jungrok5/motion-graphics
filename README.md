@@ -45,6 +45,14 @@ MMO 게임 서버와 네트워크에서 생기는 일을 **인프라팀이 이�
 | 내 스킬 하나가 상대 화면에 뜨기까지 | 1:25 | 입력부터 네트워크 · 서버 틱 · 다운링크 · 상대 클라 보간과 렌더까지 단계별 지연과 합계 | [영상](https://jungrok5.github.io/motion-graphics/skill-journey/) · [설명](https://jungrok5.github.io/motion-graphics/skill-journey/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/skill-journey/terms.html) |
 | 언리얼 클라의 스레드와 렉 | 1:52 | 게임 · 렌더 · GPU 스레드와 자체 리시브 · 센드 스레드, FPS가 패킷 적용과 화면 지연에 주는 영향, 보스전 GPU 대기와 히치 | [영상](https://jungrok5.github.io/motion-graphics/ue-client-threads/) · [설명](https://jungrok5.github.io/motion-graphics/ue-client-threads/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/ue-client-threads/terms.html) |
 
+**세로 쇼츠**
+
+공유용 9:16 짧은 버전입니다. 본편의 핵심 장면만 휴대폰 화면에 맞게 다시 그렸고, 끝에서 본편으로 이어집니다.
+
+| 쇼츠 | 길이 | 다루는 내용 | 보기 |
+|---|---|---|---|
+| 보스가 뜨면 왜 렉이 걸릴까? | 0:50 | 인원 10배 → 갱신 약 100배, 시야 2배 → 보이는 인원 약 4배, 줄이는 방법 | [쇼츠](https://jungrok5.github.io/motion-graphics/boss-lag-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+
 ## 한 주제의 세 페이지
 
 | 페이지 | 파일 | 내용 |
@@ -77,6 +85,8 @@ MMO 게임 서버와 네트워크에서 생기는 일을 **인프라팀이 이�
 5. **전문가 검수:** 별도 에이전트가 그 주제의 시니어 전문가로서 화면과 글을 읽는다.
    틀린 내용은 반드시 고치고, 오해 소지는 짧게 고칠 수 있을 때 고친다. 설명을 위한 단순화와 예시 수치는 허용한다.
 6. **배포:** 설명 · 용어집 페이지를 생성하고, 목록과 README에 추가한 뒤 푸시한다.
+
+세로 쇼츠는 "이 주제로 쇼츠 만들어줘"라고 하면 됩니다. 본편의 핵심 3~4장면을 1080×1920으로 다시 그리고, 업로드용 MP4까지 굽습니다.
 
 문구 규칙도 스킬에 들어 있습니다. 짧은 평서문으로 쓰고, "~의 길" 같은 비유나 대구로 끝나는 표어는 쓰지 않으며,
 같은 수준끼리 비교하고, 효과를 부풀리지 않습니다.
@@ -122,10 +132,11 @@ MMO 게임 서버와 네트워크에서 생기는 일을 **인프라팀이 이�
 <주제>/index.html          영상 (설명 · 용어집 원본 포함)
 <주제>/article.html        설명 (생성됨)
 <주제>/terms.html          용어집 (생성됨)
+<주제>-shorts/index.html   세로 쇼츠 (본편의 설명 · 용어집을 같이 씀)
 index.html                 전체 목록 페이지 (VIDEOS 배열에 주제 추가)
 assets/fonts/              Pretendard, JetBrains Mono (둘 다 OFL)
 scripts/                   렌더 · 점검 · 페이지 생성 스크립트
-out/                       구운 MP4 (proto-bot-pipeline 예시)
+out/                       구운 MP4 (쇼츠 업로드용 포함)
 .claude/skills/tech-motion-explainer/   영상 제작 스킬
 .github/workflows/pages.yml             GitHub Pages 배포
 ```
