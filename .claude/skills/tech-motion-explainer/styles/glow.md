@@ -1,8 +1,7 @@
-# Style A · 빛 입자 (glow)
+# 흐름과 관계를 빛으로 — craft notes (first samples: skill-journey-glow, boss-lag-glow)
 
-Reference feel: near-black space, thousands of warm peach/white particles drawn additively, thin glowing filaments, soft bokeh orbs,
-a slow orbiting camera, a structure that forms and morphs; a thin header (`A LOOK INSIDE · …` left, `0N / 05 · NAME` right, accent rule under it);
-one or two bold white caption lines near the bottom that fade in word by word; a bright cream end card with one mark, title, subtitle and a small url.
+The look of the first sample was copied from a reference and is not the rule; take the look from the topic (see README.md).
+Techniques below still apply.
 
 What worked (skill-journey-glow, boss-lag-glow):
 - Points as a custom shader material with in-shader depth of field: grow the point by its circle of confusion so out-of-focus points become bokeh

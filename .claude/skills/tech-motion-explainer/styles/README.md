@@ -1,43 +1,46 @@
-# Visual styles (3D, WebGL)
+# Other ways to explain (3D, WebGL)
 
-The default look is the 2D canvas explainer (dense information, 1–2 min, baked to MP4).
-A style version of a topic comes in two cuts:
-- **Wide (PC, 1920×1080, `<slug>-<style>-wide/`) = the full explainer in the new look.** Same chapters, timing, numbers, claims, footnotes and hidden notes
-  as the reviewed 2D video `<slug>/index.html`; nav links to its `article.html` and `terms.html`, so the set 영상 · 설명 · 용어집 still holds.
-  Build it from the 2D video, chapter by chapter, and compare stills of the same moments to make sure nothing was dropped.
-- **Vertical (mobile, 1080×1920, `<slug>-<style>/`) = a ~20 s cut** of the main message for sharing. Use one when the user asks
-for a different 그림체 / 스타일 / 광고 느낌 / 3D, or names one below. Pick by what the topic is:
+A "style" here is an **approach to explaining**, not a look. Each approach is a principle for how the picture carries the idea;
+the look (palette, type, header, end card, materials) comes from the topic itself. References people send are inspiration for the
+principle and the craft level, never a template: do not copy a reference's colors, header wording, title typography, end card or layout.
 
-| Style | Base pages (copy one) | Fits topics that are… |
-|---|---|---|
-| A · 빛 입자 (glow) | `skill-journey-glow/`, `boss-lag-glow/` (+ `-wide/`) | a flow or a crowd: things travel, gather, connect, fan out |
-| B · 3D 유리 패널 (glass) | `skill-journey-glass/`, `boss-lag-glass/` (+ `-wide/`) | a sequence of stages with real content (fields, lists, numbers) per stage |
-| C · 연속 줌인 (zoom) | `packet-zoom/` | "what is inside what": hardware down to bits, system down to one record |
+## The approaches
 
-Details per style: `glow.md`, `glass.md`, `zoom.md`.
+| Approach | Principle | Fits when the topic… | Does not fit when… |
+|---|---|---|---|
+| **분해해 들어가기** (open it up) | Start from something you can see, take it apart, and keep going inside until the working principle is visible. | has a real nesting: a thing that physically or structurally contains the thing that matters (packet → fields → bits; server process → threads → one tick; one client frame → thread work). | the idea is a comparison, a rule or a decision, with nothing to open. |
+| **흐름과 관계를 빛으로** (make the invisible flow visible) | Show data movement, connection density, pressure or waiting as light, particles and links, so the shape of the load is felt. | is about something moving, piling up or connecting (a packet's path, N × (N − 1) links, back-pressure through queues). | the point is a specific artifact the viewer must read (code, a log line, a metric table). |
+| **실물을 공간에 늘어놓기** (put the real artifacts in space) | Put the actual things engineers look at (files, code, logs, dashboards, timelines) in a space and walk through them in order. | is a pipeline or a procedure whose steps produce or read real artifacts (codegen pipeline, a diagnosis checklist with metrics). | there are no real artifacts, only an abstract mechanism. |
 
-## Common engine (all three)
-- three.js 0.170 is vendored in `assets/vendor/three/`. Importmap:
+If none fits, keep the 2D explainer. Do not force a topic into an approach; a forced one reads as a template pasted on.
+
+## Choosing, per topic
+1. Write one sentence: "the viewer understands it when they see ___." If the blank is *inside* something → 분해. If it is *movement or density* → 흐름.
+   If it is *the real screen/file* → 실물. Otherwise → 2D.
+2. Derive the look from the subject's own world: what the thing really looks like or what the engineer really looks at
+   (a profiler timeline, a packet capture, a rack, a log viewer, a game scene). Pick palette and type from that, not from a reference.
+3. Decide the beats from the reviewed 2D video's chapters; every chapter's facts must survive.
+
+## Cuts and pages
+- **Wide (PC, 1920×1080, `<slug>-<approach>-wide/`) = the full explainer**: same chapters, timing, numbers, claims, footnotes and hidden notes
+  as the reviewed 2D video `<slug>/index.html`, nav to its `article.html` and `terms.html`. Compare stills of the same moments chapter by chapter.
+- **Vertical (mobile, 1080×1920, `<slug>-<approach>/`) = a ~20 s cut** of the main message. Recompose for each frame; never letterbox.
+
+## Engine (shared)
+- three.js 0.170 vendored in `assets/vendor/three/`; importmap
   `{"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}`.
-- Offscreen `WebGLRenderer({antialias: true, preserveDrawingBuffer: true})` at the canvas size → `EffectComposer` (RenderPass, UnrealBloomPass, OutputPass)
-  → each frame `ctx.drawImage(gl.domElement, 0, 0)` onto the visible 2D canvas `#c` → header, counters and captions drawn in 2D on top
-  (Pretendard / JetBrains Mono, same fonts as every page). `scripts/render.mjs` and `check-player.mjs` work unchanged because they read `#c`.
-- Every frame is a pure function of t: camera, positions, opacity and canvas-texture contents come from t only (seeded random, no frame-to-frame state;
-  trails are re-sampled from earlier t). Expose `window.DURATION`, `window.ready`, `window.renderAt`.
-- Player shell: copy from the base page (vertical: 9:16 player of the `-shorts` pages; wide: 16:9 player of the full videos). Nav links point to the
-  topic's full video, 설명 and 용어집.
-- Facts: same numbers and claims as the reviewed full video of the topic; mark examples once (`* 수치는 예시`). Copy rules from SKILL.md still apply.
-- Orientation: the wide and the vertical are separate pages; recompose for each frame shape, do not letterbox. Lists and tables from the 2D
-  video go in clean 2D overlay columns (wide) or glass panels, large enough to read on a laptop (body ≥ 28px, key numbers ≥ 90px).
+- Offscreen `WebGLRenderer({antialias: true, preserveDrawingBuffer: true})` → `EffectComposer` (RenderPass, UnrealBloomPass, OutputPass) →
+  `ctx.drawImage(gl.domElement, 0, 0)` onto `#c` → 2D text on top. `render.mjs` and `check-player.mjs` work unchanged.
+- Every frame a pure function of t (seeded random, no frame-to-frame state). `window.DURATION`, `window.ready`, `window.renderAt`.
+- Lists and tables from the 2D video become clean 2D text columns or in-scene panels, readable on a laptop (body ≥ 28px, key numbers ≥ 90px).
+- Real-time cost matters (the page is the deliverable): InstancedMesh, hide what is out of view, modest shaders.
 
 ## Verify
-- Stills as usual (`render.mjs --stills`); software WebGL in the container takes ~1–2 s per still. Check beat ends and in-between moments, compare
-  side by side with the reference frames, iterate at least 3 rounds. `check-player.mjs` → `errors: []`.
-- Save `<folder>/poster.png` (one representative still); the gallery's 스타일 실험 cards show it instead of a live iframe
-  (several live WebGL iframes on one page would be heavy).
-- **MP4: do not bake unless asked.** In the container it takes 20+ minutes per 20 s (no GPU). The pages play live in a normal browser.
-- Real-time cost matters because the page is the deliverable: InstancedMesh / merged geometry, hide what is out of view, and keep shader work modest.
+- Stills (`render.mjs --stills`, ~1–2 s each in the container), every chapter end and middle, ≥ 3 rounds. `check-player.mjs` exits 0.
+- Look test: put a still next to the reference that inspired it. If it reads as the same video with our words swapped in, redo the look.
+- Save `<folder>/poster.png`; gallery cards in `LAB` use it.
+- **No MP4 unless asked** (20+ min per 20 s without a GPU).
 
-## Gallery and README
-Add one card per topic × style to `LAB` in the root `index.html` (`style`, `wide`, `tall`, `mp4` if one exists, `full`, `title`, `length`, `desc`, `tags`)
-and a row to the README's 스타일 실험 table.
+## Craft notes per approach
+`zoom.md` (분해), `glow.md` (흐름), `glass.md` (실물). These hold techniques that worked and what went wrong in the first samples.
+The first samples (`*-glow`, `*-glass`, `packet-zoom`) copied their references' surface too closely; use them for technique, not for look.

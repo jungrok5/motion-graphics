@@ -1,9 +1,7 @@
-# Style C · 연속 줌인 (zoom)
+# 분해해 들어가기 — craft notes (first sample: packet-zoom)
 
-Reference feel: one unbroken camera move that keeps diving into smaller structures (powers of ten); each level a lit 3D model in graphite/warm greys,
-exploded views where parts lift apart, one accent color (lime) for the thing being followed; a "FIELD OF VIEW (화면 폭)" ruler on the right edge with a
-sliding readout; bottom-left editorial caption per level (uppercase English title, uppercase English subtitle with "ILLUSTRATIVE" where the layout is generic,
-one Korean line); small callout boxes with leader lines.
+The look of the first sample was copied from a reference and is not the rule; take the look from the topic (see README.md).
+Techniques below still apply.
 
 What worked (packet-zoom):
 - Nest levels: model each level near unit size in its own unit (m, 10 cm, cm, mm, 0.1 mm, µm, 10 nm) and place it inside its parent at 1/10–1/100 scale.

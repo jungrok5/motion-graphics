@@ -1,8 +1,7 @@
-# Style B · 3D 유리 패널 (glass)
+# 실물을 공간에 늘어놓기 — craft notes (first samples: skill-journey-glass, boss-lag-glass)
 
-Reference feel: deep navy world, an endless perspective floor grid with glowing lines, frosted-glass panels (rounded, bright blue gradient,
-light edge highlight) tilted in 3D showing real UI content, glowing connector lines fanning from panel rows, a camera that cranes, orbits and dollies
-between panels, a finale that pulls back over hundreds of small panels, then a light end card.
+The look of the first sample was copied from a reference and is not the rule; take the look from the topic (see README.md).
+Techniques below still apply.
 
 What worked (skill-journey-glass, boss-lag-glass):
 - Panel UI is a 2D canvas (e.g. 900×1260) used as a CanvasTexture on a plane; redraw it from t (cache keyed on t quantized to 1/60 s).
