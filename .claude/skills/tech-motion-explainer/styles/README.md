@@ -1,7 +1,11 @@
 # Visual styles (3D, WebGL)
 
 The default look is the 2D canvas explainer (dense information, 1–2 min, baked to MP4).
-These styles are short cinematic cuts (~20 s, or ~45 s for the zoom) of an existing, reviewed topic. Use one when the user asks
+A style version of a topic comes in two cuts:
+- **Wide (PC, 1920×1080, `<slug>-<style>-wide/`) = the full explainer in the new look.** Same chapters, timing, numbers, claims, footnotes and hidden notes
+  as the reviewed 2D video `<slug>/index.html`; nav links to its `article.html` and `terms.html`, so the set 영상 · 설명 · 용어집 still holds.
+  Build it from the 2D video, chapter by chapter, and compare stills of the same moments to make sure nothing was dropped.
+- **Vertical (mobile, 1080×1920, `<slug>-<style>/`) = a ~20 s cut** of the main message for sharing. Use one when the user asks
 for a different 그림체 / 스타일 / 광고 느낌 / 3D, or names one below. Pick by what the topic is:
 
 | Style | Base pages (copy one) | Fits topics that are… |
@@ -23,8 +27,8 @@ Details per style: `glow.md`, `glass.md`, `zoom.md`.
 - Player shell: copy from the base page (vertical: 9:16 player of the `-shorts` pages; wide: 16:9 player of the full videos). Nav links point to the
   topic's full video, 설명 and 용어집.
 - Facts: same numbers and claims as the reviewed full video of the topic; mark examples once (`* 수치는 예시`). Copy rules from SKILL.md still apply.
-- Orientation: make the wide (PC, 1920×1080, folder `<slug>-<style>-wide/`) and the vertical (mobile, 1080×1920, `<slug>-<style>/`) as separate pages.
-  Recompose for each frame shape; do not letterbox.
+- Orientation: the wide and the vertical are separate pages; recompose for each frame shape, do not letterbox. Lists and tables from the 2D
+  video go in clean 2D overlay columns (wide) or glass panels, large enough to read on a laptop (body ≥ 28px, key numbers ≥ 90px).
 
 ## Verify
 - Stills as usual (`render.mjs --stills`); software WebGL in the container takes ~1–2 s per still. Check beat ends and in-between moments, compare
