@@ -55,6 +55,8 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 서버 안의 50ms | 0:55 | 틱 예산, 큐 적체, 브로드캐스트 N×(N−1), 틱을 막는 DB · 락 · GC | [쇼츠](https://jungrok5.github.io/motion-graphics/server-tick-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/server-tick-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/server-tick/) |
 | 클라가 느리면 서버도 느려진다 | 0:56 | 처리 감소 → Zero Window → 서버 송신 큐, 큐 상한, 클라 · 서버 해결법 | [쇼츠](https://jungrok5.github.io/motion-graphics/slow-client-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/slow-client-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/slow-client/) |
 | 언리얼 클라의 스레드와 FPS | 0:56 | 리시브 · 게임 · 렌더 · GPU 스레드, 다음 틱 적용, 60fps ≈ 88ms vs 15fps ≈ 263ms | [쇼츠](https://jungrok5.github.io/motion-graphics/ue-client-threads-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/ue-client-threads-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/ue-client-threads/) |
+| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 0:55 | 예측과 판정, 원인 두 가지(네트워크 · 판정 불일치), 재조정 · 스무딩 | [쇼츠](https://jungrok5.github.io/motion-graphics/rubber-banding-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/rubber-banding-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/rubber-banding/) |
+| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 0:55 | 렉의 세 구간, 클라 · 네트워크 · 서버 렉의 신호, 전송 핑 vs 앱 핑, 판별 순서 | [쇼츠](https://jungrok5.github.io/motion-graphics/lag-diagnosis-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/lag-diagnosis-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) |
 
 ## 한 주제의 세 페이지
 
