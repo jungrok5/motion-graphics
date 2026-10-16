@@ -57,6 +57,8 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 언리얼 클라의 스레드와 FPS | 0:56 | 리시브 · 게임 · 렌더 · GPU 스레드, 다음 틱 적용, 60fps ≈ 88ms vs 15fps ≈ 263ms | [쇼츠](https://jungrok5.github.io/motion-graphics/ue-client-threads-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/ue-client-threads-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/ue-client-threads/) |
 | 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 0:55 | 예측과 판정, 원인 두 가지(네트워크 · 판정 불일치), 재조정 · 스무딩 | [쇼츠](https://jungrok5.github.io/motion-graphics/rubber-banding-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/rubber-banding-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/rubber-banding/) |
 | 렉 걸렸다. 서버 탓일까, 내 탓일까? | 0:55 | 렉의 세 구간, 클라 · 네트워크 · 서버 렉의 신호, 전송 핑 vs 앱 핑, 판별 순서 | [쇼츠](https://jungrok5.github.io/motion-graphics/lag-diagnosis-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/lag-diagnosis-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) |
+| 내 스킬 하나가 상대 화면에 뜨기까지 | 0:54 | 다섯 구간, 네트워크 편도, 내 화면 ~25ms vs 상대 화면 ~221ms, 보간 버퍼 | [쇼츠](https://jungrok5.github.io/motion-graphics/skill-journey-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
+| 50ms와 RTT, 렉은 어디서 생길까? | 0:54 | 틱 50ms 예산, 과부하 시 응답 70→180ms, RTT 30 vs 200ms, 누가 늦어지나 | [쇼츠](https://jungrok5.github.io/motion-graphics/tick-and-rtt-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tick-and-rtt-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
 
 ## 한 주제의 세 페이지
 
