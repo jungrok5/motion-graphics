@@ -30,8 +30,12 @@ desk.on('pageerror', e => errors.push(String(e)));
 await desk.goto(url);
 await desk.evaluate(() => window.ready);
 await desk.click('#big');
-await desk.waitForTimeout(1200);
-const afterPlay = await desk.textContent('#time');
+// #time reads "0:03 / 1:21"; compare only the current position. Software-WebGL pages draw slowly, so wait up to 8 s.
+const cur = s => (s || '').split('/')[0].trim();
+let afterPlay = '0:00';
+for (let waited = 0; waited < 8000 && cur(afterPlay) === '0:00'; waited += 300) {
+  await desk.waitForTimeout(300); afterPlay = await desk.textContent('#time');
+}
 const bigHidden = !(await desk.isVisible('#big'));
 const chapters = await desk.$$('#chapters button');
 await chapters[Math.min(2, chapters.length - 1)].click();
@@ -59,5 +63,5 @@ if (shotsAt > 0) {
 console.log({ afterPlay, bigHidden, afterJump, rateAfterClick, notesChapters, setLinks, phoneOverflow: overflow, errors });
 await browser.close();
 server.close();
-const ok = !errors.length && bigHidden && !overflow && afterPlay !== '0:00' && afterJump !== afterPlay && rateAfterClick === '0.75×';
+const ok = !errors.length && bigHidden && !overflow && cur(afterPlay) !== '0:00' && cur(afterJump) !== cur(afterPlay) && rateAfterClick === '0.75×';
 process.exit(ok ? 0 : 1);
