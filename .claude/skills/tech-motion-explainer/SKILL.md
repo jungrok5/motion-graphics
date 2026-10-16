@@ -1,6 +1,6 @@
 ---
 name: tech-motion-explainer
-description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a set of three pages per topic (video player · written explanation · topic glossary), plus an optional MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline.
+description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a set of three pages per topic (video player · written explanation · topic glossary), plus an MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline.
 ---
 
 # Tech Motion Explainer
@@ -125,7 +125,7 @@ Pick 3–4 ideas that carry the topic's main message and redraw them for a phone
   The page tries `assets/fonts/` first, then `../assets/fonts/`.
 - Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a row in the matching group table under "영상 목록" in `README.md` (title · length · one-line summary · 영상 / 설명 / 용어집 links).
   Run `node scripts/build-articles.mjs` again if anything changed, then commit and push (the generated pages are committed).
-- MP4 only if asked: `node scripts/render.mjs <slug>/index.html out/<slug>.mp4` (~3.5 min per minute of video).
+- Bake the MP4 too: `node scripts/render.mjs <slug>/index.html out/<slug>.mp4` (~3.5 min per minute of video); the gallery entry carries `mp4: 'out/<slug>.mp4'` and the README row a `[MP4](…/out/<slug>.mp4)` link.
 
 ## Rules
 - **Determinism**: no `Math.random()`, `Date`, or `performance.now()` inside scenes. Use `rng(seed)`, and derive everything from `t`.
