@@ -17,33 +17,33 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 
 | 주제 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
-| 패킷 정의 하나로, 개발부터 라이브까지 | 1:04 | 프로토버퍼로 패킷을 정의하고 클라 · 서버 · 봇 코드를 생성해, 서버 선개발 테스트와 퍼블리셔 부하 테스트까지 잇는 흐름 | [영상](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) · [설명](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/terms.html) |
-| 이동 패킷, 바이트를 줄이면 무슨 일이? | 1:37 | 같은 이동 정보를 34B · 24B · 19B · 8B로 담을 때 송신 트래픽 · 비용 · 서버 대수 · 수용 인원이 얼마나 달라지는지, 프로토버퍼는 어떻게 쓰는지 | [영상](https://jungrok5.github.io/motion-graphics/one-byte/) · [설명](https://jungrok5.github.io/motion-graphics/one-byte/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/one-byte/terms.html) |
+| 패킷 정의 하나로, 개발부터 라이브까지 | 1:04 | 프로토버퍼로 패킷을 정의하고 클라 · 서버 · 봇 코드를 생성해, 서버 선개발 테스트와 퍼블리셔 부하 테스트까지 잇는 흐름 | [영상](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) · [설명](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/proto-bot-pipeline.mp4) |
+| 이동 패킷, 바이트를 줄이면 무슨 일이? | 1:37 | 같은 이동 정보를 34B · 24B · 19B · 8B로 담을 때 송신 트래픽 · 비용 · 서버 대수 · 수용 인원이 얼마나 달라지는지, 프로토버퍼는 어떻게 쓰는지 | [영상](https://jungrok5.github.io/motion-graphics/one-byte/) · [설명](https://jungrok5.github.io/motion-graphics/one-byte/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/one-byte/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/one-byte.mp4) |
 
 **서버 안에서**
 
 | 주제 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
-| 서버 안의 50ms, 무슨 일이 일어날까? | 1:21 | 스레드 구조와 틱 루프, 큐 적체 · AOI 브로드캐스트 · DB · 락 · GC가 틱을 늦추는 방식과 볼 지표 | [영상](https://jungrok5.github.io/motion-graphics/server-tick/) · [설명](https://jungrok5.github.io/motion-graphics/server-tick/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/server-tick/terms.html) |
-| 보스가 뜨면 왜 렉이 걸릴까? | 1:22 | 인원이 몰리면 갱신이 N×(N−1)로 늘고, 시야가 넓으면 더 나빠지는 이유와 서버 · 망 · 클라에서 터지는 지점 | [영상](https://jungrok5.github.io/motion-graphics/boss-lag/) · [설명](https://jungrok5.github.io/motion-graphics/boss-lag/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/boss-lag/terms.html) |
-| 클라가 느리면 서버도 느려진다 | 1:49 | 클라 수신 큐 → Zero Window → 서버 송신 큐로 압력이 올라오는 과정, 송신 큐 상한의 역할, 클라 · 서버 쪽 해결 방법 | [영상](https://jungrok5.github.io/motion-graphics/slow-client/) · [설명](https://jungrok5.github.io/motion-graphics/slow-client/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/slow-client/terms.html) |
+| 서버 안의 50ms, 무슨 일이 일어날까? | 1:21 | 스레드 구조와 틱 루프, 큐 적체 · AOI 브로드캐스트 · DB · 락 · GC가 틱을 늦추는 방식과 볼 지표 | [영상](https://jungrok5.github.io/motion-graphics/server-tick/) · [설명](https://jungrok5.github.io/motion-graphics/server-tick/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/server-tick/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/server-tick.mp4) |
+| 보스가 뜨면 왜 렉이 걸릴까? | 1:22 | 인원이 몰리면 갱신이 N×(N−1)로 늘고, 시야가 넓으면 더 나빠지는 이유와 서버 · 망 · 클라에서 터지는 지점 | [영상](https://jungrok5.github.io/motion-graphics/boss-lag/) · [설명](https://jungrok5.github.io/motion-graphics/boss-lag/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/boss-lag/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag.mp4) |
+| 클라가 느리면 서버도 느려진다 | 1:49 | 클라 수신 큐 → Zero Window → 서버 송신 큐로 압력이 올라오는 과정, 송신 큐 상한의 역할, 클라 · 서버 쪽 해결 방법 | [영상](https://jungrok5.github.io/motion-graphics/slow-client/) · [설명](https://jungrok5.github.io/motion-graphics/slow-client/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/slow-client/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/slow-client.mp4) |
 
 **네트워크와 TCP**
 
 | 주제 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
-| 50ms와 RTT, 렉은 어디서 생길까? | 1:23 | 서버 틱 처리시간이 50ms를 넘을 때와 RTT가 느릴 때 각각 무엇이 달라지는지 | [영상](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) · [설명](https://jungrok5.github.io/motion-graphics/tick-and-rtt/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tick-and-rtt/terms.html) |
-| 사라진 패킷 하나가 전부를 멈춘다 | 1:21 | TCP 재전송이 언제 생기는지(빠른 재전송 · RTO · HOL 블로킹), 클라 · 서버 · 인프라에서 보이는 현상과 지표 | [영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) · [설명](https://jungrok5.github.io/motion-graphics/tcp-retransmission/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tcp-retransmission/terms.html) |
-| Nagle과 TCP_NODELAY | 1:41 | 작은 게임 패킷이 Nagle · Delayed ACK 때문에 늦어지고 손실 때 RTO까지 기다리는 이유, TCP_NODELAY와 틱 배칭 | [영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) · [설명](https://jungrok5.github.io/motion-graphics/nagle-nodelay/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/nagle-nodelay/terms.html) |
+| 50ms와 RTT, 렉은 어디서 생길까? | 1:23 | 서버 틱 처리시간이 50ms를 넘을 때와 RTT가 느릴 때 각각 무엇이 달라지는지 | [영상](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) · [설명](https://jungrok5.github.io/motion-graphics/tick-and-rtt/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tick-and-rtt/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/tick-and-rtt.mp4) |
+| 사라진 패킷 하나가 전부를 멈춘다 | 1:21 | TCP 재전송이 언제 생기는지(빠른 재전송 · RTO · HOL 블로킹), 클라 · 서버 · 인프라에서 보이는 현상과 지표 | [영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) · [설명](https://jungrok5.github.io/motion-graphics/tcp-retransmission/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/tcp-retransmission/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission.mp4) |
+| Nagle과 TCP_NODELAY | 1:41 | 작은 게임 패킷이 Nagle · Delayed ACK 때문에 늦어지고 손실 때 RTO까지 기다리는 이유, TCP_NODELAY와 틱 배칭 | [영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) · [설명](https://jungrok5.github.io/motion-graphics/nagle-nodelay/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/nagle-nodelay/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay.mp4) |
 
 **클라이언트와 체감**
 
 | 주제 | 길이 | 다루는 내용 | 보기 |
 |---|---|---|---|
-| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 1:07 | 러버밴딩이 생기는 구조(클라 예측 · 서버 판정)와 원인, 줄이는 방법 | [영상](https://jungrok5.github.io/motion-graphics/rubber-banding/) · [설명](https://jungrok5.github.io/motion-graphics/rubber-banding/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/rubber-banding/terms.html) |
-| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 1:13 | 클라렉 · 네트워크렉 · 서버렉을 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 가르는 순서 | [영상](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) · [설명](https://jungrok5.github.io/motion-graphics/lag-diagnosis/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/lag-diagnosis/terms.html) |
-| 내 스킬 하나가 상대 화면에 뜨기까지 | 1:25 | 입력부터 네트워크 · 서버 틱 · 다운링크 · 상대 클라 보간과 렌더까지 단계별 지연과 합계 | [영상](https://jungrok5.github.io/motion-graphics/skill-journey/) · [설명](https://jungrok5.github.io/motion-graphics/skill-journey/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/skill-journey/terms.html) |
-| 언리얼 클라의 스레드와 렉 | 1:52 | 게임 · 렌더 · GPU 스레드와 자체 리시브 · 센드 스레드, FPS가 패킷 적용과 화면 지연에 주는 영향, 보스전 GPU 대기와 히치 | [영상](https://jungrok5.github.io/motion-graphics/ue-client-threads/) · [설명](https://jungrok5.github.io/motion-graphics/ue-client-threads/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/ue-client-threads/terms.html) |
+| 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 1:07 | 러버밴딩이 생기는 구조(클라 예측 · 서버 판정)와 원인, 줄이는 방법 | [영상](https://jungrok5.github.io/motion-graphics/rubber-banding/) · [설명](https://jungrok5.github.io/motion-graphics/rubber-banding/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/rubber-banding/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/rubber-banding.mp4) |
+| 렉 걸렸다. 서버 탓일까, 내 탓일까? | 1:13 | 클라렉 · 네트워크렉 · 서버렉을 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 가르는 순서 | [영상](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) · [설명](https://jungrok5.github.io/motion-graphics/lag-diagnosis/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/lag-diagnosis/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/lag-diagnosis.mp4) |
+| 내 스킬 하나가 상대 화면에 뜨기까지 | 1:25 | 입력부터 네트워크 · 서버 틱 · 다운링크 · 상대 클라 보간과 렌더까지 단계별 지연과 합계 | [영상](https://jungrok5.github.io/motion-graphics/skill-journey/) · [설명](https://jungrok5.github.io/motion-graphics/skill-journey/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/skill-journey/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey.mp4) |
+| 언리얼 클라의 스레드와 렉 | 1:52 | 게임 · 렌더 · GPU 스레드와 자체 리시브 · 센드 스레드, FPS가 패킷 적용과 화면 지연에 주는 영향, 보스전 GPU 대기와 히치 | [영상](https://jungrok5.github.io/motion-graphics/ue-client-threads/) · [설명](https://jungrok5.github.io/motion-graphics/ue-client-threads/article.html) · [용어집](https://jungrok5.github.io/motion-graphics/ue-client-threads/terms.html) · [MP4](https://jungrok5.github.io/motion-graphics/out/ue-client-threads.mp4) |
 
 **모바일 세로 영상**
 
