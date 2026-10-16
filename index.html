@@ -85,6 +85,9 @@
     { path: 'tcp-retransmission/', title: '사라진 패킷 하나가 전부를 멈춘다', length: '1:21',
       desc: 'TCP 재전송이 왜 · 언제 생기는지(Fast Retransmit vs RTO, HOL 블로킹), 클라 · 서버 · 인프라에 나타나는 현상과 메트릭, 확인 명령과 완화법.',
       tags: ['TCP', 'retransmission', 'RTO', 'metrics'] },
+    { path: 'tcp-retransmission-shorts/', vertical: true, mp4: 'out/tcp-retransmission-shorts.mp4', full: 'tcp-retransmission/', title: '쇼츠 · 사라진 패킷 하나가 전부를 멈춘다', length: '0:55',
+      desc: '세로 쇼츠. Dup ACK 3개면 바로 재전송, 띄엄띄엄 보내면 RTO까지 기다린다. HOL 블로킹, ss · nstat으로 확인하고 줄이는 법을 55초에.',
+      tags: ['shorts', '9:16', 'TCP', 'retransmission', 'HOL'] },
     { path: 'skill-journey/', title: '내 스킬 하나가 상대 화면에 뜨기까지', length: '1:25',
       desc: '버튼 입력부터 예측 실행 · 패킷 생성, 네트워크 홉, 서버의 I/O · 큐 · 틱 검증 · 판정 · AOI, 다운링크, 상대 클라의 보간 · 렌더까지 단계별 경로와 지연 합계.',
       tags: ['input', 'packet', 'server tick', 'interpolation'] },
@@ -124,6 +127,9 @@
     { path: 'nagle-nodelay/', title: 'Nagle과 TCP_NODELAY', length: '1:41',
       desc: '작은 이동 · 스킬 패킷이 Nagle과 Delayed ACK 때문에 수십 ms 늦게 나가는 이유, 손실 시 dup ACK가 안 생겨 빠른 재전송 대신 RTO(200 ms+)를 기다리는 문제, TCP_NODELAY와 틱 배칭, 서버에서 볼 지표.',
       tags: ['nagle', 'delayed ack', 'TCP_NODELAY', 'retransmission'] },
+    { path: 'nagle-nodelay-shorts/', vertical: true, mp4: 'out/nagle-nodelay-shorts.mp4', full: 'nagle-nodelay/', title: '쇼츠 · Nagle과 TCP_NODELAY', length: '0:56',
+      desc: '세로 쇼츠. Nagle이 작은 스킬 패킷을 ACK까지 붙잡고, delayed ACK와 겹치면 더 늦고, 손실 시 RTO까지 기다린다. TCP_NODELAY + 틱 배칭을 56초에.',
+      tags: ['shorts', '9:16', 'Nagle', 'TCP_NODELAY'] },
   ];
   const list = document.getElementById('list');
   for (const v of VIDEOS) {

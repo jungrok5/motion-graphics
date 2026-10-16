@@ -61,6 +61,8 @@ MMO 게임 서버와 네트워크에서 생기는 일을 풀어 쓴 기술 설�
 | 50ms와 RTT, 렉은 어디서 생길까? | 0:54 | 틱 50ms 예산, 과부하 시 응답 70→180ms, RTT 30 vs 200ms, 누가 늦어지나 | [쇼츠](https://jungrok5.github.io/motion-graphics/tick-and-rtt-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tick-and-rtt-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
 | 패킷 정의 하나로, 개발부터 라이브까지 | 0:57 | .proto → 클라 · 서버 · 봇 코드 생성, 필드 추가, 서버 먼저 봇 테스트, 부하 테스트로 장비 산정 | [쇼츠](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/proto-bot-pipeline-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) |
 | 이동 패킷, 바이트를 줄이면 무슨 일이? | 0:54 | 34/24/19/8B 인코딩, 1바이트 = 월 6.5TB, 34B → 8B면 −168TB/월, 프로토버퍼 비교 | [쇼츠](https://jungrok5.github.io/motion-graphics/one-byte-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/one-byte-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
+| 사라진 패킷 하나가 전부를 멈춘다 | 0:55 | Fast Retransmit vs RTO, HOL 블로킹, ss -ti · nstat 확인, 줄이는 법 | [쇼츠](https://jungrok5.github.io/motion-graphics/tcp-retransmission-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
+| Nagle과 TCP_NODELAY | 0:56 | Nagle 보류 규칙, delayed ACK +60ms, 손실 시 RTO 245ms vs 75ms, NODELAY + 틱 배칭 | [쇼츠](https://jungrok5.github.io/motion-graphics/nagle-nodelay-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
 
 ## 한 주제의 세 페이지
 

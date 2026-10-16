@@ -1,0 +1,714 @@
+<meta charset="utf-8">
+<title>TCP Retransmission Shorts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="TCP 재전송과 Head-of-Line 블로킹 세로 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="56" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:55</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../tcp-retransmission/">전체 영상</a><a href="../tcp-retransmission/article.html">설명</a><a href="../tcp-retransmission/terms.html">용어집</a></nav>
+</div>
+<!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script>
+// ─────────────────────────────────────────────────────────────
+//  TCP Retransmission Shorts
+//  Every frame is a pure function of time: renderAt(t).
+// ─────────────────────────────────────────────────────────────
+const W = 1080, H = 1920, DURATION = 55.5;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+const C = {
+  bg: '#070a13', text: '#e8ecf4', dim: '#8b95a7', faint: '#4b5568',
+  proto: '#a78bfa', client: '#38bdf8', server: '#fbbf24', bot: '#34d399',
+  pub: '#f472b6', red: '#f87171', panel: '#0e1424', line: '#24304a',
+};
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+// fade in at s, fade out at e
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const R = rng(7);
+const PARTS = Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * H, vx: (R() - .5) * 14, vy: -4 - R() * 10, s: 1 + R() * 2, a: .05 + R() * .18 }));
+
+// ── drawing helpers ──────────────────────────────────────────
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = C.text, align = 'left', base = 'alphabetic', alpha = 1, mono = false, ls = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono);
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  if (ls) ctx.letterSpacing = ls + 'px';
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function panel(x, y, w, h, o = {}) {
+  const { r = 18, fill = C.panel, stroke = C.line, glow = null, glowA = 1, alpha = 1, lw = 1.5, dash = null } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  if (glow) { ctx.shadowColor = rgba(glow, .55 * glowA); ctx.shadowBlur = 50; }
+  rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+  if (dash) ctx.setLineDash(dash);
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function chip(label, x, y, color, o = {}) {
+  const { alpha = 1, size = 18, align = 'left', fillA = .14 } = o;
+  font(size, 700, true);
+  const w = ctx.measureText(label).width + size * 1.2, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  rr(X, y - h / 2, w, h, h / 2); ctx.fillStyle = rgba(color, fillA); ctx.fill();
+  ctx.strokeStyle = rgba(color, .7); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, X + w / 2, y + 1); ctx.restore();
+  return w;
+}
+function dot(x, y, r, color, a = 1, glow = 18) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = color; ctx.shadowBlur = glow;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function check(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .36, y); ctx.lineTo(x - s * .1, y + s * .26); ctx.lineTo(x + s * .38, y - s * .28); ctx.stroke(); ctx.restore();
+}
+function cross(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .3, y - s * .3); ctx.lineTo(x + s * .3, y + s * .3);
+  ctx.moveTo(x + s * .3, y - s * .3); ctx.lineTo(x - s * .3, y + s * .3); ctx.stroke(); ctx.restore();
+}
+function botIcon(x, y, s, color, a = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * .07);
+  rr(x - s / 2, y - s * .36, s, s * .72, s * .2); ctx.fillStyle = rgba(color, .15); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - s * .36); ctx.lineTo(x, y - s * .54); ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y - s * .6, s * .07, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + s * .19, y - s * .04, s * .08, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - s * .16, y + s * .18); ctx.lineTo(x + s * .16, y + s * .18); ctx.stroke();
+  ctx.restore();
+}
+function bezPt(P, t) {
+  const [a, b, c, d] = P, u = 1 - t;
+  return [u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
+          u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]];
+}
+function bezLine(P, k, color, lw = 2, a = 1) {
+  if (k <= 0 || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+  for (let i = 0; i <= 48; i++) { const q = bezPt(P, k * i / 48); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ── tiny syntax highlighter ──────────────────────────────────
+const KW = new Set(['syntax', 'package', 'message', 'public', 'sealed', 'partial', 'class', 'final', 'var', 'new', 'const', 'get', 'set']);
+const TY = new Set(['string', 'int32', 'int64', 'int', 'int32_t', 'IMessage']);
+function tokens(line) {
+  const out = [], re = /(\/\/.*$|"[^"]*"|\s+|\d+|[A-Za-z_]\w*|.)/g; let m;
+  while ((m = re.exec(line))) {
+    const s = m[0]; let c = C.text;
+    if (s.startsWith('//')) c = C.faint;
+    else if (s[0] === '"') c = '#86efac';
+    else if (/^\d+$/.test(s)) c = C.server;
+    else if (KW.has(s)) c = C.proto;
+    else if (TY.has(s)) c = C.client;
+    else if (/^[^\w\s]$/.test(s)) c = C.dim;
+    out.push([s, c]);
+  }
+  return out;
+}
+// lines: array of strings. chars: how many characters are revealed (newline = 1).
+// insert: {idx, s, k, chars} — a line sliding in at idx (k: 0..1).
+function code(lines, x, y, o = {}) {
+  const { size = 24, lh = 36, chars = Infinity, alpha = 1, insert = null, hlW = 600 } = o;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, 500, true); ctx.textBaseline = 'alphabetic';
+  const cw = ctx.measureText('M').width; let left = chars, cursor = null;
+  const drawLine = (s, yy, limit) => {
+    let col = 0;
+    for (const [tok, c] of tokens(s)) {
+      if (limit <= 0) break;
+      const vis = tok.slice(0, limit); ctx.fillStyle = c;
+      ctx.fillText(vis, x + col * cw, yy); col += vis.length; limit -= vis.length;
+    }
+    return col;
+  };
+  let shift = 0;
+  const drawInsert = i => {
+    if (!insert || i !== insert.idx || insert.k <= 0) return;
+    {
+      const yy = y + i * lh; const k = insert.k;
+      ctx.save(); ctx.globalAlpha *= k;
+      ctx.fillStyle = rgba(C.bot, .16 * (insert.flash ?? 1)); ctx.fillRect(x - 18, yy - lh * .74, hlW, lh);
+      ctx.fillStyle = C.bot; ctx.fillRect(x - 18, yy - lh * .74, 4, lh);
+      drawLine(insert.s, yy, insert.chars ?? Infinity); ctx.restore();
+      shift = insert.k;
+    }
+  };
+  lines.forEach((ln, i) => {
+    drawInsert(i);
+    if (left <= 0) return;
+    const yy = y + (i + shift) * lh;
+    const col = drawLine(ln, yy, left);
+    cursor = [x + col * cw, yy]; left -= ln.length + 1;
+  });
+  drawInsert(lines.length);
+  ctx.restore();
+  return { cw, cursor };
+}
+
+// ── background, headers, progress ────────────────────────────
+function background(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const glow = (cx, cy, r, col) => { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+  glow(W * .18 + Math.sin(t * .2) * 80, H * .1, 900, 'rgba(167,139,250,0.10)');
+  glow(W * .86, H * .92 + Math.cos(t * .17) * 60, 900, 'rgba(56,189,248,0.08)');
+  ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
+  const off = (t * 10) % 60; ctx.beginPath();
+  for (let x = -60 + off; x < W; x += 60) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = -60 + off; y < H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  for (const q of PARTS) {
+    const x = ((q.x + t * q.vx) % W + W) % W, y = ((q.y + t * q.vy) % H + H) % H;
+    ctx.fillStyle = `rgba(200,210,255,${q.a})`; ctx.fillRect(x, y, q.s, q.s);
+  }
+}
+
+// [start, end, number, title, subtitle] — one row per chapter. Chapters own the top-left header zone (y < 190).
+// ── word-by-word title ───────────────────────────────────────
+function words(ws, cx, y, t, t0, o = {}) {
+  const { size = 96, weight = 800, stagger = .12, colors = [] } = o;
+  font(size, weight); const sp = size * .28;
+  const widths = ws.map(w => ctx.measureText(w).width);
+  let x = cx - (widths.reduce((a, b) => a + b, 0) + sp * (ws.length - 1)) / 2;
+  ws.forEach((w, i) => {
+    const k = eo(p(t, t0 + i * stagger, .8));
+    ctx.save(); ctx.globalAlpha *= k; font(size, weight); ctx.fillStyle = colors[i] || C.text;
+    if (colors[i]) { ctx.shadowColor = rgba(colors[i], .5); ctx.shadowBlur = 40; }
+    ctx.fillText(w, x, y + (1 - k) * 46); ctx.restore();
+    x += widths[i] + sp;
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  layout + shared helpers
+// ═════════════════════════════════════════════════════════════
+const fmt = n => Math.round(n).toLocaleString('en-US');
+// ── vertical layout (shorts) ─────────────────────────────────
+// Full-bleed frame; only text keeps a light margin from the shorts app's own UI (top ~110px, bottom ~280px).
+// Header y 100–340, picture y 370–1470, caption y 1500–1640. Side margins 60, centered on 540.
+const X0 = 60, X1 = 1020, CX = (X0 + X1) / 2;
+// Roles: proto = 데이터 세그먼트, server = 서버(송신측) · ACK, client = 클라(수신측) · 앱,
+//        pub = Dup ACK, bot = 재전송 성공 · 정상, red = 손실 · 정지
+
+// [start, end, number, title, subtitle, example-numbers?]
+const HEAD = [
+  [4.5, 15.5, '01', 'Dup ACK 3개면 재전송', '하나가 빠지면 같은 ACK가 반복된다', false],
+  [15.5, 28.0, '02', '띄엄띄엄이면 RTO', 'ACK가 안 오면 타이머가 끝나야 다시 보낸다', true],
+  [28.0, 39.0, '03', 'Head-of-Line 블로킹', '하나가 빠지면 뒤에 도착한 것까지 기다린다', false],
+  [39.0, 50.0, '04', '확인하고 줄이기', '지표로 확인하고, 구조로 피한다', true],
+];
+function headers(t) {
+  for (const [s, e, n, title, sub, ex] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a;
+    chip(n, X0 - (1 - k) * 30, 168, C.proto, { size: 32, alpha: k });
+    if (ex) txt('* 수치는 예시', X1, 180, { size: 34, weight: 600, color: C.dim, align: 'right', alpha: k2 });
+    txt(title, X0 - (1 - k) * 30, 262, { size: 80, weight: 800, alpha: k });
+    txt(sub, X0, 330, { size: 40, weight: 500, color: C.dim, alpha: k2 });
+    ctx.restore();
+  }
+}
+function progress(t) {   // thin bar only; the shorts app shows its own timeline
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .8; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(148,163,184,0.18)'; ctx.fillRect(X0, 110, X1 - X0, 4);
+  ctx.fillStyle = C.proto; ctx.fillRect(X0, 110, (X1 - X0) * clamp(t / DURATION), 4);
+  ctx.restore();
+}
+function caption(lines, u, t0, col = C.text) {
+  lines.forEach((l, i) => txt(l, CX, 1550 + i * 70, { size: i ? 44 : 54, weight: 800, align: 'center', color: i ? C.dim : col, alpha: eo(p(u, t0 + i * .5, .5)) }));
+}
+// text with a dark backing (for labels that sit over lines or dots)
+function btxt(s, x, y, o = {}) {
+  const { size = 34, weight = 700, align = 'left', mono = false, alpha = 1 } = o; if (alpha <= 0) return;
+  const w = tw(s, size, weight, mono), X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha * .92; rr(X - 10, y - size * .9, w + 20, size * 1.2, 8); ctx.fillStyle = C.bg; ctx.fill(); ctx.restore();
+  txt(s, x, y, o);
+}
+// chip in the sans face (Korean labels), with a dark backing
+function kchip(label, x, y, color, o = {}) {
+  const { size = 34, align = 'left', alpha = 1 } = o; if (alpha <= 0) return 0;
+  const w = tw(label, size, 700) + size * 1.2, h = size * 1.6, X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha; rr(X, y - h / 2, w, h, h / 2); ctx.fillStyle = C.bg; ctx.fill();
+  ctx.fillStyle = rgba(color, .14); ctx.fill(); ctx.strokeStyle = rgba(color, .7); ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  txt(label, X + w / 2, y + size * .36, { size, weight: 700, color, align: 'center', alpha });
+  return w;
+}
+function arrow(x0, y0, x1, y1, k, col, o = {}) {
+  const { lw = 4, dash = null, a = 1 } = o; if (k <= 0 || a <= 0) return;
+  const xe = lerp(x0, x1, k), ye = lerp(y0, y1, k), ang = Math.atan2(y1 - y0, x1 - x0);
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = col; ctx.lineWidth = lw; if (dash) ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xe, ye); ctx.stroke(); ctx.setLineDash([]);
+  if (k >= 1) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(xe, ye);
+    ctx.lineTo(xe - 22 * Math.cos(ang - .4), ye - 22 * Math.sin(ang - .4)); ctx.lineTo(xe - 22 * Math.cos(ang + .4), ye - 22 * Math.sin(ang + .4)); ctx.fill(); }
+  ctx.restore();
+  if (k < 1) dot(xe, ye, 9, col, a, 24);
+}
+// lifeline: header box + dashed vertical line
+function lifeline(x, y, label, col, yEnd, k, w = 300) {
+  if (k <= 0) return;
+  panel(x - w / 2, y + (1 - k) * 20, w, 84, { alpha: k, stroke: col, fill: rgba(col, .1), glow: col, glowA: .3, r: 14 });
+  txt(label, x, y + 56, { size: 40, weight: 800, color: col, align: 'center', alpha: k });
+  ctx.save(); ctx.globalAlpha *= .55 * k; ctx.setLineDash([8, 10]); ctx.strokeStyle = col; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x, y + 90); ctx.lineTo(x, lerp(y + 90, yEnd, eo(clamp(k * 1.4)))); ctx.stroke(); ctx.restore();
+}
+function hatch(x, y, w, h, col, a = 1, step = 18) {
+  if (a <= 0 || w <= 0 || h <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = rgba(col, .14); ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = rgba(col, .6); ctx.lineWidth = 2.5; ctx.beginPath();
+  for (let q = -h; q < w + h; q += step) { ctx.moveTo(x + q, y + h); ctx.lineTo(x + q + h, y); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  INTRO
+// ═════════════════════════════════════════════════════════════
+function sTitle(t) {
+  const a = win(t, 0, 4.9, .5); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt('TCP · RETRANSMISSION', CX, 560, { size: 36, weight: 600, color: C.dim, align: 'center', mono: true, ls: 6, alpha: eo(p(t, .1, .6)) });
+  words(['사라진', '패킷'], CX, 740, t, .3, { size: 130, colors: [C.red, null] });
+  words(['하나가'], CX, 900, t, .55, { size: 130 });
+  words(['전부를', '멈춘다'], CX, 1060, t, .8, { size: 130 });
+  // a row of segments: the third is lost, the rest wait
+  for (let i = 0; i < 7; i++) {
+    const x = 180 + i * 120, kk = eback(p(t, 1.6 + i * .12, .5)); if (kk <= 0) continue;
+    if (i === 2) { cross(x, 1260, 60 * clamp(kk), C.red, clamp(kk)); continue; }
+    const wait = i > 2 && t > 2.6;
+    dot(x, 1260, 20 * kk, wait ? C.faint : C.proto, 1, wait ? 0 : 20);
+    if (wait) hatch(x - 30, 1300, 60, 22, C.red, eo(p(t, 2.6 + (i - 3) * .1, .4)));
+  }
+  txt('뒤 데이터까지 기다린다', CX, 1400, { size: 40, weight: 700, color: C.red, align: 'center', alpha: eo(p(t, 2.9, .5)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  01 · Seq / ACK / Dup ACK / Fast Retransmit — time runs down
+// ═════════════════════════════════════════════════════════════
+function sSeqAck(t) {
+  const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const sx = 250, cx = 790, Y = T => 540 + (T - 1) * 160, k = eo(p(u, .1, .6));
+  lifeline(sx, 390, '서버 · 송신', C.server, 1440, k);
+  lifeline(cx, 390, '클라 · 수신', C.client, 1440, eo(p(u, .25, .6)));
+  txt('시간 ↓', CX, 446, { size: 34, weight: 600, color: C.dim, align: 'center', alpha: k });
+  const SEG = [[1.0, 1], [1.5, 2], [2.0, 3, true], [2.5, 4], [3.0, 5], [3.5, 6]];
+  SEG.forEach(([s, seq, lost]) => {
+    const kd = p(u, s, .6); if (kd <= 0) return;
+    txt('Seq ' + seq, sx - 26, Y(s) + 12, { size: 34, weight: 700, color: lost ? C.red : C.proto, mono: true, align: 'right', alpha: eo(p(u, s, .3)) });
+    if (lost) {
+      arrow(sx, Y(s), cx, Y(s + .6), Math.min(kd, .45), C.proto);
+      if (kd > .45) { const lx = lerp(sx, cx, .45), ly = lerp(Y(s), Y(s + .6), .45);
+        cross(lx, ly, 46, C.red, eo(p(u, s + .27, .2))); btxt('손실', lx + 34, ly + 12, { size: 34, weight: 800, color: C.red, alpha: eo(p(u, s + .3, .3)) }); }
+      return;
+    }
+    arrow(sx, Y(s), cx, Y(s + .6), eio(kd), C.proto);
+    const ka = p(u, s + .65, .6), dup = seq > 3, col = dup ? C.pub : C.server;
+    arrow(cx, Y(s + .65), sx, Y(s + 1.25), eio(ka), col, { lw: dup ? 4 : 3, dash: [10, 8] });
+    if (ka > 0) txt(dup ? 'Dup ACK 3' : 'ACK ' + (seq + 1), cx + 22, Y(s + .65) + 12, { size: 34, weight: 700, color: col, mono: true, alpha: eo(p(u, s + .65, .3)) });
+  });
+  // fast retransmit
+  const tr = 5.2;
+  kchip('Dup ACK × 3 → 바로 재전송', CX, Y(4.98), C.pub, { align: 'center', size: 34, alpha: eo(p(u, 4.8, .3)) });
+  arrow(sx, Y(tr), cx, Y(tr + .6), eio(p(u, tr, .6)), C.bot, { lw: 6 });
+  if (u > tr) txt('Seq 3', sx - 26, Y(tr) + 12, { size: 34, weight: 800, color: C.bot, mono: true, align: 'right', alpha: eo(p(u, tr, .3)) });
+  arrow(cx, Y(tr + .65), sx, Y(tr + 1.25), eio(p(u, tr + .65, .6)), C.server, { lw: 3, dash: [10, 8] });
+  if (u > tr + .65) txt('ACK 7', cx + 22, Y(tr + .65) + 12, { size: 34, weight: 800, color: C.server, mono: true, alpha: eo(p(u, tr + .65, .3)) });
+  caption(['Dup ACK 3개면 바로 재전송', '타이머를 기다리지 않는다 (Fast Retransmit)'], u, 6.6, C.pub);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  02 · Fast Retransmit vs RTO — two columns, time runs down
+// ═════════════════════════════════════════════════════════════
+function sTwoKinds(t) {
+  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const Y = ms => 565 + ms * .92, now = (u - 1.0) * 125;   // 800 ms reached at u ≈ 7.4
+  const COLS = [[60, 'Fast Retransmit', '촘촘할 때 · 20ms 간격', C.bot, 270], [550, 'RTO 타임아웃', '띄엄띄엄할 때', C.red, 700]];
+  COLS.forEach(([x, title, sub, col], i) => {
+    const k = eo(p(u, .1 + i * .25, .6)); if (k <= 0) return;
+    panel(x, 370 + (1 - k) * 30, 470, 1100, { alpha: k, stroke: rgba(col, .5) });
+    txt(title, x + 30, 434, { size: 42, weight: 800, color: col, alpha: k });
+    txt(sub, x + 30, 486, { size: 34, color: C.dim, alpha: k });
+  });
+  const ka = eo(p(u, .6, .5));
+  [0, 200, 400, 600, 800].forEach(ms => {
+    ctx.save(); ctx.globalAlpha *= ka * .35; ctx.fillStyle = '#94a3b8'; ctx.fillRect(84, Y(ms), 40, 2); ctx.restore();
+    txt(ms + (ms ? '' : ' ms'), 84, Y(ms) - 12, { size: 34, color: C.faint, mono: true, alpha: ka });
+  });
+  const mark = (ms, x, col, kind) => { if (now < ms) return; if (kind === 'x') cross(x, Y(ms), 40, C.red); else dot(x, Y(ms), kind === 'big' ? 15 : 7, col, 1, 12); };
+  // ── fast column
+  const fx = 270;
+  { const kd = clamp((now - 100) / 100); if (kd > 0) { ctx.fillStyle = rgba(C.bot, .3); ctx.fillRect(fx - 16, Y(100), 32, 100 * .92 * kd); } }
+  for (let ms = 0; ms <= 800; ms += 20) mark(ms, fx, ms > 100 && ms < 180 ? C.proto : C.proto, ms === 100 ? 'x' : ms === 180 ? 'big' : null);
+  if (now >= 180) mark(180, fx, C.bot, 'big');
+  if (now >= 100) txt('손실', fx - 36, Y(100) + 12, { size: 34, weight: 800, color: C.red, align: 'right' });
+  [140, 160, 180].forEach(ms => { if (now >= ms) dot(fx + 40, Y(ms), 8, C.pub, 1, 10); });
+  if (now >= 180) btxt('dup ACK ×3', fx + 62, Y(150) + 6, { size: 34, weight: 800, color: C.pub, mono: true });
+  if (now >= 180) btxt('→ 재전송', fx + 62, Y(200) + 30, { size: 34, weight: 800, color: C.bot });
+  // ── RTO column
+  const rx = 700;
+  { const kd = clamp((now - 100) / 620); if (kd > 0) hatch(rx - 16, Y(100), 32, 620 * .92 * kd, C.red); }
+  [0, 100, 350, 600].forEach(ms => mark(ms, rx, ms > 100 ? C.faint : C.proto, ms === 100 ? 'x' : null));
+  if (now >= 100) txt('손실', rx - 36, Y(100) + 12, { size: 34, weight: 800, color: C.red, align: 'right' });
+  const tbar = (from, to, lab, lab2) => {
+    const kk = clamp((now - from) / (to - from)); if (kk <= 0) return;
+    ctx.save(); ctx.strokeStyle = C.red; ctx.lineWidth = 3; ctx.setLineDash([8, 7]);
+    ctx.beginPath(); ctx.moveTo(rx + 40, Y(from)); ctx.lineTo(rx + 40, Y(from + (to - from) * kk)); ctx.stroke(); ctx.restore();
+    if (kk >= 1) { txt(lab, rx + 62, Y((from + to) / 2) + 6, { size: 34, weight: 800, color: C.red, mono: true });
+      if (lab2) txt(lab2, rx + 62, Y((from + to) / 2) + 50, { size: 34, weight: 700, color: C.red, mono: true }); }
+  };
+  tbar(100, 300, 'RTO 200ms'); mark(300, rx, C.red, 'x');
+  if (now >= 300) txt('손실', rx - 36, Y(300) + 12, { size: 34, weight: 800, color: C.red, align: 'right' });
+  tbar(300, 700, 'RTO 400ms', '(×2)');
+  if (now >= 350) btxt('dup ACK 부족', rx + 62, Y(350) + 30, { size: 34, weight: 700, color: C.pub, alpha: clamp((now - 350) / 30) });
+  if (now >= 700) { mark(700, rx, C.bot, 'big'); btxt('재전송 성공', rx + 62, Y(700) + 12, { size: 34, weight: 800, color: C.bot }); }
+  // results
+  const k1 = eback(p(u, 2.6, .5)), k2 = eback(p(u, 7.0, .5));
+  if (k1 > 0) { txt('정지 · 약 1 RTT', 90, 1372, { size: 34, weight: 700, color: C.dim, alpha: clamp(k1) }); txt('≈100ms', 90, 1452, { size: 92, weight: 800, mono: true, color: C.bot, alpha: clamp(k1) }); }
+  if (k2 > 0) { txt('정지', 580, 1372, { size: 34, weight: 700, color: C.dim, alpha: clamp(k2) }); txt('620ms', 580, 1452, { size: 92, weight: 800, mono: true, color: C.red, alpha: clamp(k2) }); }
+  caption(['게임 트래픽은 RTO로 빠지기 쉽다', 'RTO 최소 200ms, 실패마다 2배 (리눅스)'], u, 8.0, C.red);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  03 · Head-of-Line blocking
+// ═════════════════════════════════════════════════════════════
+const ARRIVE = [9, 1.0, 1.5, 2.0, 2.5, 3.0];   // seq 3..8; seq 3 arrives with the retransmit
+function sHOL(t) {
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6)), rt = 5.0, flush = p(u, rt + .3, .9);
+  txt('클라 커널 수신 버퍼', X0, 424, { size: 40, weight: 800, alpha: k });
+  for (let i = 0; i < 6; i++) {
+    const x = X0 + i * 162, y = 460, seq = i + 3, arrived = i === 0 ? u >= rt : u >= ARRIVE[i];
+    if (flush >= 1 && arrived) continue;
+    const fy = lerp(y, 720, eio(flush)), al = arrived ? 1 - flush * .9 : 1;
+    ctx.save(); ctx.globalAlpha *= k * al; rr(x, fy, 150, 130, 14);
+    if (!arrived) { ctx.setLineDash([8, 8]); ctx.strokeStyle = C.red; ctx.lineWidth = 3; ctx.stroke(); }
+    else { ctx.fillStyle = i === 0 ? rgba(C.bot, .5) : 'rgba(148,163,184,0.25)'; ctx.fill(); }
+    ctx.restore();
+    txt('Seq ' + seq, x + 75, fy + 56, { size: 34, weight: 800, mono: true, align: 'center', color: arrived ? C.text : C.red, alpha: k * al });
+    txt(!arrived ? '없음' : i === 0 ? '재전송' : '대기', x + 75, fy + 104, { size: 34, weight: 700, color: !arrived ? C.red : i === 0 ? C.bot : C.dim, align: 'center', alpha: k * al });
+  }
+  if (u > 1 && u < rt + .3) kchip('↑ 앱은 Seq 3부터 순서대로만 읽는다', X0, 650, C.red, { size: 34, alpha: eo(p(u, 1.2, .4)) * (1 - p(u, rt, .3)) });
+  if (flush >= 1) { const kf = eo(p(u, rt + 1.2, .5));
+    ctx.save(); ctx.globalAlpha *= kf; for (let i = 0; i < 6; i++) { rr(X0 + i * 162, 460, 150, 130, 14); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(148,163,184,0.35)'; ctx.lineWidth = 2; ctx.stroke(); } ctx.restore();
+    btxt('Seq 3~8 한꺼번에 앱으로', CX, 540, { size: 40, weight: 800, color: C.bot, align: 'center', alpha: kf }); }
+  panel(X0, 720, X1 - X0, 140, { alpha: k, stroke: C.client, fill: rgba(C.client, .07), glow: flush > 0 && flush < 1 ? C.client : null, glowA: .8 });
+  txt('게임 앱  recv()', CX, 806, { size: 48, weight: 800, color: C.client, align: 'center', alpha: k });
+  // app-level arrival timeline
+  const tx0 = 100, tx1 = 980, ty = 1100, TX = s => lerp(tx0, tx1, s / 10), kt = eo(p(u, .8, .5));
+  txt('앱이 받은 메시지', X0, 960, { size: 40, weight: 800, alpha: kt });
+  txt('시간 →', X1, 960, { size: 34, color: C.dim, align: 'right', alpha: kt });
+  ctx.save(); ctx.globalAlpha *= kt; ctx.strokeStyle = 'rgba(148,163,184,0.3)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tx0, ty); ctx.lineTo(tx1, ty); ctx.stroke(); ctx.restore();
+  const burst = s2 => s2 > rt && s2 < rt + .6;
+  const msgs = [0, .3, .6, .9]; for (let j = 0; j < 7; j++) msgs.push(rt + .35 + j * .03); for (let s2 = 6; s2 <= 10; s2 += .3) msgs.push(s2);
+  msgs.forEach((s2, j) => { if (u >= s2) dot(TX(s2), ty - (burst(s2) ? (j % 4) * 22 : 0), 10, burst(s2) ? C.red : C.client, 1, 12); });
+  if (u >= rt) {
+    ctx.save(); ctx.strokeStyle = C.red; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(TX(1), ty + 30); ctx.lineTo(TX(1), ty + 44); ctx.lineTo(TX(rt), ty + 44); ctx.lineTo(TX(rt), ty + 30); ctx.stroke(); ctx.restore();
+    txt('아무것도 안 옴', TX((1 + rt) / 2), ty + 96, { size: 36, weight: 800, color: C.red, align: 'center' });
+    txt('한꺼번에', TX(rt + .4), ty - 110, { size: 36, weight: 800, color: C.red, align: 'center' });
+  }
+  [['멈췄다가 한꺼번에 처리', C.red], ['러버밴딩 · 순간이동', C.client], ['이동 · 스킬 · 채팅이 같이 멈춤', C.server]].forEach(([s2, c], i) =>
+    kchip(s2, X0, 1290 + i * 70, c, { size: 34, alpha: eo(p(u, 6.2 + i * .35, .4)) }));
+  caption(['뒤 데이터도 도착한 채로 기다린다', '재전송이 오면 한꺼번에 앱으로 넘어간다'], u, 7.4, C.red);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  04 · check & mitigate
+// ═════════════════════════════════════════════════════════════
+const CMDS = [
+  "$ ss -ti '( sport = :7777 )'",
+  '  rtt:182/90 rto:1200 cwnd:4',
+  '  retrans:0/37',
+  '$ nstat -az TcpRetransSegs \\',
+  '      TcpExtTCPTimeouts',
+];
+const FIX = [
+  ['이동 · 위치는 UDP로', '최신 상태만 중요한 데이터는 다시 안 보낸다'],
+  ['TCP_NODELAY · thin-stream', 'tcp_thin_linear_timeouts로 백오프 완화'],
+  ['세션 송신 큐 상한', '넘으면 오래된 상태 패킷 버리기'],
+];
+function sCheck(t) {
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .1, .6));
+  panel(X0, 370, X1 - X0, 420, { alpha: k, stroke: rgba(C.proto, .45) });
+  ctx.save(); ctx.globalAlpha *= k;
+  txt('확인하기', X0 + 36, 432, { size: 40, weight: 800, color: C.proto });
+  ctx.fillStyle = C.line; ctx.fillRect(X0, 462, X1 - X0, 1.5);
+  const kh = eo(p(u, 3.2, .4));
+  ctx.fillStyle = rgba(C.red, .14 * kh); ctx.fillRect(X0 + 20, 520 + 56 - 42, X1 - X0 - 40, 56 * 2);
+  ctx.fillStyle = rgba(C.red, kh); ctx.fillRect(X0 + 20, 520 + 56 - 42, 5, 56 * 2);
+  const total = CMDS.reduce((s2, l) => s2 + l.length + 1, 0);
+  code(CMDS, X0 + 40, 520, { size: 34, lh: 56, chars: total * p(u, .5, 3.2) });
+  ctx.restore();
+  // retransmission-rate scale (example thresholds)
+  const kg = eo(p(u, 3.6, .6)), GX = v => lerp(X0, X1, v / 3), gy = 960;
+  txt('재전송률 = RetransSegs ÷ OutSegs', X0, 890, { size: 34, weight: 700, color: C.pub, alpha: kg });
+  ctx.save(); ctx.globalAlpha *= kg;
+  [[0, .5, C.bot], [.5, 2, C.server], [2, 3, C.red]].forEach(([s0, s1, c]) => { ctx.fillStyle = rgba(c, .55); ctx.fillRect(GX(s0), gy, GX(s1) - GX(s0) - 3, 34); });
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha *= kg; ctx.fillStyle = C.text; ctx.fillRect(GX(.5) - 2, gy - 10, 4, 54); ctx.fillRect(GX(2) - 2, gy - 10, 4, 54); ctx.restore();
+  txt('0.5% 미만 정상', X0, gy + 84, { size: 34, weight: 800, color: C.bot, alpha: kg });
+  txt('2% 넘으면 조사', X1, gy + 84, { size: 34, weight: 800, color: C.red, align: 'right', alpha: kg });
+  // mitigations
+  txt('줄이는 법', X0, 1132, { size: 40, weight: 800, color: C.bot, alpha: eo(p(u, 5, .5)) });
+  FIX.forEach(([ti, de], i) => {
+    const kk = eo(p(u, 5.3 + i * .5, .5)); if (kk <= 0) return;
+    const y = 1206 + i * 100;
+    dot(X0 + 24, y - 14, 24, rgba(C.bot, .18), kk, 0); check(X0 + 24, y - 14, 28, C.bot, kk);
+    txt(ti, X0 + 70, y, { size: 38, weight: 800, alpha: kk });
+    txt(de, X0 + 70, y + 44, { size: 34, color: C.dim, alpha: kk });
+  });
+  caption(['재전송률과 RTO로 확인한다', '0.5% 미만 정상 · 2% 넘으면 조사'], u, 7.0, C.pub);
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  OUTRO
+// ═════════════════════════════════════════════════════════════
+const OUTRO = { link: ['jungrok5.github.io/motion-graphics/', 'tcp-retransmission'] };
+function sOutro(t) {
+  const S = HEAD[3][1] - .3; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
+  const v = t - S; ctx.save(); ctx.globalAlpha = a;
+  words(['TCP는', '빠진', '패킷을'], CX, 820, t, S + .3, { size: 100, colors: [null, C.red, null] });
+  words(['기다리느라', '늦어진다.'], CX, 980, t, S + .8, { size: 100 });
+  const k = eo(p(v, 2, .6));
+  txt('전체 영상 · 설명 · 용어집', CX, 1210, { size: 40, weight: 700, color: C.dim, align: 'center', alpha: k });
+  OUTRO.link.forEach((l, i) => txt(l, CX, 1280 + i * 50, { size: 34, weight: 600, mono: true, color: C.proto, align: 'center', alpha: k }));
+  ctx.restore();
+}
+
+
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t);
+  sTitle(t); sSeqAck(t); sTwoKinds(t); sHOL(t); sCheck(t); sOutro(t);
+  headers(t); progress(t);
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [DURATION - 5.5, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 3.6;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
