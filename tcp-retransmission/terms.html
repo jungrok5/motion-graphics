@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>사라진 패킷 하나가 전부를 멈춘다 — 용어집</title>
+<meta name="description" content="사라진 패킷 하나가 전부를 멈춘다 용어집">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html">설명</a><a href="terms.html" aria-current="page">용어집</a></nav>
+<span class="eyebrow">1:21 · TCP · retransmission · RTO · metrics</span>
+<h1>사라진 패킷 하나가 전부를 멈춘다</h1>
+<p class="lede">이 영상에 나오는 용어 14개.</p>
+<input type="search" id="q" placeholder="용어 찾기" aria-label="용어 찾기">
+<dl class="terms" id="list">
+<dt>재전송률</dt><dd>전체 송신 세그먼트 중 재전송된 비율이다. <code>TcpRetransSegs / OutSegs</code>로 계산한다.</dd>
+<dt>cwnd (혼잡 윈도우)</dt><dd>ACK 없이 한 번에 보낼 수 있는 데이터 양의 상한이다. 손실이 감지되면 줄어들고 처리량도 같이 떨어진다.</dd>
+<dt>Dup ACK</dt><dd>같은 번호의 ACK가 반복되는 것이다. 중간 세그먼트가 빠졌는데 뒤 세그먼트가 계속 도착할 때 생긴다.</dd>
+<dt>Fast Retransmit</dt><dd>Dup ACK 3개를 받으면 타이머를 기다리지 않고 바로 재전송하는 방식이다. 지연은 대략 1 RTT 수준이다.</dd>
+<dt>Head-of-Line 블로킹</dt><dd>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.</dd>
+<dt>MTU 블랙홀</dt><dd>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.</dd>
+<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.</dd>
+<dt>RTO (Retransmission Timeout)</dt><dd>ACK를 기다리는 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값은 200ms이고 실패할 때마다 두 배로 늘어난다.</dd>
+<dt>RTT / SRTT / RTTVAR</dt><dd>RTT는 패킷이 갔다가 응답이 돌아오는 왕복 시간이다. SRTT는 커널이 평활화한 RTT 평균, RTTVAR는 그 변동폭이며 RTO 계산에 쓰인다.</dd>
+<dt>Seq / ACK</dt><dd>Seq는 세그먼트의 순번, ACK는 수신측이 "여기까지 받았고 다음은 이 번호가 필요하다"고 알려 주는 응답이다.</dd>
+<dt>Slow Start</dt><dd>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.</dd>
+<dt>tail drop</dt><dd>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.</dd>
+<dt>TCP_USER_TIMEOUT</dt><dd>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.</dd>
+<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.</dd>
+</dl>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
+<script>
+  const q = document.getElementById('q'), dts = [...document.querySelectorAll('#list dt')];
+  q.addEventListener('input', () => { const s = q.value.trim().toLowerCase();
+    dts.forEach(dt => { const show = !s || (dt.textContent + dt.nextElementSibling.textContent).toLowerCase().includes(s); dt.hidden = dt.nextElementSibling.hidden = !show; }); });
+</script>
+</main>
+</body>
+</html>

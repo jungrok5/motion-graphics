@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>사라진 패킷 하나가 전부를 멈춘다 — 글</title>
+<title>사라진 패킷 하나가 전부를 멈춘다 — 설명</title>
 <meta name="description" content="TCP 재전송이 왜 · 언제 생기는지(Fast Retransmit vs RTO, HOL 블로킹), 클라 · 서버 · 인프라에 나타나는 현상과 메트릭, 확인 명령과 완화법.">
 <style>
   /* Reading page: one 720px column, light and dark. */
@@ -30,6 +30,11 @@
   .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
   p, li { color: var(--text2); }
   .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
   .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
   .actions a:hover { border-color: var(--accent); }
@@ -51,12 +56,11 @@
 </head>
 <body>
 <main>
-<span class="eyebrow">글로 읽기 · 1:21</span>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html" aria-current="page">설명</a><a href="terms.html">용어집</a></nav>
+<span class="eyebrow">1:21 · TCP · retransmission · RTO · metrics</span>
 <h1>사라진 패킷 하나가 전부를 멈춘다</h1>
-<div class="tags"><span>TCP</span><span>retransmission</span><span>RTO</span><span>metrics</span></div>
-<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
 <p class="lede">TCP가 잃어버린 세그먼트를 다시 보내는 두 가지 방식(Fast Retransmit, RTO)과, 재전송 하나가 같은 연결의 뒤따르는 데이터까지 멈추게 하는 Head-of-Line 블로킹을 보여준다. 작은 패킷이 띄엄띄엄 오가는 게임 트래픽은 RTO로 빠지기 쉬워 수백 ms 정지가 생긴다. 같은 사건이 클라, 서버, 인프라에서 각각 어떤 지표로 보이는지와 확인 명령, 완화 방법까지 정리한다.</p>
-<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">잃으면 다시 보낸다</a></li><li><a href="#ch02">언제 생기나</a></li><li><a href="#ch03">두 가지 재전송</a></li><li><a href="#ch04">Head-of-Line 블로킹</a></li><li><a href="#ch05">클라 · 서버 · 인프라에 보이는 것</a></li><li><a href="#ch06">확인하고 줄이기</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">잃으면 다시 보낸다</a></li><li><a href="#ch02">언제 생기나</a></li><li><a href="#ch03">두 가지 재전송</a></li><li><a href="#ch04">Head-of-Line 블로킹</a></li><li><a href="#ch05">클라 · 서버 · 인프라에 보이는 것</a></li><li><a href="#ch06">확인하고 줄이기</a></li></ol></nav>
 <section id="ch01">
 <h2><span class="n">01</span>잃으면 다시 보낸다</h2>
 <p class="sub">TCP는 모든 바이트가 순서대로, 반드시 도착해야 다음으로 넘어간다 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
@@ -126,26 +130,8 @@
 <li>장비 큐, MTU, 무선 구간 drop을 구간별로 점검한다.</li>
 </ul>
 </section>
-<section id="terms">
-<h2>용어 정리</h2>
-<dl class="terms">
-<dt>Seq / ACK</dt><dd>Seq는 세그먼트의 순번, ACK는 수신측이 "여기까지 받았고 다음은 이 번호가 필요하다"고 알려 주는 응답이다.</dd>
-<dt>Dup ACK</dt><dd>같은 번호의 ACK가 반복되는 것이다. 중간 세그먼트가 빠졌는데 뒤 세그먼트가 계속 도착할 때 생긴다.</dd>
-<dt>Fast Retransmit</dt><dd>Dup ACK 3개를 받으면 타이머를 기다리지 않고 바로 재전송하는 방식이다. 지연은 대략 1 RTT 수준이다.</dd>
-<dt>RTO (Retransmission Timeout)</dt><dd>ACK를 기다리는 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값은 200ms이고 실패할 때마다 두 배로 늘어난다.</dd>
-<dt>RTT / SRTT / RTTVAR</dt><dd>RTT는 패킷이 갔다가 응답이 돌아오는 왕복 시간이다. SRTT는 커널이 평활화한 RTT 평균, RTTVAR는 그 변동폭이며 RTO 계산에 쓰인다.</dd>
-<dt>cwnd (혼잡 윈도우)</dt><dd>ACK 없이 한 번에 보낼 수 있는 데이터 양의 상한이다. 손실이 감지되면 줄어들고 처리량도 같이 떨어진다.</dd>
-<dt>Slow Start</dt><dd>cwnd를 작은 값에서 시작해 ACK가 올 때마다 빠르게 키우는 단계다. RTO 이후에는 cwnd 1부터 이 단계를 다시 밟는다.</dd>
-<dt>Head-of-Line 블로킹</dt><dd>앞의 데이터 하나가 빠져서 뒤에 이미 도착한 데이터까지 앱에 전달되지 못하는 현상이다. TCP는 연결 하나가 순서를 보장하는 한 줄이라 생긴다.</dd>
-<dt>tail drop</dt><dd>장비 큐가 가득 찼을 때 새로 들어온 패킷을 버리는 동작이다. 혼잡 구간 손실의 대표 원인이다.</dd>
-<dt>NIC 링 버퍼</dt><dd>NIC가 받은 패킷을 커널이 가져가기 전까지 담아 두는 고정 크기 버퍼다. 커널이 제때 비우지 못하면 넘쳐서 <code>rx_dropped</code>가 오른다.</dd>
-<dt>MTU 블랙홀</dt><dd>경로 중간 장비가 큰 패킷을 버리면서 그 사실을 알리지 않는 상황이다. 작은 패킷은 통과하고 큰 패킷만 계속 사라진다.</dd>
-<dt>재전송률</dt><dd>전체 송신 세그먼트 중 재전송된 비율이다. <code>TcpRetransSegs / OutSegs</code>로 계산한다.</dd>
-<dt>thin-stream</dt><dd>작은 패킷을 드문드문 보내는 연결이다. 게임, 채팅 트래픽이 여기에 해당하며 Dup ACK가 모이지 않아 RTO에 의존하기 쉽다.</dd>
-<dt>TCP_USER_TIMEOUT</dt><dd>보낸 데이터가 ACK 없이 이 시간 이상 남아 있으면 연결을 끊는 소켓 옵션이다. 죽은 연결을 오래 붙잡고 있지 않게 해 준다.</dd>
-</dl>
-</section>
-<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+<p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
 </main>
 </body>
 </html>

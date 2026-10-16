@@ -1,5 +1,5 @@
 // Headless check of a player page (add --shots <dir> for full-page screenshots): no page errors, play advances time, chapter jump works,
-// speed button cycles, notes render (count of chapter headings), no horizontal overflow at phone width.  Usage: node scripts/check-player.mjs <page.html>
+// speed button cycles, notes source present (chapter count), links to article/terms, no horizontal overflow at phone width.  Usage: node scripts/check-player.mjs <page.html>
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import http from 'node:http';
@@ -40,8 +40,8 @@ const afterJump = await desk.textContent('#time');
 await desk.click('#rate');
 const rateAfterClick = await desk.textContent('#rate');
 await desk.click('#rate'); await desk.click('#rate');
-const notesShown = await desk.isVisible('#notes');
-const notesChapters = await desk.$$eval('#notes article h3', els => els.length);
+const notesChapters = await desk.$$eval('#notes article', els => els.length);
+const setLinks = await desk.$$eval('nav.set a', els => els.map(a => a.getAttribute('href')).join(' '));
 
 const phone = await browser.newPage({ viewport: { width: 400, height: 800 } });
 phone.on('pageerror', e => errors.push(String(e)));
@@ -56,7 +56,7 @@ if (shotsAt > 0) {
   await desk.screenshot({ path: path.join(dir, 'page-desktop.png'), fullPage: true });
   await phone.screenshot({ path: path.join(dir, 'page-phone.png'), fullPage: true });
 }
-console.log({ afterPlay, bigHidden, afterJump, rateAfterClick, notesShown, notesChapters, phoneOverflow: overflow, errors });
+console.log({ afterPlay, bigHidden, afterJump, rateAfterClick, notesChapters, setLinks, phoneOverflow: overflow, errors });
 await browser.close();
 server.close();
 const ok = !errors.length && bigHidden && !overflow && afterPlay !== '0:00' && afterJump !== afterPlay && rateAfterClick === '0.75×';

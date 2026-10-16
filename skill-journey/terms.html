@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>내 스킬 하나가 상대 화면에 뜨기까지 — 용어집</title>
+<meta name="description" content="내 스킬 하나가 상대 화면에 뜨기까지 용어집">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html">설명</a><a href="terms.html" aria-current="page">용어집</a></nav>
+<span class="eyebrow">1:25 · input · packet · server tick · interpolation</span>
+<h1>내 스킬 하나가 상대 화면에 뜨기까지</h1>
+<p class="lede">이 영상에 나오는 용어 13개.</p>
+<input type="search" id="q" placeholder="용어 찾기" aria-label="용어 찾기">
+<dl class="terms" id="list">
+<dt>보간 버퍼</dt><dd>상대 클라가 서버 스냅샷을 일정 시간 모아 두고, 그 사이를 부드럽게 이어 그리기 위해 일부러 과거 상태를 보여주는 버퍼다. 영상 예시는 약 100ms다.</dd>
+<dt>브로드캐스트</dt><dd>판정 결과를 AOI 안의 여러 플레이어에게 전송하는 일이다.</dd>
+<dt>예측 실행 (Client-side Prediction)</dt><dd>클라이언트가 서버 승인을 기다리지 않고 입력 결과를 먼저 화면에 보여주는 기법이다. 내 화면이 즉시 반응하는 이유다.</dd>
+<dt>존 메시지 큐</dt><dd>존별로 들어온 요청을 로직 스레드가 다음 틱에 꺼내 처리하도록 쌓아 두는 대기열이다.</dd>
+<dt>지터</dt><dd>패킷 도착 간격이 고르지 않게 흔들리는 정도다. 와이파이 구간에서 크게 나타나며, 크면 보간 버퍼를 늘려야 한다.</dd>
+<dt>직렬화</dt><dd>메모리 안의 구조체를 네트워크로 보낼 바이트 열로 바꾸는 일이다. 영상에서는 protobuf를 쓴다.</dd>
+<dt>틱 / 틱레이트</dt><dd>틱은 서버가 월드를 한 번 갱신하는 주기, 틱레이트는 초당 틱 횟수다. 20Hz면 틱 간격이 50ms다.</dd>
+<dt>틱 대기</dt><dd>요청이 존 메시지 큐에 들어가 다음 틱이 시작될 때까지 기다리는 시간이다. 0~50ms 사이로, 평균은 틱 간격의 절반이다.</dd>
+<dt>AOI</dt><dd>각 플레이어가 보는 범위, 즉 시야다. 서버는 이 범위 안의 플레이어에게만 스킬 시전 사실을 보낸다.</dd>
+<dt>RTO</dt><dd>TCP가 ACK를 기다리다 타이머가 만료되어 재전송하는 방식이다. 리눅스 최솟값이 200ms라 손실 한 번이 큰 정지로 이어진다.</dd>
+<dt>RTT</dt><dd>패킷이 상대에게 갔다가 응답이 돌아오는 왕복 시간이다. 편도 지연은 대략 RTT의 절반으로 본다.</dd>
+<dt>UseSkillReq / SkillCastNoti</dt><dd>클라가 서버에 스킬 사용을 요청하는 패킷과, 서버가 주변 플레이어에게 스킬 시전을 알리는 패킷이다. 영상에서 쓰는 예시 메시지 이름이다.</dd>
+<dt>vsync</dt><dd>모니터 갱신 주기에 맞춰 프레임을 출력하는 방식이다. 60Hz 화면이면 최대 약 16ms를 더 기다릴 수 있다.</dd>
+</dl>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
+<script>
+  const q = document.getElementById('q'), dts = [...document.querySelectorAll('#list dt')];
+  q.addEventListener('input', () => { const s = q.value.trim().toLowerCase();
+    dts.forEach(dt => { const show = !s || (dt.textContent + dt.nextElementSibling.textContent).toLowerCase().includes(s); dt.hidden = dt.nextElementSibling.hidden = !show; }); });
+</script>
+</main>
+</body>
+</html>

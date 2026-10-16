@@ -46,8 +46,7 @@
   <header>
     <span class="eyebrow">Code-driven motion graphics</span>
     <h1>코드로 그리는 기술 설명 영상</h1>
-    <p>모든 프레임을 코드로 그립니다. 브라우저에서 바로 재생되고, 영상마다 글로 읽는 페이지와 용어 정리가 함께 있습니다.</p>
-    <div class="head-links"><a href="glossary.html">전체 용어집</a></div>
+    <p>모든 프레임을 코드로 그립니다. 브라우저에서 바로 재생되고, 주제마다 영상 · 설명 · 용어집이 한 세트입니다.</p>
   </header>
   <ul id="list"></ul>
   <footer>Source: <a href="https://github.com/jungrok5/motion-graphics">github.com/jungrok5/motion-graphics</a></footer>
@@ -96,7 +95,7 @@
       <div class="poster"><iframe src="${v.path}#poster" title="${v.title}" loading="lazy" tabindex="-1"></iframe></div>
       <div class="meta"><h2></h2><p></p><div class="tags"><span class="len">${v.length}</span>${v.tags.map(t => `<span>${t}</span>`).join('')}</div></div></a>`;
     const links = document.createElement('div'); links.className = 'links';
-    links.innerHTML = `<a href="${v.path}">▶ 영상 보기</a><a href="${v.path}article.html">글로 읽기</a>`;
+    links.innerHTML = `<a href="${v.path}">▶ 영상 보기</a><a href="${v.path}article.html">설명</a><a href="${v.path}terms.html">용어집</a>`;
     li.appendChild(links);
     li.querySelector('h2').textContent = v.title;
     li.querySelector('p').textContent = v.desc;

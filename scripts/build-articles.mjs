@@ -1,6 +1,5 @@
-// Build the reading pages from the notes already inside each video page.
-//   <slug>/article.html — chapter-by-chapter explanation + glossary, one per video
-//   glossary.html       — every glossary term across all videos, searchable
+// Build the two reading pages of each topic from the notes already inside its video page.
+// Each topic is a set of three: <slug>/index.html (영상) · article.html (설명) · terms.html (용어집).
 // Source of truth: the <section class="notes"> and HEAD in <slug>/index.html, and VIDEOS in the root index.html.
 // Usage: node scripts/build-articles.mjs            (run from the repo root after editing any notes)
 import fs from 'node:fs';
@@ -37,6 +36,11 @@ const CSS = `
   .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
   p, li { color: var(--text2); }
   .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
   .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
   .actions a:hover { border-color: var(--accent); }
@@ -73,7 +77,10 @@ ${body}
 </html>
 `;
 
-const glossary = new Map();   // normalized term -> { label, defs: [{ def, slug, title }] }
+// tabs shared by the three pages of one topic: 영상 · 설명 · 용어집
+const tabs = cur => `<nav class="tabs" aria-label="같은 주제">${[['index.html', '영상'], ['article.html', '설명'], ['terms.html', '용어집']]
+  .map(([href, label]) => `<a href="${href}"${href === cur ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
+
 for (const v of VIDEOS) {
   const slug = v.path.replace(/\/$/, ''), src = `${slug}/index.html`;
   if (!fs.existsSync(src)) continue;
@@ -83,14 +90,14 @@ for (const v of VIDEOS) {
   if (!notes || !notes.includes('<article')) { console.warn(`skip ${slug}: no notes`); continue; }
   const lede = between(notes, '<p class="lede">', '</p>') || '';
   const arts = [...notes.matchAll(/<article data-ch="(\d\d)">([\s\S]*?)<\/article>/g)];
-  const terms = between(notes, '<dl class="terms">', '</dl>') || '';
-  for (const [, dt, dd] of terms.matchAll(/<dt>([\s\S]*?)<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g)) {
-    // same term with a different parenthetical (틱 / 틱 (Tick)) merges into one entry; the fullest label wins
-    const label = dt.trim(), key = label.replace(/<[^>]+>/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-    if (!glossary.has(key)) glossary.set(key, { label, defs: [] });
-    const g = glossary.get(key); if (label.length > g.label.length) g.label = label;
-    g.defs.push({ def: dd.trim(), slug, title: v.title });
-  }
+  const terms = [...(between(notes, '<dl class="terms">', '</dl>') || '').matchAll(/<dt>([\s\S]*?)<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g)]
+    .map(([, dt, dd]) => [dt.trim(), dd.trim()])
+    .sort((a, b) => a[0].replace(/<[^>]+>/g, '').localeCompare(b[0].replace(/<[^>]+>/g, ''), 'ko'));
+  const top = cur => `${tabs(cur)}
+<span class="eyebrow">${esc(v.length)} · ${v.tags.map(esc).join(' · ')}</span>
+<h1>${esc(v.title)}</h1>`;
+  const foot = `<footer><a href="${SITE}">전체 영상 목록</a></footer>`;
+
   const chapters = arts.map(([, n, body]) => {
     const h = HEAD.find(r => r[2] === n) || [0, 0, n, '', ''];
     return `<section id="ch${n}">
@@ -99,36 +106,24 @@ for (const v of VIDEOS) {
 ${body.trim()}
 </section>`;
   });
-  const body = `<span class="eyebrow">글로 읽기 · ${esc(v.length)}</span>
-<h1>${esc(v.title)}</h1>
-<div class="tags">${v.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>
-<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="${SITE}glossary.html">전체 용어집</a></div>
+  fs.writeFileSync(`${slug}/article.html`, page(`${v.title} — 설명`, `${top('article.html')}
 <p class="lede">${lede}</p>
-<nav class="toc" aria-label="목차"><ol>${arts.map(([, n]) => { const h = HEAD.find(r => r[2] === n); return `<li><a href="#ch${n}">${esc(h ? h[3] : n)}</a></li>`; }).join('')}<li><a href="#terms">용어 정리</a></li></ol></nav>
+<nav class="toc" aria-label="목차"><ol>${arts.map(([, n]) => { const h = HEAD.find(r => r[2] === n); return `<li><a href="#ch${n}">${esc(h ? h[3] : n)}</a></li>`; }).join('')}</ol></nav>
 ${chapters.join('\n')}
-<section id="terms">
-<h2>용어 정리</h2>
-<dl class="terms">${terms}</dl>
-</section>
-<footer><a href="${SITE}">전체 영상 목록</a> · <a href="${SITE}glossary.html">전체 용어집</a></footer>`;
-  fs.writeFileSync(`${slug}/article.html`, page(`${v.title} — 글`, body, v.desc));
-  console.log(`${slug}/article.html  ${arts.length} chapters`);
-}
+<p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
+${foot}`, v.desc));
 
-const keys = [...glossary.keys()].sort((a, b) => a.localeCompare(b, 'ko'));
-const gbody = `<span class="eyebrow">Glossary</span>
-<h1>용어집</h1>
-<p class="lede">모든 영상에 나오는 용어를 한곳에 모았다. 같은 용어도 영상마다 설명하는 맥락이 달라, 영상별 설명을 함께 둔다.</p>
-<div class="actions"><a href="./">전체 영상 목록</a></div>
-<input type="search" id="q" placeholder="용어 찾기 (예: RTT, 틱, Zero Window)" aria-label="용어 찾기">
+  fs.writeFileSync(`${slug}/terms.html`, page(`${v.title} — 용어집`, `${top('terms.html')}
+<p class="lede">이 영상에 나오는 용어 ${terms.length}개.</p>
+<input type="search" id="q" placeholder="용어 찾기" aria-label="용어 찾기">
 <dl class="terms" id="list">
-${keys.map(k => `<dt>${glossary.get(k).label}</dt><dd>${glossary.get(k).defs.map(e => `<div>${e.def}<span class="src"><a href="${e.slug}/article.html#terms">${esc(e.title)}</a></span></div>`).join('')}</dd>`).join('\n')}
+${terms.map(([dt, dd]) => `<dt>${dt}</dt><dd>${dd}</dd>`).join('\n')}
 </dl>
-<footer>${keys.length}개 용어 · <a href="./">전체 영상 목록</a></footer>
+${foot}
 <script>
   const q = document.getElementById('q'), dts = [...document.querySelectorAll('#list dt')];
   q.addEventListener('input', () => { const s = q.value.trim().toLowerCase();
     dts.forEach(dt => { const show = !s || (dt.textContent + dt.nextElementSibling.textContent).toLowerCase().includes(s); dt.hidden = dt.nextElementSibling.hidden = !show; }); });
-</script>`;
-fs.writeFileSync('glossary.html', page('용어집', gbody, '모든 기술 설명 영상에 나오는 용어 모음'));
-console.log(`glossary.html  ${keys.length} terms`);
+</script>`, `${v.title} 용어집`));
+  console.log(`${slug}: article.html ${arts.length} chapters · terms.html ${terms.length} terms`);
+}

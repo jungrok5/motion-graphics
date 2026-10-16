@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>클라가 느리면 서버도 느려진다 — 용어집</title>
+<meta name="description" content="클라가 느리면 서버도 느려진다 용어집">
+<style>
+  /* Reading page: one 720px column, light and dark. */
+  @font-face { font-family: Pretendard; src: url(assets/fonts/Pretendard-Variable.woff2) format("woff2"), url(../assets/fonts/Pretendard-Variable.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"), url(../assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 100 800; }
+  :root {
+    --bg: #fbfbfd; --surface: #f1f2f7; --line: #dde0ea; --fg: #141826; --text2: #39405a; --dim: #6b7290; --accent: #6d4fd8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --text2: #c3cad8; --dim: #8b95a7; --accent: #a78bfa; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.8;
+    word-break: keep-all; overflow-wrap: anywhere;
+    padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 720px; margin: 0 auto; }
+  a { color: var(--accent); }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--dim); text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.25; letter-spacing: -.02em; margin: 12px 0 16px; text-wrap: balance; }
+  h2 { font-size: 24px; line-height: 1.4; margin: 56px 0 4px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h2 .n { font: 600 15px/1 var(--mono); color: var(--accent); flex: none; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
+  p, li { color: var(--text2); }
+  .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
+  .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
+  .actions a:hover { border-color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+  nav.toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 32px 0 0; background: var(--surface); }
+  nav.toc ol { margin: 0; padding-left: 1.4em; } nav.toc li { color: var(--fg); }
+  nav.toc a { color: inherit; text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  .scene { font: 600 13px/1 var(--sans); }
+  code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  dl.terms { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 14px 28px; margin: 16px 0 0; }
+  dt { font-weight: 700; color: var(--fg); } dd { margin: 0; color: var(--text2); }
+  dd .src { display: block; font-size: 13px; color: var(--dim); }
+  @media (max-width: 600px) { dl.terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } dd { margin-bottom: 16px; } }
+  input[type=search] { width: 100%; box-sizing: border-box; font: 500 16px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; }
+  footer { margin-top: 64px; font-size: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html">설명</a><a href="terms.html" aria-current="page">용어집</a></nav>
+<span class="eyebrow">1:49 · boss fight · receive queue · zero window · send queue</span>
+<h1>클라가 느리면 서버도 느려진다</h1>
+<p class="lede">이 영상에 나오는 용어 15개.</p>
+<input type="search" id="q" placeholder="용어 찾기" aria-label="용어 찾기">
+<dl class="terms" id="list">
+<dt>공유 브로드캐스트 버퍼</dt><dd>같은 패킷을 여러 세션에 보낼 때 복사 대신 함께 참조하는 버퍼다. 참조하는 세션이 모두 보내야 해제되므로 느린 세션 하나가 메모리를 붙잡는다.</dd>
+<dt>논블로킹 send</dt><dd>버퍼가 차도 기다리지 않고 바로 반환하는 전송 방식이다. 로직 스레드가 느린 클라이언트 때문에 멈추지 않게 해 준다.</dd>
+<dt>메인 스레드</dt><dd>클라이언트의 게임 로직과 렌더를 돌리는 스레드다. 프레임마다 수신 큐에서 정해진 개수만큼 패킷을 꺼내 처리한다.</dd>
+<dt>백프레셔 (backpressure)</dt><dd>받는 쪽이 느릴 때 그 압력이 보내는 쪽으로 거슬러 전달되는 현상이다. 이 영상에서는 클라이언트 수신 큐에서 시작해 서버 앱 송신 큐까지 전달된다.</dd>
+<dt>수신 스레드</dt><dd>클라이언트에서 소켓 읽기만 전담하는 스레드다. 렌더가 느려도 커널 수신 버퍼를 계속 비워 서버 쪽으로 압력이 가지 않게 한다.</dd>
+<dt>수신 큐</dt><dd>수신 스레드가 받은 패킷을 메인 스레드가 꺼내 갈 때까지 담아 두는 앱 메모리 안의 큐다.</dd>
+<dt>앱 송신 큐 (세션 송신 큐)</dt><dd>서버가 세션별로 두는, 커널에 아직 넘기지 못한 데이터의 대기열이다. 느린 클라이언트일수록 커지고, 상한에 닿으면 연결을 끊는 경우가 많다.</dd>
+<dt>프레임당 처리 예산</dt><dd>한 프레임에 처리할 패킷 수의 한도다. 프레임 시간이 길어지는 것을 막는 대신 남은 패킷은 다음 프레임으로 넘어간다.</dd>
+<dt>EAGAIN</dt><dd>논블로킹 소켓에서 커널 송신 버퍼가 가득 차 <code>send()</code>가 지금은 쓸 수 없다고 돌려주는 오류 코드다. 앱은 데이터를 자기 큐에 두고 나중에 다시 보내야 한다.</dd>
+<dt>FPS</dt><dd>초당 프레임 수다. 메인 스레드가 프레임마다 패킷을 꺼내므로 FPS가 떨어지면 초당 처리량도 같이 떨어진다.</dd>
+<dt>GC 정지</dt><dd>가비지 컬렉터가 메모리를 정리하는 동안 스레드가 멈추는 현상이다. 수신 경로에서 할당이 많으면 자주 일어난다.</dd>
+<dt>IOCP</dt><dd>Windows의 비동기 I/O 완료 통지 방식이다. 전송 요청을 걸어 두면 대기 중인 바이트가 쌓이므로 여기에도 상한이 필요하다.</dd>
+<dt>Send-Q</dt><dd><code>ss</code> 출력에서 연결별로 커널 송신 버퍼에 남아 상대의 ACK를 기다리는 바이트 수다. 특정 연결만 크면 그 클라이언트가 느리게 받아가고 있다는 신호다.</dd>
+<dt>SO_RCVBUF / SO_SNDBUF</dt><dd>소켓의 커널 수신 버퍼와 송신 버퍼 크기 옵션이다. 앱이 읽지 않으면 수신 버퍼가, 상대가 받지 않으면 송신 버퍼가 찬다.</dd>
+<dt>Zero Window</dt><dd>TCP 수신 측이 ACK에 수신 윈도우 0을 알려 더 받을 수 없다고 알리는 상태다. 송신 측 커널은 윈도우가 다시 열릴 때까지 전송을 멈춘다.</dd>
+</dl>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
+<script>
+  const q = document.getElementById('q'), dts = [...document.querySelectorAll('#list dt')];
+  q.addEventListener('input', () => { const s = q.value.trim().toLowerCase();
+    dts.forEach(dt => { const show = !s || (dt.textContent + dt.nextElementSibling.textContent).toLowerCase().includes(s); dt.hidden = dt.nextElementSibling.hidden = !show; }); });
+</script>
+</main>
+</body>
+</html>

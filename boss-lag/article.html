@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>보스가 뜨면 왜 렉이 걸릴까? — 글</title>
+<title>보스가 뜨면 왜 렉이 걸릴까? — 설명</title>
 <meta name="description" content="인원이 몰리면 브로드캐스트가 N×(N−1)로 늘고, 시야 반경이 2배면 보이는 인원이 4배가 되는 이유. 광역기 · 이펙트 · AI 부하, 서버 · 망 · 클라에서 터지는 지점과 대응.">
 <style>
   /* Reading page: one 720px column, light and dark. */
@@ -30,6 +30,11 @@
   .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
   p, li { color: var(--text2); }
   .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
   .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
   .actions a:hover { border-color: var(--accent); }
@@ -51,12 +56,11 @@
 </head>
 <body>
 <main>
-<span class="eyebrow">글로 읽기 · 1:22</span>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html" aria-current="page">설명</a><a href="terms.html">용어집</a></nav>
+<span class="eyebrow">1:22 · broadcast N² · AOI · view radius · boss fight</span>
 <h1>보스가 뜨면 왜 렉이 걸릴까?</h1>
-<div class="tags"><span>broadcast N²</span><span>AOI</span><span>view radius</span><span>boss fight</span></div>
-<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
 <p class="lede">MMO에서 보스가 등장하면 왜 렉이 걸리는지 설명하는 영상이다. 한곳에 모인 인원이 N명이면 서버가 보내야 할 상태 갱신은 N × (N − 1)로 늘고, 시야 반경을 넓히면 보이는 인원이 반경의 제곱으로 늘어 부담이 더 커진다. 게임은 보내는 양을 줄이거나 한곳에 모이는 인원을 나누는 방식으로 대응한다.</p>
-<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">사람이 몰린다</a></li><li><a href="#ch02">브로드캐스트는 N × (N − 1)</a></li><li><a href="#ch03">시야가 넓으면 더 나빠진다</a></li><li><a href="#ch04">보스 전투가 더하는 것</a></li><li><a href="#ch05">어디서 터지나</a></li><li><a href="#ch06">게임은 이렇게 줄인다</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">사람이 몰린다</a></li><li><a href="#ch02">브로드캐스트는 N × (N − 1)</a></li><li><a href="#ch03">시야가 넓으면 더 나빠진다</a></li><li><a href="#ch04">보스 전투가 더하는 것</a></li><li><a href="#ch05">어디서 터지나</a></li><li><a href="#ch06">게임은 이렇게 줄인다</a></li></ol></nav>
 <section id="ch01">
 <h2><span class="n">01</span>사람이 몰린다</h2>
 <p class="sub">보스가 뜨는 순간, 흩어져 있던 플레이어가 한곳으로 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
@@ -126,26 +130,8 @@
 </ul>
 <p>정리하면 보스전 렉 대응은 보내는 양(N², r²)을 줄이거나 한곳에 모이는 N을 나누는 것이다.</p>
 </section>
-<section id="terms">
-<h2>용어 정리</h2>
-<dl class="terms">
-<dt>존 (zone)</dt><dd>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 보스가 있는 존에 인원이 몰리면 그 존 서버만 부하가 튄다.</dd>
-<dt>틱</dt><dd>서버가 게임 세계를 한 번 갱신하는 주기다. 20Hz면 50ms마다 한 번이고, 이 시간이 한 틱의 처리 예산이다.</dd>
-<dt>브로드캐스트</dt><dd>한 플레이어의 상태 변화를 그 플레이어를 볼 수 있는 다른 플레이어 모두에게 복제해서 보내는 것이다. 인원이 N이면 한 명의 변화가 N − 1개의 패킷이 된다.</dd>
-<dt>N × (N − 1)</dt><dd>N명이 모두 서로를 볼 때 한 틱에 필요한 전송 수다. 인원의 제곱에 비례해서 늘어난다.</dd>
-<dt>AOI (Area of Interest)</dt><dd>플레이어 주변에서 서버가 정보를 보내 줄 범위다. 보통 시야 반경으로 정하고, 그리드로 나눠 주변 대상을 찾는다.</dd>
-<dt>시야 반경</dt><dd>AOI의 크기를 정하는 거리다. 반경이 2배면 면적과 보이는 인원이 최대 4배가 된다.</dd>
-<dt>pps (packets per second)</dt><dd>초당 패킷 수다. 작은 패킷이 많을 때는 대역폭보다 pps가 먼저 NIC나 커널 처리 한계에 걸리기도 한다.</dd>
-<dt>아웃바운드</dt><dd>서버에서 클라이언트 방향으로 나가는 트래픽이다. 브로드캐스트가 늘면 인바운드보다 훨씬 크게 증가한다.</dd>
-<dt>다운링크</dt><dd>클라이언트가 서버로부터 받는 방향의 회선이다. 수신량이 회선 속도를 넘으면 느린 회선부터 밀리고 끊긴다.</dd>
-<dt>광역기</dt><dd>한 번에 여러 대상을 맞히는 범위 공격이다. 피격 판정과 결과 알림이 피격 인원과 관전 인원의 곱만큼 생긴다.</dd>
-<dt>어그로</dt><dd>몬스터가 누구를 공격할지 정하는 위협 수치다. 보스는 참가자 N명의 위협 목록을 계속 다시 계산한다.</dd>
-<dt>LOD (Level of Detail)</dt><dd>거리나 중요도에 따라 상세도를 낮추는 기법이다. 서버는 갱신 빈도를, 클라이언트는 그래픽 품질을 낮춘다.</dd>
-<dt>델타 압축</dt><dd>이전에 보낸 상태와 비교해 바뀐 값만 보내는 방식이다. 패킷 크기를 줄인다.</dd>
-<dt>인스턴스 · 채널 분리</dt><dd>같은 지역을 여러 사본(채널)으로 나누거나 보스전을 별도 서버, 스레드로 떼어 한곳에 모이는 인원을 줄이는 방식이다.</dd>
-</dl>
-</section>
-<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+<p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
 </main>
 </body>
 </html>

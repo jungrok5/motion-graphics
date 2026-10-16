@@ -1,20 +1,20 @@
 ---
 name: tech-motion-explainer
-description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a playable web page with a player, a written chapter-by-chapter explanation and glossary under it, plus an optional MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline.
+description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a set of three pages per topic (video player · written explanation · topic glossary), plus an optional MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline.
 ---
 
 # Tech Motion Explainer
 
 Builds a single-file canvas animation where every frame is a pure function of time (`renderAt(t)`),
-wrapped in a player (play/pause, scrubber, chapter chips, speed 1× / 0.75× / 0.5×), with a written
-explanation and glossary under the player. The same page is baked to MP4 by
+wrapped in a player (play/pause, scrubber, chapter chips, speed 1× / 0.75× / 0.5×). Each topic is a set of three pages:
+`index.html` (영상), `article.html` (설명, chapter by chapter) and `terms.html` (용어집, this topic's terms only). The same page is baked to MP4 by
 `scripts/render.mjs`. Reference implementation: `proto-bot-pipeline/index.html` (64s, 5 chapters).
 
 Files:
 - `template.html` (this folder) — engine + player + 4 example scenes (intro, code panel, node flow, outro).
 - `scripts/render.mjs` — stills (`--stills 3,20`) or full MP4.
 - `scripts/check-player.mjs` — headless check: page errors, play, chapter jump, speed button, notes, phone-width overflow.
-- `scripts/build-articles.mjs` — builds `<slug>/article.html` and `glossary.html` from the notes in every video page.
+- `scripts/build-articles.mjs` — builds `<slug>/article.html` (설명) and `<slug>/terms.html` (용어집) from the notes in every video page.
 - `assets/fonts/` — Pretendard (Korean/Latin UI) and JetBrains Mono (code). Loaded from `../assets/fonts/`.
 
 ## Workflow
@@ -61,18 +61,18 @@ Each chapter = one idea and one visual device. Pick from the device catalog belo
    A chapter can have sub-phases: two `win()` windows overlapping by ~0.3s (see `sServerFirst`, `sPublisher`).
    Or one window whose layout persists while state changes (see `sCodegen` → sync, which spans two headers).
 
-6. Write the notes into the `<!-- NOTES -->` slot (inside `<section class="notes">`), for the same audience:
+6. Write the source text for the 설명 and 용어집 pages into the `<!-- NOTES -->` slot (inside the hidden `<section class="notes">`), for the same audience:
    ```html
    <p class="lede">2–3 sentences: what the video explains and the main takeaway.</p>
    <article data-ch="01"><p>…</p></article>      <!-- one per chapter number in HEAD; no heading -->
    <h2>용어 정리</h2>
    <dl class="terms"><dt>틱</dt><dd>…</dd> …</dl>  <!-- 8–15 terms used in the video -->
    ```
-   The page inserts each chapter title and a "▶ 이 장면" jump button from `HEAD`, so chapter renames need no notes edit.
+   Chapter titles and subtitles come from `HEAD` when the pages are built, so chapter renames need no notes edit.
    Each chapter: 2–4 short paragraphs (or a `<ul>`) that say what is on screen and why. Numbers must match the canvas exactly.
 7. Add the gallery entry (see Deliver), then generate the reading pages from those notes:
-   `node scripts/build-articles.mjs` → `<slug>/article.html` (글로 읽기: lede, table of contents, chapters with
-   "▶ 이 장면 보기" links to `index.html#chNN`, glossary) and the site-wide `glossary.html` (all terms, merged, searchable).
+   `node scripts/build-articles.mjs` → `<slug>/article.html` (설명: lede, table of contents, chapters with "▶ 이 장면 보기"
+   links to `index.html#chNN`) and `<slug>/terms.html` (용어집: this topic's terms, searchable). All three pages share tabs 영상 · 설명 · 용어집.
    Never edit these generated files by hand; edit the notes in `<slug>/index.html` and rerun.
 
 ### 4. Verify (mandatory, before showing the user)
@@ -84,7 +84,7 @@ node scripts/check-player.mjs <slug>/index.html --shots <scratch>/<slug>-stills
 - Pick times: the end of each chapter (everything revealed), plus the moments where something moves through
   or lands near text (packets crossing labels, counters growing, chips appearing). Overlaps hide in those in-between frames.
 - The two `404` lines in the render log are expected: fonts are tried at `assets/fonts/` then `../assets/fonts/`.
-- `--shots` saves full-page desktop and phone screenshots; look at the notes section in both.
+- Open `article.html` and `terms.html` too (or screenshot them) at desktop and phone width.
 - The poster frame (`POSTER`, before play) shows the intro; the big play button sits under the title, so keep the intro's
   story strip above y ≈ 900.
 Read every still. Fix overlapping text, clipped boxes, truncated typed lines, empty areas. Re-render only the stills you changed.
@@ -93,7 +93,7 @@ is any number or effect exaggerated, is an example number labeled `예시`? Fix 
 
 ### 5. Deliver
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
-  `{"article.html": "<slug>/article.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
+  `{"article.html": "<slug>/article.html", "terms.html": "<slug>/terms.html", "assets/fonts/Pretendard-Variable.woff2": "assets/fonts/Pretendard-Variable.woff2", "assets/fonts/JetBrainsMono.woff2": "assets/fonts/JetBrainsMono.woff2"}`.
   The page tries `assets/fonts/` first, then `../assets/fonts/`.
 - Add an entry to the `VIDEOS` list in the root `index.html` (GitHub Pages gallery) and a `## <slug> (Ns)` chapter table in `README.md`.
   Run `node scripts/build-articles.mjs` again if anything changed, then commit and push (the generated pages are committed).

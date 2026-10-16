@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>50ms와 RTT, 렉은 어디서 생길까? — 글</title>
+<title>50ms와 RTT, 렉은 어디서 생길까? — 설명</title>
 <meta name="description" content="서버 틱 처리시간이 50ms를 넘으면 왜 문제인지(응답 · 끊김 · 시간 왜곡), RTT가 느리면 무엇이 달라지는지(결과 지연 · 과거의 나 · 판정 불일치 · 지터).">
 <style>
   /* Reading page: one 720px column, light and dark. */
@@ -30,6 +30,11 @@
   .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
   p, li { color: var(--text2); }
   .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
   .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
   .actions a:hover { border-color: var(--accent); }
@@ -51,12 +56,11 @@
 </head>
 <body>
 <main>
-<span class="eyebrow">글로 읽기 · 1:23</span>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html" aria-current="page">설명</a><a href="terms.html">용어집</a></nav>
+<span class="eyebrow">1:23 · tick budget · RTT · jitter · lag compensation</span>
 <h1>50ms와 RTT, 렉은 어디서 생길까?</h1>
-<div class="tags"><span>tick budget</span><span>RTT</span><span>jitter</span><span>lag compensation</span></div>
-<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
 <p class="lede">게임 서버가 느릴 때와 네트워크 왕복 시간(RTT)이 길 때 플레이어가 겪는 지연이 어떻게 다른지 설명하는 영상이다. 서버의 틱 처리시간이 틱 간격(20Hz 기준 50ms)을 넘으면 같은 존의 모든 플레이어가 함께 늦어지고, RTT가 길면 그 플레이어와 그 플레이어를 보는 사람이 늦어진다. 체감 지연은 RTT, 틱 대기, 틱 처리, 보간, 프레임 시간을 더한 값으로 정리한다.</p>
-<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">틱은 서버 세계의 시계</a></li><li><a href="#ch02">50ms를 넘으면</a></li><li><a href="#ch03">끊김과 왜곡</a></li><li><a href="#ch04">RTT란</a></li><li><a href="#ch05">RTT가 느리면</a></li><li><a href="#ch06">정리</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">틱은 서버 세계의 시계</a></li><li><a href="#ch02">50ms를 넘으면</a></li><li><a href="#ch03">끊김과 왜곡</a></li><li><a href="#ch04">RTT란</a></li><li><a href="#ch05">RTT가 느리면</a></li><li><a href="#ch06">정리</a></li></ol></nav>
 <section id="ch01">
 <h2><span class="n">01</span>틱은 서버 세계의 시계</h2>
 <p class="sub">세계는 틱마다 한 칸씩 움직인다 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
@@ -117,26 +121,8 @@
 </ul>
 <p>체감 지연은 <code>RTT + 틱 대기 + 틱 처리 + 보간 + 프레임</code>으로 근사한다. 서버가 느리면 모두가 늦고, RTT가 느리면 나와 나를 보는 사람이 늦는다.</p>
 </section>
-<section id="terms">
-<h2>용어 정리</h2>
-<dl class="terms">
-<dt>틱 (tick)</dt><dd>서버가 게임 세계 전체를 한 번 갱신하는 주기적인 처리 단위다. 입력 처리, 이동, 전투 판정, 상태 전송이 한 틱 안에서 이루어진다.</dd>
-<dt>틱레이트 (Hz)</dt><dd>1초에 틱을 몇 번 도는지를 나타낸다. 20Hz면 틱 간격이 50ms이고, 이 간격이 한 틱의 처리시간 예산이 된다.</dd>
-<dt>틱 처리시간</dt><dd>한 틱을 실제로 처리하는 데 걸린 시간이다. 틱 간격보다 길어지면 다음 틱이 밀려 실제 틱레이트가 떨어진다.</dd>
-<dt>틱 대기</dt><dd>입력이 서버에 도착한 뒤 다음 틱이 시작될 때까지 기다리는 시간이다. 평균적으로 틱 간격의 절반 정도이고, 핑 숫자에는 보통 포함되지 않는다.</dd>
-<dt>p99</dt><dd>측정값을 작은 순서로 늘어놓았을 때 99% 위치의 값이다. 평균보다 스파이크를 잘 드러내므로 틱 처리시간 감시에 쓴다.</dd>
-<dt>RTT (Round-Trip Time)</dt><dd>패킷이 상대에게 갔다가 응답이 돌아오기까지의 왕복 시간이다. 게임의 핑 표시는 대개 이 값이다.</dd>
-<dt>지터 (jitter)</dt><dd>RTT나 패킷 도착 간격이 일정하지 않고 흔들리는 정도다. 지터가 크면 보간 버퍼를 키워야 해서 지연이 늘어난다.</dd>
-<dt>스냅샷</dt><dd>서버가 틱마다 클라이언트에게 보내는 주변 세계의 상태다. 다른 캐릭터의 위치 등이 들어 있다.</dd>
-<dt>보간 (interpolation)</dt><dd>클라이언트가 받은 스냅샷 두 개 사이의 위치를 계산해 부드럽게 그리는 방식이다. 이를 위해 스냅샷 몇 개를 버퍼에 쌓아 두고 약간 과거를 그린다.</dd>
-<dt>클라이언트 예측</dt><dd>서버 응답을 기다리지 않고 내 캐릭터를 먼저 움직이는 방식이다. 서버 결과가 예측과 다르면 나중에 보정한다.</dd>
-<dt>러버밴딩</dt><dd>예측한 위치와 서버의 위치가 달라 캐릭터가 뒤로 끌려가듯 되돌아가는 현상이다. 보정이 늦게 올수록 폭이 커진다.</dd>
-<dt>랙 보상 (lag compensation)</dt><dd>서버가 시간을 되감아, 공격한 플레이어의 화면 기준 위치로 명중을 판정하는 방식이다. 공격자에게는 공정하지만 맞는 쪽은 엄폐 후에 맞는 경험을 한다.</dd>
-<dt>dt</dt><dd>직전 틱부터 이번 틱까지 흐른 시간이다. 틱이 밀려 dt가 커지면 한 번에 움직이는 거리가 길어져 충돌 판정 누락이나 이동 검증 오탐이 생긴다.</dd>
-<dt>존 (zone)</dt><dd>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 그 존의 틱이 느려지면 존 안의 플레이어 전원이 영향을 받는다.</dd>
-</dl>
-</section>
-<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+<p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
 </main>
 </body>
 </html>

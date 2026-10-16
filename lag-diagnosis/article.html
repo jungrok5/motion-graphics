@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>렉 걸렸다. 서버 탓일까, 내 탓일까? — 글</title>
+<title>렉 걸렸다. 서버 탓일까, 내 탓일까? — 설명</title>
 <meta name="description" content="클라렉 · 네트워크렉 · 서버렉의 증상과 원인, 프레임타임 · 전송 핑 · 앱 핑 · 영향 범위로 판별하는 순서.">
 <style>
   /* Reading page: one 720px column, light and dark. */
@@ -30,6 +30,11 @@
   .sub { color: var(--dim); margin: 0 0 16px; font-size: 16px; }
   p, li { color: var(--text2); }
   .lede { font-size: 19px; color: var(--fg); }
+  nav.tabs { display: flex; gap: 6px; margin: 0 0 28px; border-bottom: 1px solid var(--line); }
+  nav.tabs a { font: 700 15px/1 var(--sans); color: var(--dim); text-decoration: none; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--fg); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .next { margin-top: 48px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; }
   .actions a { font: 600 14px/1 var(--sans); text-decoration: none; color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; background: var(--surface); }
   .actions a:hover { border-color: var(--accent); }
@@ -51,12 +56,11 @@
 </head>
 <body>
 <main>
-<span class="eyebrow">글로 읽기 · 1:13</span>
+<nav class="tabs" aria-label="같은 주제"><a href="index.html">영상</a><a href="article.html" aria-current="page">설명</a><a href="terms.html">용어집</a></nav>
+<span class="eyebrow">1:13 · frame time · RTT · server tick · diagnosis</span>
 <h1>렉 걸렸다. 서버 탓일까, 내 탓일까?</h1>
-<div class="tags"><span>frame time</span><span>RTT</span><span>server tick</span><span>diagnosis</span></div>
-<div class="actions"><a href="index.html">▶ 영상으로 보기</a><a href="#terms">용어 정리</a><a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></div>
 <p class="lede">이 영상은 "렉"이라는 하나의 증상을 클라렉, 네트워크렉, 서버렉으로 나누는 방법을 보여 준다. 체감 지연은 클라, 네트워크, 서버 구간 지연의 합이므로 어느 구간이 늘었는지 재면 원인이 갈린다. 실제로 볼 지표는 프레임타임, 전송 핑, 앱 핑 세 가지와 영향 범위다.</p>
-<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">렉의 세 구간</a></li><li><a href="#ch02">클라렉</a></li><li><a href="#ch03">네트워크렉</a></li><li><a href="#ch04">서버렉</a></li><li><a href="#ch05">핑 두 개로 가르기</a></li><li><a href="#ch06">판별 순서</a></li><li><a href="#terms">용어 정리</a></li></ol></nav>
+<nav class="toc" aria-label="목차"><ol><li><a href="#ch01">렉의 세 구간</a></li><li><a href="#ch02">클라렉</a></li><li><a href="#ch03">네트워크렉</a></li><li><a href="#ch04">서버렉</a></li><li><a href="#ch05">핑 두 개로 가르기</a></li><li><a href="#ch06">판별 순서</a></li></ol></nav>
 <section id="ch01">
 <h2><span class="n">01</span>렉의 세 구간</h2>
 <p class="sub">한 번의 반응 = 클라 + 네트워크 + 서버 · <a class="scene" href="index.html#ch01">▶ 이 장면 보기</a></p>
@@ -138,27 +142,8 @@
 </ul>
 <p>보는 순서는 "프레임타임 → 전송 핑 → 앱 핑 · 영향 범위"다. 클라 문제는 앱 핑까지 끌어올릴 수 있으므로 프레임타임을 가장 먼저 봐야 뒤 단계의 판단이 흔들리지 않는다.</p>
 </section>
-<section id="terms">
-<h2>용어 정리</h2>
-<dl class="terms">
-<dt>렉</dt><dd>입력한 뒤 결과가 화면에 나타나기까지 늦어지는 체감 지연을 통틀어 부르는 말이다. 원인은 클라, 네트워크, 서버 어디에도 있을 수 있다.</dd>
-<dt>프레임타임</dt><dd>클라가 화면 한 장(프레임)을 만드는 데 걸린 시간이다. 60fps를 유지하려면 프레임당 16.7ms 안에 끝나야 한다.</dd>
-<dt>FPS</dt><dd>초당 그리는 프레임 수다. 프레임타임의 역수이며 영상에서는 정상 60, 히치 중 4로 표시된다.</dd>
-<dt>히치</dt><dd>평소 정상이던 프레임 중 하나가 갑자기 수백 ms 걸려 화면이 순간 멈추는 현상이다.</dd>
-<dt>GC 스파이크</dt><dd>가비지 컬렉터가 메모리를 정리하느라 실행을 잠시 멈추는 구간이다. 클라에서는 히치, 서버에서는 틱 지연으로 나타난다.</dd>
-<dt>메인 스레드 블로킹</dt><dd>게임 루프를 돌리는 스레드가 파일 읽기나 긴 연산에 묶여 다음 프레임을 처리하지 못하는 상태다.</dd>
-<dt>RTT (핑)</dt><dd>패킷이 클라에서 서버까지 갔다가 응답이 돌아오는 왕복 시간이다.</dd>
-<dt>패킷 손실</dt><dd>전송 중 패킷이 사라지는 비율이다. 영상의 네트워크렉 구간에서 0%에서 12%로 오른다.</dd>
-<dt>지터</dt><dd>RTT가 일정하지 않고 들쭉날쭉한 정도다. 평균 핑이 낮아도 지터가 크면 움직임이 끊겨 보인다.</dd>
-<dt>전송 핑</dt><dd>서버의 소켓, 네트워크 계층에서 바로 응답하는 핑이다. 게임 로직을 거치지 않으므로 순수한 네트워크 왕복 시간에 가깝다.</dd>
-<dt>앱 핑</dt><dd>서버의 게임 로직 큐와 틱을 거친 뒤 응답하는 핑이다. 전송 핑과의 차이가 서버 내부 대기 시간이다.</dd>
-<dt>틱 / 틱레이트</dt><dd>서버가 게임 상태를 한 번 갱신하는 주기가 틱이고, 초당 틱 수가 틱레이트다. <code>20Hz</code>면 한 틱 예산이 50ms다.</dd>
-<dt>틱 예산</dt><dd>한 틱 안에 처리를 끝내야 하는 시간 한도다. 처리시간이 이를 넘기면 다음 틱이 밀리고 틱레이트가 떨어진다.</dd>
-<dt>락 경합</dt><dd>여러 스레드가 같은 자원을 잡으려고 서로 기다리는 상태다. 서버 틱 처리시간을 늘리는 흔한 원인이다.</dd>
-<dt>영향 범위</dt><dd>같은 증상을 겪는 사람이 나 혼자인지, 같은 망인지, 채널 전체인지를 뜻한다. 원인 구간을 가르는 마지막 단서다.</dd>
-</dl>
-</section>
-<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a> · <a href="https://jungrok5.github.io/motion-graphics/glossary.html">전체 용어집</a></footer>
+<p class="next">이 영상에 나온 용어는 <a href="terms.html">용어집</a>에 정리했다.</p>
+<footer><a href="https://jungrok5.github.io/motion-graphics/">전체 영상 목록</a></footer>
 </main>
 </body>
 </html>
