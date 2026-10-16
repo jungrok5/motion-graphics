@@ -1,6 +1,6 @@
 ---
 name: tech-motion-explainer
-description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a set of three pages per topic (video player · written explanation · topic glossary), plus an MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline.
+description: Turn a technical process (architecture, pipeline, dev workflow, protocol, infra flow) into a 60–110s code-driven motion-graphic explainer — a set of three pages per topic (video player · written explanation · topic glossary), plus an MP4. Use when the user gives technical content and asks for a 모션그래픽 / 설명 영상 / explainer video / animated walkthrough in the style of proto-bot-pipeline. Also covers short cinematic 3D cuts of a topic in other visual styles (빛 입자 glow, 3D 유리 패널 glass, 연속 줌인 zoom) — see styles/.
 ---
 
 # Tech Motion Explainer
@@ -15,6 +15,7 @@ Files:
 - `scripts/render.mjs` — stills (`--stills 3,20`) or full MP4.
 - `scripts/check-player.mjs` — headless check: page errors, play, chapter jump, speed button, notes, phone-width overflow.
 - `expert-review.md` — prompt for the senior-expert review agent (step 5).
+- `styles/` — 3D visual styles (glow, glass, zoom): engine notes, what worked, base pages to copy.
 - `scripts/build-articles.mjs` — builds `<slug>/article.html` (설명) and `<slug>/terms.html` (용어집) from the notes in every video page.
 - `assets/fonts/` — Pretendard (Korean/Latin UI) and JetBrains Mono (code). Loaded from `../assets/fonts/`.
 
@@ -118,6 +119,11 @@ Pick 3–4 ideas that carry the topic's main message and redraw them for a phone
 - Verify the same way (stills, `check-player`), then bake the MP4 to upload: `node scripts/render.mjs <slug>-shorts/index.html out/<slug>-shorts.mp4`.
 - Gallery entry: `{ path: '<slug>-shorts/', vertical: true, mp4: 'out/<slug>-shorts.mp4', full: '<slug>/', … }`;
   add a `모바일 세로 영상` link to the full video's player nav. In user-facing copy call it 세로 영상 or 모바일 세로 영상, not 쇼츠; title prefix `세로 · `, desc starts `모바일용 세로 영상.`, tags start `'mobile', '9:16'`.
+
+### Other visual styles (3D, WebGL)
+When the user asks for a different look (그림체 / 스타일 / 광고 느낌 / 3D) or names one of 빛 입자 · 유리 패널 · 연속 줌인,
+read `styles/README.md` and the style's file. Those are ~20 s cuts of an already reviewed topic, built with the vendored three.js,
+made as a wide (PC) and a vertical (mobile) page, verified with stills, and not baked to MP4 unless asked.
 
 ### 6. Deliver
 - Publish the page as an Artifact. Use `files` so the fonts and the reading page ship with it:
