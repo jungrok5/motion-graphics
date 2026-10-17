@@ -1032,7 +1032,7 @@ function ov06(t) {
   const u = t - S; ctx.save(); ctx.globalAlpha = a;
   const k = eo(p(u, .2, .6));
   txt('패킷 하나(최대 1,460B 예시)에 담기는 캐릭터 이동 정보', 120, 262, { size: 32, weight: 800, alpha: k });
-  txt('한 칸 = 1바이트 · 한 줄 = 32바이트 · 같은 색 덩어리 = 한 명분', 120, 302, { size: 28, color: C.dim, alpha: k });
+  txt('한 칸 = 1바이트 · 한 줄 = 32바이트 · 같은 밝기 한 묶음 = 한 명분', 120, 302, { size: 28, color: C.dim, alpha: k });
   ENC.forEach(([b], i) => {
     const kk = eo(p(u, .6 + i * .7, .4)); if (kk <= 0) return;
     const n = Math.floor(MSS / b), fill = eo(p(u, .6 + i * .7, 1.2)), [x, y] = proj(O6.x + PLX(i) + PW / 2, 0, 0);

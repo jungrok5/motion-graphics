@@ -356,7 +356,7 @@ const PL = (() => {
     out.push({ swarm, ra, aa, rs, as, delay: R() * 1.7, ph: R() * 6.28, ph2: R() * 6.28, ch: i % NCH, thr: .45 + .55 * R(), cls: Math.floor(R() * CLASS.length) });
   }
   // the player whose view ring we draw sits near (1.3, 0, .9); make it index 0 so it is also the first of every subset
-  const ci = out.map((a, i) => [a.swarm.distanceToSquared(V(1.3, 0, .9)), i]).sort((x, y) => x[0] - y[0])[0][1];
+  const ci = out.map((a, i) => [a.swarm.distanceToSquared(V(-1.9, 0, -1.3)), i]).sort((x, y) => x[0] - y[0])[0][1];
   [out[0], out[ci]] = [out[ci], out[0]];
   return out;
 })();
@@ -1155,8 +1155,8 @@ function s06(t) {
     const on = i === act || (i === 3 && t > T_SH + .9 && t < T_CH) || (i === 5 && t > 74.6);
     y += item(ti, de, CL, y, p(t, 66.3 + i * .45, .5), { ts: 30, active: on ? 1 : .15, col: on ? GOLD : ACC }) - 8;
   });
-  readout(`가까운 ${K}명만 · 200 × ${K}`, fmt(NP * K), '/ 틱', X0, 300, win(t, T_K + .3, T_SH, .35), { size: 96, sh: true });
-  readout(`채널 ${NCH}개 · 채널당 50명`, fmt(50 * 49), '/ 틱', X0, 300, win(t, T_CH + .8, 77.0, .35), { size: 96, sh: true });
+  readout(`상세 동기화 · 가까운 ${K}명 · 200 × ${K}`, fmt(NP * K), '/ 틱', X0, 300, win(t, T_K + .3, T_SH, .35), { size: 96, sh: true });
+  readout(`채널 하나 · 50명 (존 전체 ${NCH} × 2,450)`, fmt(50 * 49), '/ 틱', X0, 300, win(t, T_CH + .8, 77.0, .35), { size: 96, sh: true });
   const lod = win(t, T_FAR - .1, T_K + .2, .4), c = LINKS.material.uniforms.uP.value[CI];
   [[1.0, '20Hz'], [2.0, '5Hz'], [3.2, '2Hz']].forEach(([r, s], k) => label3D(s, V(c.x + r * .74, 0, c.z - r * .74), lod * eo(p(t, T_FAR + .4 + k * .2, .4)), { size: 34, mono: true, align: 'left', dx: 8, color: '#bff6ff' }));
   mePlate(t, Math.max(lod, win(t, T_SH, T_CH + .2, .4)));

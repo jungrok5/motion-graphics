@@ -507,9 +507,9 @@ function drawHW(g, t) {
   const x = 30, y = TB + 50;
   codeLine(g, 'buf.Add(0x08); buf.AddVarint(dungeonId);', x, y, 30);
   codeLine(g, 'buf.Add(0x10); buf.AddVarint(partyId);', x, y + 44, 30);
-  gt(g, '// v1.4 difficulty(3번) 미반영', x, y + 88, { size: 30, mono: true, color: rgba(K.red, .9) });
+  gt(g, '// difficulty(3번) 누락 → 서버는 0으로 읽음', x, y + 88, { size: 30, mono: true, color: rgba(K.red, .9) });
   g.fillStyle = 'rgba(242,73,92,0.25)'; g.fillRect(0, y + 118, w, 1.5);
-  gt(g, '번호 · 타입 수동 관리 → 어긋나면 서버가 잘못 파싱', x, y + 166, { size: 29, weight: 700, color: '#ff7383', alpha: eo(p(t, 29.6, .5)) });
+  gt(g, '필드를 손으로 관리 → 빠져도 오류 없이 기본값으로 테스트', x, y + 166, { size: 29, weight: 700, color: '#ff7383', alpha: eo(p(t, 29.6, .5)) });
   gt(g, '→ 테스트 결과를 믿을 수 없음', x, y + 210, { size: 29, color: K.dim, alpha: eo(p(t, 30.4, .5)) });
   const kx = eback(p(t, 29.35, .5));
   if (kx > 0) { g.save(); g.translate(w - 34, 36); g.scale(kx, kx); gdot(g, 0, 0, 25, '#3a1218'); g.lineWidth = 2; g.strokeStyle = K.red; g.beginPath(); g.arc(0, 0, 25, 0, 7); g.stroke(); gcross(g, 0, 0, 28, K.red); g.restore(); }

@@ -270,7 +270,7 @@ const PL = (() => {
     out.push({ swarm, ra, aa, rs, as, delay: R() * 1.7, ph: R() * 6.28, ph2: R() * 6.28, ch: i % NCH, thr: .45 + .55 * R(), cls: Math.floor(R() * CLASS.length) });
   }
   // the player whose view ring we draw sits near (1.3, 0, .9); make it index 0 so it is also the first of every subset
-  const ci = out.map((a, i) => [a.swarm.distanceToSquared(V(1.3, 0, .9)), i]).sort((x, y) => x[0] - y[0])[0][1];
+  const ci = out.map((a, i) => [a.swarm.distanceToSquared(V(-1.9, 0, -1.3)), i]).sort((x, y) => x[0] - y[0])[0][1];
   [out[0], out[ci]] = [out[ci], out[0]];
   return out;
 })();
@@ -710,8 +710,8 @@ function counter(t) {
     block(lab, String(t < T_R2 ? CNT1 : insideCount(vr)), '명', a, { numCol: t > T_R2 + .2 ? GOLD : INK });
   }
   block('거리별 갱신 빈도 · 가까움 → 멂', '20 → 2~5', 'Hz', win(t, T_FAR + .1, T_K + .15, .35), { size: 120 });
-  block(`가까운 ${K}명만 · 200 × ${K}`, fmt(NP * K), '/ 틱', win(t, T_K + .2, T_CH + .1, .35));
-  block(`채널 ${NCH}개 · 채널당 50명`, fmt(50 * 49), '/ 틱', win(t, T_CH + .6, END_AT + .2, .35));
+  block(`상세 동기화 · 200 × ${K}`, fmt(NP * K), '/ 틱', win(t, T_K + .2, T_CH + .1, .35));
+  block(`채널 하나 · 50명 (전체 ${NCH} × 2,450)`, fmt(50 * 49), '/ 틱', win(t, T_CH + .6, END_AT + .2, .35));
   ctx.save(); shadow(10); txt('* 수치는 예시', X1, 250, { size: 32, weight: 600, color: 'rgba(214,238,236,.62)', align: 'right', alpha: win(t, 5.8, END_AT, .5) }); ctx.restore();
 }
 // caption: words fade + un-blur one by one, on a dark HUD strip

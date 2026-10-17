@@ -796,7 +796,7 @@ function sSlowRTT(t, E) {
     txt('내 화면의 적', x + 440, ly + 46, { size: 20, color: C.b, align: 'center', alpha: k });
     dot(x + 700, ly, 14, C.b, k, 12); txt('서버의 현재 적', x + 700, ly + 46, { size: 20, color: C.b, align: 'center', alpha: k });
     const ks = p(mod(v, 4), .5, .5); if (ks > 0 && ks < 1) dot(lerp(x + 140, x + 430, ks), ly, 5, C.a, 1, 14);
-    if (mod(v, 4) > 1) tag(`명중 (되감아서 판정, ≈ ${R0(m.seen)}ms) → 상대는 벽 뒤에서 맞음`, x + 417, y + 170, C.red, { align: 'center', size: 20, mono: false, alpha: k }); }
+    if (mod(v, 4) > 1) tag(`명중 (되감아서 판정, ≈ ${R0(P.rttA + m.wait + P.proc + m.interp)}ms) → 상대는 벽 뒤에서 맞음`, x + 417, y + 170, C.red, { align: 'center', size: 20, mono: false, alpha: k }); }
   // 4 · bigger corrections
   f = cardFrame(3, u, '예측 오차 · 러버밴딩 증가', '보정이 늦게 올수록 더 멀리 갔다가 더 크게 되돌림', C.red);
   if (f) { const { x, y, k } = f, v = E.live ? ck : f.v, cyc = mod(v, 4);

@@ -508,7 +508,7 @@ let BLK, BEDS = [], BUDG, PLAYH, STW, AOIBOX, RULER;
 }
 
 // ═════ L3 · THE ZONE'S PLAYERS (inside the AOI step) ═════
-const CROWD = (() => { const r = rng(9); return Array.from({ length: 60 }, () => { const a = r() * Math.PI * 2, d = Math.sqrt(r()); return [Math.cos(a) * d * 44, Math.sin(a) * d * 40]; }); })();
+const CROWD = (() => { const r = rng(9); return Array.from({ length: 60 }, () => { const a = r() * Math.PI * 2, d = Math.sqrt(r()); return [Math.cos(a) * d * 26, Math.sin(a) * d * 24]; }); })();
 CROWD[0] = [4, 2];
 const PAIRS = []; for (let j = 1; j < 60; j++) for (let i = 0; i < j; i++) PAIRS.push([i, j]);
 let PL, LINKS, PULSE, RING;

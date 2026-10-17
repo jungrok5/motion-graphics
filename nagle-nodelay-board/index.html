@@ -444,7 +444,7 @@ function sBatch(t) {
   onBoardV(t, OUT_S, 0, H, u => {
     const v = u - WIPE1;
     paper(80, 410, 920, 210, clamp((v - .4) / .45), { rot: -.012 }, () => {
-      txt('// 서버 (C++, Linux)', 36, 58, { size: 28, weight: 500, mono: true, color: '#7a808a' });
+      txt('// 서버 쪽 (클라도 각자 설정)', 36, 58, { size: 28, weight: 500, mono: true, color: '#7a808a' });
       txt('setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,', 36, 118, { size: 30, weight: 600, mono: true });
       txt('           &one, sizeof one);', 36, 166, { size: 30, weight: 600, mono: true });
       font(30, 600, true); const cw = ctx.measureText('M').width;

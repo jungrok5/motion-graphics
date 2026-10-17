@@ -840,7 +840,7 @@ function overFixV(t) {
     if (as >= 0 && as < 1.3) { const g = cV(f).gb, x1 = cV(f).xb - CV.err; const [x, y] = proj((g + x1) / 2, .05, zB + .95); txt('미확인 입력 재적용', W - 30, y - 120, { size: 30, weight: 700, color: C.client, align: 'right', alpha: eo(p(as, 0, .2)) * (1 - eo(p(as, 1.0, .3))), sh: 6 }); }
   }
   drawHChips();
-  netPanelV(k, { mode: 'SLOW-MO ×0.5', rows: [['RTT', '62 ms', C.ok], ['재조정', 'ON', C.ok], ['스무딩', 'ON', C.ok]], big: ['보정 보간 (Smoothing)', '100~200', C.ok, 96, 'ms'] });
+  netPanelV(k, { mode: 'SLOW-MO ×0.5', rows: [['재조정', 'ON', C.ok], ['스무딩', 'ON', C.ok]], big: ['보정 보간 (Smoothing)', '100~200', C.ok, 96, 'ms'] });
   captionV('재조정: 보정 위치에서 미확인 입력을 다시 적용', '보간: 순간이동 대신 100~200ms에 걸쳐 이동', eo(p(u, .6, .5)) * (1 - eo(p(u, 3.0, .3))), eo(p(u, 1.1, .5)) * (1 - eo(p(u, 3.0, .3))), { y: 1700, s1: 40 });
   const kc = eo(p(u, 3.2, .4));
   if (kc > 0) {
@@ -866,7 +866,7 @@ function overOutroV(t) {
     txt(lab, 336, y + 10, { size: 40, weight: 800, color: col, alpha: k });
   });
   txt('Prediction → Network → Authority → Correction → Reconciliation', W / 2, 1480, { size: 24, color: C.faint, align: 'center', mono: true, alpha: eo(p(v, 1.4, .6)) });
-  txt('전체 영상: 원인 4가지를 하나씩 재현 · 1:07', W / 2, 1580, { size: 34, color: C.dim, align: 'center', alpha: eo(p(v, 1.6, .6)) });
+  txt('전체 영상: 원인 두 갈래 · 사례 4가지 · 1:07', W / 2, 1580, { size: 34, color: C.dim, align: 'center', alpha: eo(p(v, 1.6, .6)) });
   ctx.restore();
 }
 
