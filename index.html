@@ -45,8 +45,6 @@
   .section-head p { margin: 0; color: var(--dim); line-height: 1.6; max-width: 62ch; }
   .meta .eyebrow { font: 700 13px/1 var(--sans); letter-spacing: .06em; color: var(--accent); }
   .poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-  details.early summary { cursor: pointer; color: var(--dim); font-size: 15px; padding: 8px 0; }
-  details.early ul { margin-top: 16px; }
   .head-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
   footer { color: var(--dim); font-size: 13px; }
   footer a { color: var(--fg); }
@@ -63,7 +61,6 @@
   <ul id="list"></ul>
   <section class="section-head"><h2>설명 방식 실험</h2><p>같은 주제를 다른 설명 방식으로 다시 만든 실험입니다. 방식마다 가장 잘 맞는 주제를 골랐고, 그림체는 그 주제의 실제 세계(게임 화면, 프로파일러, 에디터, 화이트보드 등)에서 가져왔습니다. 가로(PC)는 본편 전체 내용, 세로(모바일)는 20초 요약이고, 브라우저에서 실시간으로 재생됩니다.</p></section>
   <ul id="lab"></ul>
-  <details class="early"><summary>초기 샘플 5편 — 레퍼런스 겉모습을 너무 따라 한 첫 시도 (기법 참고용)</summary><ul id="early"></ul></details>
   <footer>Source: <a href="https://github.com/jungrok5/motion-graphics">github.com/jungrok5/motion-graphics</a></footer>
 </main>
 <script>
@@ -174,14 +171,7 @@
       desc: '회의실 화이트보드에 시퀀스 다이어그램을 마커로 그려 가며 추론한다. 보류 구간에 빗금, +60 ms 포스트잇, 옆에 NODELAY를 다시 그리고, ss · nstat 출력에 동그라미.',
       tags: ['whiteboard', 'sequence', 'TCP'] },
   ];
-  // First samples: copied their references' look too closely. Kept for technique.
-  const EARLY = [
-    { style: '초기 샘플 · 빛 입자', wide: 'skill-journey-glow-wide/', tall: 'skill-journey-glow/', full: 'skill-journey/', title: '내 스킬 하나가 상대 화면에 뜨기까지', length: '0:21' },
-    { style: '초기 샘플 · 유리 패널', wide: 'skill-journey-glass-wide/', tall: 'skill-journey-glass/', full: 'skill-journey/', title: '내 스킬 하나가 상대 화면에 뜨기까지', length: '0:22' },
-    { style: '초기 샘플 · 빛 입자', wide: 'boss-lag-glow-wide/', tall: 'boss-lag-glow/', full: 'boss-lag/', title: '보스가 뜨면 렉이 생기는 이유', length: '1:22' },
-    { style: '초기 샘플 · 유리 패널', wide: 'boss-lag-glass-wide/', tall: 'boss-lag-glass/', full: 'boss-lag/', title: '보스가 뜨면 렉이 생기는 이유', length: '0:22' },
-    { style: '초기 샘플 · 연속 줌인', wide: 'packet-zoom/', full: 'one-byte/', title: '이동 패킷 하나를 끝까지 따라가기', length: '0:50' },
-  ];  const card = (v, ul) => {
+ const card = (v, ul) => {
     const li = document.createElement('li');
     li.innerHTML = `<a class="card" href="${v.wide}">
       <div class="poster"><img src="${v.wide}poster.png" alt="" loading="lazy"></div>
@@ -196,7 +186,6 @@
     ul.appendChild(li);
   };
   LAB.forEach(v => card(v, document.getElementById('lab')));
-  EARLY.forEach(v => card(v, document.getElementById('early')));
   const list = document.getElementById('list');
   for (const v of VIDEOS) {
     const li = document.createElement('li');

@@ -81,8 +81,6 @@
 | 바닥부터 쌓기 | 이동 패킷, 바이트를 줄이면 무슨 일이? | 헥스 덤프 · 비트 격자 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/one-byte-stack-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/one-byte-stack/) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
 | 그려 가며 설명 | Nagle과 TCP_NODELAY | 회의실 화이트보드 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board/) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
 
-레퍼런스 겉모습을 너무 따라 한 첫 시도 5편(빛 입자 · 유리 패널 · 연속 줌인)은 갤러리 아래 "초기 샘플"에 기법 참고용으로 남겨 두었습니다.
-
 ## 한 주제의 세 페이지
 
 | 페이지 | 파일 | 내용 |
