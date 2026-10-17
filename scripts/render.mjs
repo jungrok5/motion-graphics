@@ -1,5 +1,6 @@
 // Render a canvas animation page to MP4.
-// Usage: node scripts/render.mjs <page.html> <out.mp4> [--fps 30] [--stills 3,10,20]
+// Usage: node scripts/render.mjs <page.html> <out.mp4> [--fps 30] [--crf 18] [--from s --to s] [--stills 3,10,20]
+//   --from/--to render one segment (frames [from*fps, to*fps)); join segments with scripts/render-chunked.sh.
 //   The page must expose window.ready (Promise), window.renderAt(t) and window.DURATION.
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
@@ -16,6 +17,8 @@ const args = process.argv.slice(2);
 const flag = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : def; };
 const fps = Number(flag('--fps', 30));
 const stills = flag('--stills', null);
+const crf = flag('--crf', '18');
+const from = Number(flag('--from', 0)), to = flag('--to', null);
 const [page, out] = args;
 if (!page || !out) { console.error('usage: render.mjs <page.html> <out.mp4> [--fps 30] [--stills t1,t2]'); process.exit(1); }
 
@@ -45,9 +48,9 @@ if (stills) {
   }
 } else {
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
-  const total = Math.round(duration * fps);
-  for (let f = 0; f < total; f++) {
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
+  const total = Math.round((to === null ? duration : Math.min(Number(to), duration)) * fps);
+  for (let f = Math.round(from * fps); f < total; f++) {
     const buf = Buffer.from(await grab(f / fps), 'base64');
     if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
     if (f % fps === 0) process.stdout.write(`\r${f}/${total}`);
