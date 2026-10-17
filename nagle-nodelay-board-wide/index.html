@@ -1,0 +1,1072 @@
+<meta charset="utf-8">
+<title>Nagle Whiteboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage (a whiteboard drawn on canvas), a slim transport bar under it, chapter chips below. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="Nagle과 TCP_NODELAY 화이트보드 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="102" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:41</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../nagle-nodelay/article.html">설명 읽기</a><a href="../nagle-nodelay/terms.html">용어집</a><a href="../nagle-nodelay/">2D 원본 영상</a><a href="../nagle-nodelay-board/">모바일 세로 영상</a></nav>
+</div>
+<!-- Source text: kept verbatim from ../nagle-nodelay/index.html; its article.html / terms.html are the 설명 · 용어집 for this page. Not shown on this page. -->
+<section class="notes" id="notes" hidden>
+<p class="lede">TCP 소켓은 기본으로 Nagle 알고리즘이 켜져 있어서, 앞 패킷의 ACK를 받기 전에 쓴 작은 데이터는 바로 나가지 않습니다. 받는 쪽이 ACK를 늦추는 Delayed ACK와 겹치면 스킬 입력 같은 작은 패킷이 수십 ms 늦게 도착합니다. 손실이 나면 Nagle 때문에 빠른 재전송도 못 쓰고 RTO(최소 200 ms)까지 기다릴 수 있습니다. 게임 서버와 클라는 <code>TCP_NODELAY</code>를 켜고, 패킷 수는 서버가 틱마다 모아서 보내는 방식으로 관리합니다.</p>
+<article data-ch="01">
+<p>MMO 클라이언트가 보내는 패킷은 대부분 수십 바이트입니다. 화면의 예시에서 <code>MoveReq</code>는 데이터 24B, <code>SkillUseReq</code>는 16B이고, 여기에 IPv4 20B + TCP 20B + 타임스탬프 옵션 12B, 합계 52B 헤더가 붙습니다.</p>
+<p>세그먼트 하나에는 MSS(이 예시에서 1448B)까지 데이터를 담을 수 있으니, 게임 패킷은 그 수십 분의 일만 채운 채 나갑니다. <code>MoveReq</code> 기준으로 패킷의 68%(52 ÷ 76)가 헤더입니다.</p>
+<p>이동 패킷은 캐릭터가 움직이는 동안 초당 10~20회, 스킬 패킷은 입력 즉시 이동 패킷 사이에 섞여 나갑니다. 크기와 빈도는 예시이며 게임마다 다릅니다.</p>
+</article>
+<article data-ch="02">
+<p>Nagle 알고리즘(RFC 896)은 1바이트 입력마다 41바이트 패킷이 나가던 원격 터미널 트래픽을 줄이려고 만든 규칙이고, Linux와 Windows 모두 TCP 소켓에서 기본으로 켜져 있습니다.</p>
+<ul>
+<li>앞 패킷의 ACK를 이미 받았으면 바로 보냅니다.</li>
+<li>모인 데이터가 MSS를 채우면 바로 보냅니다.</li>
+<li>ACK를 받지 못한 작은 세그먼트가 아직 있으면, 새 작은 데이터는 커널 송신 버퍼에 보류합니다.</li>
+</ul>
+<p>화면에서는 <code>MoveReq</code>가 먼저 나가 ACK를 기다리는 동안 <code>SkillUseReq</code>가 버퍼에 머물고, ACK가 돌아온 뒤에야 나갑니다. 이동 · 스킬 패킷은 작고 자주 나가기 때문에 세 번째 경우에 자주 걸립니다.</p>
+</article>
+<article data-ch="03">
+<p>받는 쪽은 ACK를 바로 보내지 않고 잠시 기다렸다가, 보낼 데이터가 생기면 거기에 실어 보냅니다(Delayed ACK). Linux는 이 타이머가 40 ms부터 시작해 최대 200 ms, Windows는 기본 200 ms입니다.</p>
+<p>세로축이 시간인 시퀀스 다이어그램의 예시 조건은 RTT 30 ms, 서버 delayed ACK 40 ms입니다. 0 ms에 <code>MoveReq</code>를 보내고 10 ms에 스킬을 입력하면, 스킬은 Nagle 규칙에 걸려 보류됩니다. 서버는 15 ms에 <code>MoveReq</code>를 받지만 보낼 응답이 없어 ACK를 55 ms까지 미루고, 그 ACK가 70 ms에 클라에 도착해야 스킬이 나가 85 ms에 서버에 닿습니다. Nagle이 없었다면 25 ms에 도착했을 패킷이 60 ms 늦어집니다.</p>
+<p>서버가 그사이 클라에 보낼 데이터(주변 상태 등)가 있으면 ACK가 거기에 실려 오므로 보류는 짧아집니다. 실제 지연은 RTT, 상대편 ACK 타이머, 서버가 응답을 보내는 주기에 따라 0부터 수백 ms까지 달라집니다.</p>
+</article>
+<article data-ch="04">
+<p>패킷 하나가 손실됐을 때 Nagle이 어떻게 복구를 늦추는지 양쪽을 나란히 비교합니다. 둘 다 첫 패킷 A가 손실되고, 이어서 B, C, D를 보내려는 상황입니다. 수치는 예시로 RTT 30 ms, Linux의 최소 RTO 200 ms를 썼습니다.</p>
+<p>Nagle이 켜져 있으면 ACK를 받지 못한 작은 세그먼트가 하나 있는 동안 B, C, D는 송신 버퍼에 머뭅니다. 서버는 아무것도 받지 못했으니 중복 ACK(dup ACK)를 보낼 일이 없고, 클라는 손실을 알아챌 단서가 없습니다. 결국 RTO 타이머가 끝나는 200 ms 뒤에야 A를 재전송하고, A는 215 ms에 도착합니다. 재전송한 A도 아직 ACK를 받지 못한 작은 세그먼트라 B, C, D는 계속 보류됩니다. RTO 직후에는 cwnd도 1이라 A 하나만 나갈 수 있습니다. B, C, D는 A의 ACK가 돌아온 뒤에야 나가서, 서버가 ACK를 바로 보내면 245 ms, delayed ACK에 걸리면 285 ms쯤 도착합니다.</p>
+<p>TCP_NODELAY면 B, C, D가 바로 나가 서버에 먼저 도착합니다. 서버는 A가 빠졌다는 뜻으로 패킷마다 dup ACK를 돌려보내고, 클라는 dup ACK 3개를 받는 순간 RTO를 기다리지 않고 A를 다시 보냅니다(빠른 재전송). 이 예시에서는 75 ms에 A부터 D까지 모두 전달됩니다.</p>
+<p>다만 빠른 재전송은 뒤따르는 패킷이 있어야 동작합니다. 메시지가 드문 연결이면 NODELAY여도 dup ACK가 모자라 RTO까지 가는 경우가 있습니다. 재전송 자체는 <a href="https://jungrok5.github.io/motion-graphics/tcp-retransmission/">TCP 재전송 영상</a>에서 자세히 다룹니다.</p>
+</article>
+<article data-ch="05">
+<p><code>TCP_NODELAY</code>는 Nagle을 끄는 소켓 옵션입니다. 켜면 <code>send()</code>한 데이터가 앞 패킷의 ACK와 상관없이 바로 나갑니다. 같은 예시 조건에서 스킬 패킷은 85 ms가 아니라 25 ms에 서버에 도착합니다.</p>
+<p>옵션은 보내는 쪽 소켓에 적용됩니다. 클라 소켓에 켜면 클라 → 서버 방향(이동 · 스킬 입력)이, 서버 소켓에 켜면 서버 → 클라 방향(주변 상태 · 판정 결과)이 바로 나갑니다. 서버 → 클라 방향의 ACK는 클라(Windows)가 보내므로 이 방향에서 Nagle이 남아 있으면 보류가 Windows 기본 타이머(200 ms) 가까이 길어질 수 있습니다. 양쪽 모두 설정합니다.</p>
+<p>코드 예: C/C++ <code>setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &amp;one, sizeof one)</code>, .NET <code>Socket.NoDelay = true</code>, Unreal <code>FSocket::SetNoDelay(true)</code>.</p>
+</article>
+<article data-ch="06">
+<p><code>TCP_NODELAY</code>만 켜고 서버가 메시지마다 <code>send()</code>를 부르면, 최악의 경우 메시지 수만큼 패킷이 나갑니다. 예시 조건(5,000 CCU, 20 Hz 틱, 클라당 틱마다 30B 메시지 6개, 헤더 52B)에서 서버 송신은 최악의 경우 초당 600,000 패킷, IP+TCP 헤더 포함 394 Mbps이고 그중 63%가 헤더입니다. Linux는 기본으로 <code>tcp_autocorking</code>이 켜져 있어, 앞 패킷이 아직 NIC 큐에 남아 있으면 이어진 작은 write를 합쳐 보냅니다. 그래서 부하가 걸린 서버에서는 실제 pps가 이보다 낮게 측정될 수 있습니다. <code>send()</code> 호출 수는 그대로 6배입니다.</p>
+<p>서버가 한 틱 동안 클라별로 메시지를 모아 <code>send()</code>를 한 번만 부르면 초당 100,000 패킷, 186 Mbps, 헤더 비율 22%가 됩니다. 메시지는 원래 틱 단위로 만들어지므로 모아서 보내도 추가 대기는 거의 없습니다.</p>
+<p>Nagle을 켜 둬도 패킷은 모이지만, 언제 보낼지가 ACK 도착에 달려 있어 03의 보류가 생깁니다. 두 방식 모두 대기 없이 보내는 조건에서 비교하면, 차이는 패킷 수와 헤더 비율입니다. pps 비용은 NIC · 커널 처리량이 병목일 때 커집니다.</p>
+</article>
+<article data-ch="07">
+<p>서버에서 바로 볼 수 있는 지표입니다. 화면의 출력 값은 예시입니다.</p>
+<ul>
+<li><code>ss -ti</code>: 연결별 <code>rto</code>(재전송 타임아웃, ms), <code>rtt</code>, <code>ato</code>(현재 delayed ACK 타이머, ms), <code>mss</code>를 보여 줍니다.</li>
+<li><code>nstat -az TcpExtDelayedACKs TcpRetransSegs</code>: 타이머로 늦춰 보낸 ACK와 재전송한 세그먼트의 누적 수입니다. 절대값보다 증가 속도를 봅니다.</li>
+<li><code>sar -n DEV 1</code>의 <code>txpck/s</code>: NIC 송신 pps입니다. NODELAY 적용과 틱 배칭 전후로 비교합니다.</li>
+<li>입력 → 서버 수신 p99: 클라 입력 시각과 서버 수신 시각을 게임 서버 로그에 남겨 계산합니다. 커널 지표가 바뀌어도 이 값이 줄지 않으면 다른 병목을 찾아야 합니다.</li>
+</ul>
+</article>
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>RTO (Retransmission Timeout)</dt><dd>ACK가 이 시간 안에 안 오면 손실로 보고 다시 보내는 타이머입니다. Linux에서는 최소 200 ms라 RTO로 복구하면 지연이 크게 튑니다.</dd>
+<dt>빠른 재전송 (Fast Retransmit)</dt><dd>같은 ACK가 3번 연달아 오면(dup ACK) RTO를 기다리지 않고 빠진 세그먼트를 바로 다시 보내는 방식입니다. 뒤따르는 패킷이 있어야 동작합니다.</dd>
+<dt>dup ACK (중복 ACK)</dt><dd>받는 쪽이 중간 세그먼트가 빠진 채 뒤 세그먼트를 받으면, 빠진 위치를 다시 알리는 같은 ACK를 보냅니다. 보내는 쪽은 이것으로 손실을 빨리 알아챕니다.</dd>
+
+<dt>Nagle 알고리즘</dt><dd>ACK를 받지 못한 작은 세그먼트가 있으면 새 작은 데이터를 모아 두었다가 보내는 TCP 송신 규칙. RFC 896. 기본으로 켜져 있음.</dd>
+<dt>Delayed ACK</dt><dd>받는 쪽이 ACK를 바로 보내지 않고 잠시 기다려, 보낼 데이터나 다음 세그먼트와 묶어 보내는 동작. Linux 40~200 ms, Windows 기본 200 ms.</dd>
+<dt>TCP_NODELAY</dt><dd>소켓의 Nagle을 끄는 옵션. 보내는 쪽 소켓마다 설정한다.</dd>
+<dt>ACK</dt><dd>받는 쪽이 "여기까지 받았다"고 알리는 TCP 응답.</dd>
+<dt>세그먼트</dt><dd>TCP가 한 번에 보내는 데이터 단위. IP 패킷 하나에 실린다.</dd>
+<dt>MSS</dt><dd>세그먼트 하나에 담을 수 있는 최대 데이터 크기. 이더넷 MTU 1500, 타임스탬프 옵션 사용 시 1448B.</dd>
+<dt>RTT</dt><dd>패킷이 상대에게 갔다가 응답이 돌아오기까지 걸리는 시간.</dd>
+<dt>틱</dt><dd>게임 서버가 월드 상태를 갱신하는 주기. 20 Hz면 50 ms마다 한 번.</dd>
+<dt>틱 배칭</dt><dd>한 틱 동안 클라별로 보낼 메시지를 모아 <code>send()</code>를 한 번만 부르는 방식.</dd>
+<dt>pps</dt><dd>초당 패킷 수. NIC, 커널 네트워크 처리, 클라우드 인스턴스의 패킷 한도에 직접 걸리는 값.</dd>
+<dt>CCU</dt><dd>동시 접속자 수.</dd>
+<dt>p99</dt><dd>값을 작은 순서로 줄 세웠을 때 99% 지점. 가끔 튀는 지연을 볼 때 쓴다.</dd>
+<dt><code>ato</code></dt><dd><code>ss -i</code> 출력에서 그 연결의 현재 delayed ACK 타임아웃(ms).</dd>
+<dt><code>TcpExtDelayedACKs</code></dt><dd>Linux가 타이머로 늦춰 보낸 ACK 누적 수. <code>nstat</code>, <code>netstat -s</code>로 확인.</dd>
+</dl>
+</section>
+<script>
+// ─────────────────────────────────────────────────────────────
+//  Nagle Whiteboard — the 2D explainer redrawn as a whiteboard session.
+//  Every frame is a pure function of time: renderAt(t).
+// ─────────────────────────────────────────────────────────────
+const W = 1920, H = 1080, DURATION = 101.5;
+// ── board kit: marker strokes, handwriting-placed text, stickies, taped paper, eraser ──
+// Every frame is a pure function of t. Wobble comes from a seed hashed from each stroke's id, so a stroke looks the same every frame.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// Marker set on this board: black = structure and data segments, blue = ACK, red = waiting / the problem, green = the fix (TCP_NODELAY).
+const INK = { k: '#1e2229', b: '#1c4fc7', r: '#d22b26', g: '#12864a', dim: '#59606c', faint: '#9298a1' };
+const BOARD = '#f3f2ec';
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function txt(s, x, y, o = {}) {
+  const { size = 30, weight = 600, color = INK.k, align = 'left', alpha = 1, mono = false, ls = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono); if (ls) ctx.letterSpacing = ls + 'px';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, x, y); ctx.restore();
+}
+
+// The marker in hand: the last stroke or line of text still being drawn this frame.
+let PEN = null;
+let PEEL = 1;   // stickies and taped paper (and what is written on them) come off the board just before the eraser passes
+
+// stroke(id, points, k, color): a marker line drawn along its path up to fraction k, with a seeded hand wobble.
+function stroke(id, pts, k, col, o = {}) {
+  if (k <= 0 || pts.length < 2) return;
+  const { lw = 6, amp = 1.8, alpha = 1, dash = null, pen = true } = o;
+  const r = rng(hash(id)), f1 = .007 + r() * .009, f2 = .024 + r() * .018, p1 = r() * 6.283, p2 = r() * 6.283, A = amp * (.6 + r() * .8);
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); segs.push(L); total += L; }
+  if (total < .5) return;
+  const lim = total * clamp(k), path = new Path2D();
+  let s = 0, first = true, tip = null;
+  for (let i = 0; i < segs.length && s < lim; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], L = segs[i];
+    if (L < 1e-6) continue;
+    const nx = -(y1 - y0) / L, ny = (x1 - x0) / L, n = Math.max(1, Math.ceil(L / 6));
+    for (let j = 0; j <= n; j++) {
+      let d = L * j / n; const last = s + d >= lim; if (last) d = lim - s;
+      const ss = s + d, off = A * (.65 * Math.sin(ss * f1 + p1) + .35 * Math.sin(ss * f2 + p2));
+      const x = x0 + (x1 - x0) * d / L + nx * off, y = y0 + (y1 - y0) * d / L + ny * off;
+      if (first) { path.moveTo(x, y); first = false; } else path.lineTo(x, y);
+      tip = [x, y];
+      if (last) break;
+    }
+    s += L;
+  }
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (dash) ctx.setLineDash(dash);
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(path);
+  // dry-marker streak inside the line
+  ctx.globalAlpha *= .2; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1, lw * .22);
+  ctx.translate(lw * .16, -lw * .16); ctx.stroke(path);
+  ctx.restore();
+  if (k < 1 && pen && tip) setPen(tip[0], tip[1], col);
+}
+// pen position in canvas space, so strokes drawn on a taped card (inside its transform) still put the marker in the right place
+function setPen(x, y, col) {
+  const m = ctx.getTransform(), c = [INK.b, INK.r, INK.g].includes(col) ? col : INK.k;   // gray notes are written with the black marker
+  PEN = { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, col: c };
+}
+function arrowS(id, x0, y0, x1, y1, k, col, o = {}) {
+  if (k <= 0) return;
+  const kl = clamp(k / .86), kh = clamp((k - .86) / .14), L = o.head || 22, a = Math.atan2(y1 - y0, x1 - x0);
+  stroke(id, [[x0, y0], [x1, y1]], kl, col, o);
+  const oh = { ...o, dash: null, amp: .5 };
+  stroke(id + 'h1', [[x1, y1], [x1 - L * Math.cos(a - .44), y1 - L * Math.sin(a - .44)]], clamp(kh * 2), col, oh);
+  stroke(id + 'h2', [[x1, y1], [x1 - L * Math.cos(a + .44), y1 - L * Math.sin(a + .44)]], clamp(kh * 2 - 1), col, oh);
+}
+function boxS(id, x, y, w, h, k, col, o = {}) {
+  const r = rng(hash(id + 'b')), j = () => (r() - .5) * 5;
+  stroke(id, [[x - 5 + j(), y + j()], [x + w + j(), y + j()], [x + w + j(), y + h + j()], [x + j(), y + h + j()], [x + 2, y - 9]], k, col, o);
+}
+function ringS(id, cx, cy, rx, ry, k, col, o = {}) {
+  const r = rng(hash(id + 'r')), a0 = -2.4 + r() * .8, ph = r() * 6, pts = [];
+  for (let i = 0; i <= 80; i++) { const a = a0 + i / 80 * Math.PI * 2 * 1.1, q = 1 + .035 * Math.sin(a * 2 + ph) + i / 80 * .06; pts.push([cx + Math.cos(a) * rx * q, cy + Math.sin(a) * ry * q]); }
+  stroke(id, pts, k, col, { amp: .8, ...o });
+}
+// hatching for waiting time; lines are anchored to the board so they do not slide while the region grows
+function hatch(x, y, w, h, col, a = 1, step = 15) {
+  if (w <= 0 || h <= 0 || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = rgba(col, .08); ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = rgba(col, .8); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath();
+  const c0 = Math.floor((x - y - h) / step) * step;
+  for (let c = c0; c < x + w - y; c += step) { ctx.moveTo(c + y, y); ctx.lineTo(c + y + h, y + h); }
+  ctx.stroke(); ctx.restore();
+}
+
+// wr: text written left to right up to fraction k (a clip that follows the pen). Set in a readable face, placed with a slight hand tilt.
+function wr(s, x, y, k, o = {}) {
+  if (k <= 0 || !s) return 0;
+  const { size = 30, weight = 700, color = INK.k, align = 'left', mono = false, alpha = 1, rot = null, ls = 0 } = o;
+  ctx.save(); font(size, weight, mono); if (ls) ctx.letterSpacing = ls + 'px';
+  const w = ctx.measureText(s).width, X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  const r = rot ?? ((hash(s) % 1000) / 1000 - .5) * .012;
+  ctx.globalAlpha *= alpha; ctx.translate(X, y); ctx.rotate(r);
+  if (k < 1) { ctx.beginPath(); ctx.rect(-8, -size * 1.2, (w + 16) * k, size * 1.75); ctx.clip(); }
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, 0, 0);
+  ctx.restore();
+  if (k < 1) setPen(X + w * k, y - size * .2, color);
+  return w;
+}
+const wk = (u, t0, s, cps = 26) => clamp((u - t0) / Math.max(.22, s.length / cps));
+function say(s, x, y, u, t0, o = {}) { return wr(s, x, y, wk(u, t0, s, o.cps || 26), o); }
+// several colored runs on one line, written in sequence
+function sayParts(parts, x, y, u, t0, o = {}) {
+  const { size = 30, weight = 700, align = 'left', cps = 26, mono = false } = o;
+  font(size, weight, mono);
+  const ws = parts.map(([s]) => ctx.measureText(s).width), tot = ws.reduce((a, b) => a + b, 0);
+  let X = align === 'center' ? x - tot / 2 : align === 'right' ? x - tot : x, tt = t0;
+  parts.forEach(([s, col], i) => { const d = Math.max(.1, s.length / cps); wr(s, X, y, clamp((u - tt) / d), { ...o, align: 'left', color: col, rot: 0 }); X += ws[i]; tt += d; });
+  return [x - (align === 'center' ? tot / 2 : align === 'right' ? tot : 0), tot];
+}
+// strike a written line through (the reasoning "this no longer holds")
+function strike(id, x0, x1, y, k, col, o = {}) { stroke(id, [[x0, y + 3], [x1, y - 3]], k, col, { lw: 5, ...o }); }
+
+// sticky note: slapped on (slight overshoot in scale, shadow settles), content drawn in local coords (0,0 = top-left)
+function sticky(x, y, w, h, k, o, fn) {
+  if (k <= 0 || PEEL <= 0) return;
+  const { rot = -.02, col = '#ffe45e' } = o || {};
+  const kk = eo(clamp(k)), sc = 1 + (1 - kk) * .1;
+  ctx.save(); ctx.globalAlpha *= clamp(k * 3) * PEEL; ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot); ctx.scale(sc, sc);
+  ctx.save(); ctx.shadowColor = 'rgba(40,36,20,.22)'; ctx.shadowBlur = 14 + (1 - kk) * 24; ctx.shadowOffsetY = 6 + (1 - kk) * 16; ctx.shadowOffsetX = 3;
+  ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2 - 10);
+  ctx.quadraticCurveTo(w / 2 - 6, h / 2 + 1, w / 2 - 30, h / 2 + 3); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2); g.addColorStop(0, col); g.addColorStop(1, shade(col, -.06));
+  ctx.fillStyle = g; ctx.fill(); ctx.restore();
+  ctx.fillStyle = 'rgba(120,90,0,.06)'; ctx.fillRect(-w / 2, -h / 2, w, h * .16);
+  ctx.translate(-w / 2, -h / 2); fn(w, h); ctx.restore();
+}
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); const c = v => Math.round(clamp(v + v * f, 0, 255)); return `rgb(${c(n >> 16 & 255)},${c(n >> 8 & 255)},${c(n & 255)})`; }
+// taped paper (printouts, code cards): two strips of masking tape on the top corners
+function paper(x, y, w, h, k, o, fn) {
+  if (k <= 0 || PEEL <= 0) return;
+  const { rot = -.008, col = '#fdfcf8', tape = true } = o || {};
+  const kk = eo(clamp(k));
+  ctx.save(); ctx.globalAlpha *= clamp(k * 2.5) * PEEL; ctx.translate(x + w / 2, y + h / 2 + (1 - kk) * 24); ctx.rotate(rot);
+  ctx.save(); ctx.shadowColor = 'rgba(30,30,30,.18)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = col; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.restore();
+  ctx.strokeStyle = 'rgba(0,0,0,.06)'; ctx.lineWidth = 1; ctx.strokeRect(-w / 2, -h / 2, w, h);
+  if (tape) [[-w / 2 + 18, -h / 2 + 2, -.5], [w / 2 - 18, -h / 2 + 2, .5]].forEach(([tx, ty, a]) => {
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(a); ctx.fillStyle = 'rgba(226,212,170,.82)'; ctx.fillRect(-46, -15, 92, 30);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(-46, -15, 92, 8); ctx.restore();
+  });
+  ctx.translate(-w / 2, -h / 2); fn(w, h); ctx.restore();
+}
+
+// the marker in hand, drawn at the tip of whatever is being drawn
+function drawPen(sc = 1) {
+  if (!PEN) return;
+  const { x, y, col } = PEN;
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.rotate(.62);
+  ctx.save(); ctx.translate(10, 22); ctx.rotate(-.05); ctx.fillStyle = 'rgba(20,20,20,.13)'; rr(20, -14, 220, 30, 13); ctx.fill(); ctx.restore();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-1, 0); ctx.lineTo(15, -6); ctx.lineTo(15, 6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#c9ccd1'; ctx.beginPath(); ctx.moveTo(13, -7); ctx.lineTo(36, -14); ctx.lineTo(36, 14); ctx.lineTo(13, 7); ctx.closePath(); ctx.fill();
+  const g = ctx.createLinearGradient(0, -14, 0, 14); g.addColorStop(0, '#ffffff'); g.addColorStop(.55, '#e9eaee'); g.addColorStop(1, '#b9bcc3');
+  ctx.fillStyle = g; rr(34, -14, 172, 28, 5); ctx.fill();
+  ctx.fillStyle = col; ctx.fillRect(46, -14, 9, 28);
+  rr(200, -15, 44, 30, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(204, -12, 36, 6);
+  ctx.restore();
+}
+function eraserAt(x, y, rot = .06, sc = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc, sc);
+  ctx.fillStyle = 'rgba(0,0,0,.16)'; rr(-44, -100, 110, 222, 16); ctx.fill();
+  ctx.fillStyle = '#cfcdc6'; rr(-62, -112, 26, 224, 6); ctx.fill();
+  const g = ctx.createLinearGradient(-40, 0, 52, 0); g.addColorStop(0, '#3a4049'); g.addColorStop(1, '#262a31');
+  ctx.fillStyle = g; rr(-44, -114, 96, 228, 14); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; rr(-36, -104, 14, 208, 6); ctx.fill();
+  ctx.restore();
+}
+// ── board, frame, tray ───────────────────────────────────────
+const GHOST = (() => { const r = rng(42); return Array.from({ length: 16 }, (_, i) => {
+  const x = 160 + r() * (W - 320), y = 160 + r() * (H - 340), L = 140 + r() * 380, a = (r() - .5) * .5, bend = (r() - .5) * 60;
+  return { id: 'g' + i, pts: [[x, y], [x + L * .5, y + L * .5 * Math.sin(a) + bend], [x + L, y + L * Math.sin(a)]], lw: 7 + r() * 8, a: .03 + r() * .03 };
+}); })();
+function board(t) {
+  ctx.fillStyle = BOARD; ctx.fillRect(0, 0, W, H);
+  let g = ctx.createLinearGradient(0, 0, W * .6, H); g.addColorStop(0, 'rgba(255,255,255,.6)'); g.addColorStop(.6, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(70,70,60,.06)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createLinearGradient(W * .58, 0, W * .86, H); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.32)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const q of GHOST) stroke(q.id, q.pts, 1, '#7d828c', { lw: q.lw, alpha: q.a, pen: false, amp: 3 });
+}
+function boardFrame() {
+  const al = (x, y, w, h, vert) => { const g = vert ? ctx.createLinearGradient(x, 0, x + w, 0) : ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, '#d9dcdf'); g.addColorStop(.5, '#aeb3b9'); g.addColorStop(1, '#8c9198'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); };
+  al(0, 0, W, 14, false); al(0, 0, 14, H, true); al(W - 14, 0, 14, H, true);
+  // marker tray
+  const g = ctx.createLinearGradient(0, 1048, 0, H); g.addColorStop(0, '#e3e5e8'); g.addColorStop(.25, '#b8bdc3'); g.addColorStop(1, '#7f858c');
+  ctx.fillStyle = g; ctx.fillRect(0, 1048, W, H - 1048);
+  ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 1046, W, 2);
+}
+const TRAY = [[INK.k, 1250], [INK.b, 1365], [INK.r, 1480], [INK.g, 1595]];
+function tray(erasing) {
+  for (const [col, x] of TRAY) {
+    if (PEN && PEN.col === col) continue;   // that marker is in hand
+    ctx.save(); ctx.translate(x, 1062);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; rr(4, 3, 104, 14, 7); ctx.fill();
+    const g = ctx.createLinearGradient(0, -8, 0, 8); g.addColorStop(0, '#fff'); g.addColorStop(1, '#c4c7cc');
+    ctx.fillStyle = g; rr(0, -8, 80, 16, 4); ctx.fill(); ctx.fillStyle = col; rr(76, -9, 30, 18, 6); ctx.fill(); ctx.fillRect(8, -8, 6, 16);
+    ctx.restore();
+  }
+  if (!erasing) { ctx.save(); ctx.translate(1790, 1060); ctx.rotate(Math.PI / 2); ctx.scale(.42, .42); eraserAt(0, 0, 0); ctx.restore(); }
+}
+
+// [start, end, number, title, subtitle] — same chapters and timing as the 2D video
+const HEAD = [
+  [5.0, 17.0, '01', '작은 패킷', '이동 · 스킬 패킷은 수십 바이트, 헤더보다 작다'],
+  [17.0, 30.0, '02', 'Nagle 규칙', '앞 패킷의 ACK가 오기 전엔 작은 데이터를 모아 둔다'],
+  [30.0, 44.0, '03', 'Delayed ACK', '받는 쪽이 ACK를 늦추면 보류 시간이 그만큼 길어진다'],
+  [44.0, 58.0, '04', '손실 나면: 재전송', 'Nagle이면 빠른 재전송 대신 RTO를 기다린다'],
+  [58.0, 70.0, '05', 'TCP_NODELAY', '소켓 옵션 하나로 send() 즉시 전송'],
+  [70.0, 84.0, '06', '패킷 수 비용', 'NODELAY만 켜면 메시지마다 패킷이 하나씩 나갈 수 있다'],
+  [84.0, 96.0, '07', '확인할 지표', '지연 ACK · 재전송 · pps를 서버에서 직접 확인'],
+];
+const INTRO_END = 5.1;
+const ERASES = [INTRO_END, ...HEAD.map(h => h[1])];
+const eraseK = (t, E) => eio(p(t, E - .85, .75));
+const eraserPos = e => [lerp(-150, W + 150, e), H / 2 - 40 + Math.sin(e * Math.PI * 5) * 300];
+// one chapter on the board: everything inside is wiped by the eraser at its end
+function onBoard(t, S, E, fn) {
+  if (t < S || t >= E) return;
+  const e = eraseK(t, E);
+  ctx.save();
+  if (e > 0) { const [ex] = eraserPos(e); ctx.beginPath(); ctx.rect(ex - 30, 0, W, H); ctx.clip(); }
+  PEEL = 1 - p(t, E - 1.15, .3);
+  fn(t - S);
+  PEEL = 1;
+  ctx.restore();
+}
+function eraser(t) {
+  let any = false;
+  for (const E of ERASES) {
+    const e = eraseK(t, E), fade = 1 - p(t, E, 1.6);
+    if (e <= 0 || fade <= 0) continue;
+    // smear the eraser leaves behind
+    const pts = []; for (let q = 0; q <= e + 1e-6; q += .01) pts.push(eraserPos(Math.min(q, e)));
+    if (pts.length > 1) stroke('smear' + E, pts, 1, '#8a8f98', { lw: 200, alpha: .045 * fade, pen: false, amp: 6 });
+    if (e < 1) { any = true; const [x, y] = eraserPos(e); eraserAt(x, y, .08 + Math.sin(e * 30) * .05); }
+  }
+  if (any) PEN = null;
+  return any;
+}
+function chHeader(u, i) {
+  const [, , n, title, sub] = HEAD[i];
+  ringS('hdr' + n, 152, 113, 38, 34, clamp((u - .05) / .4), INK.k, { lw: 4.5 });
+  txt(n, 152, 125, { size: 32, weight: 800, mono: true, align: 'center', alpha: clamp((u - .3) / .15) });
+  say(title, 212, 134, u, .3, { size: 56, weight: 800, cps: 16 });
+  say(sub, 214, 184, u, .75, { size: 30, weight: 500, color: INK.dim, cps: 36 });
+  paper(1664, 56, 136, 58, clamp((u - .2) / .4), { rot: .03 }, () => txt(`${n} / 07`, 68, 40, { size: 28, weight: 700, mono: true, align: 'center', color: INK.dim }));
+}
+function clock(ms, a) { if (a > 0) txt(`t = ${Math.round(ms)} ms`, 1800, 172, { size: 30, weight: 700, mono: true, align: 'right', color: INK.r, alpha: a }); }
+function foot(s, u, t0, y = 1002) { say(s, 120, y, u, t0, { size: 24, weight: 500, color: INK.dim, cps: 60 }); }
+function progress(t) {
+  const x0 = 120, x1 = 1800, y = 1032;
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(30,34,41,.12)'; ctx.fillRect(x0, y, x1 - x0, 3);
+  ctx.fillStyle = rgba(INK.k, .75); ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
+  HEAD.forEach((h, i) => {
+    const x = x0 + (x1 - x0) * h[0] / DURATION, nx = i + 1 < HEAD.length ? x0 + (x1 - x0) * HEAD[i + 1][0] / DURATION : x1;
+    ctx.fillStyle = t >= h[0] ? INK.k : INK.faint; ctx.fillRect(x, y - 5, 2, 12);
+    let lab = h[2] + ' ' + h[3];
+    while (lab.length > 2 && tw(lab, 16, 600) > nx - x - 18) lab = lab.slice(0, -1);
+    if (lab !== h[2] + ' ' + h[3]) lab = lab.length > 4 ? lab.slice(0, -1).trimEnd() + '…' : h[2];
+    txt(lab, x + 8, y - 9, { size: 16, weight: 600, color: t >= h[0] ? INK.dim : INK.faint });
+  });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  INTRO (0 – 5.1)
+// ═════════════════════════════════════════════════════════════
+function sTitle(t) {
+  onBoard(t, 0, INTRO_END, u => {
+    say('TCP · NAGLE · DELAYED ACK · TCP_NODELAY', W / 2, 330, u, .2, { size: 24, weight: 600, color: INK.dim, mono: true, align: 'center', ls: 5, cps: 70 });
+    sayParts([['작은 스킬 패킷이', INK.k]], W / 2, 470, u, .45, { size: 104, weight: 800, align: 'center', cps: 18 });
+    const [lx, lw] = sayParts([['ACK를 ', INK.b], ['기다린다', INK.k]], W / 2, 600, u, .95, { size: 104, weight: 800, align: 'center', cps: 18 });
+    const ux = lx + tw('ACK를 ', 104, 800);
+    stroke('t-ul', [[ux, 626], [ux + (lx + lw - ux) * .5, 632], [lx + lw + 6, 622]], clamp((u - 1.55) / .35), INK.r, { lw: 7 });
+    say('Nagle과 Delayed ACK가 MMO 이동 · 스킬 패킷을 늦추는 조건, 그리고 TCP_NODELAY', W / 2, 700, u, 1.7, { size: 30, weight: 500, color: INK.dim, align: 'center', cps: 70 });
+    const STORY = [['MoveReq', INK.k], ['Nagle', INK.k], ['Delayed ACK', INK.b], ['TCP_NODELAY', INK.g], ['Tick batch', INK.g]];
+    const x0 = 480, x1 = 1440, y = 820, k = clamp((u - 2.1) / 1.5);
+    arrowS('t-strip', x0 - 30, y, x1 + 50, y, k, INK.faint, { lw: 4 });
+    STORY.forEach(([lab, col], i) => {
+      const x = lerp(x0, x1, i / 4), kk = clamp((u - 2.15 - i * .3) / .25);
+      if (kk <= 0) return;
+      ringS('t-n' + i, x, y, 13, 13, kk, col, { lw: 5 });
+      say(lab, x, y + 50, u, 2.3 + i * .3, { size: 24, weight: 700, color: col, mono: true, align: 'center', cps: 40 });
+    });
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 01 · 작은 패킷 — draw the segment: header box, then the tiny data box
+// ═════════════════════════════════════════════════════════════
+function sSmall(t) {
+  const [S, E] = HEAD[0];
+  onBoard(t, S, E, u => {
+    chHeader(u, 0);
+    say('패킷 한 개의 크기 (바이트)', 120, 268, u, .2, { size: 38, weight: 800 });
+    const BX = 560, SC = 9, HB = 52 * SC, PX = BX + HB + 10;
+    [['MoveReq', '위치 · 방향 · 시각', 24], ['SkillUseReq', 'skill_id · target_id', 16]].forEach(([name, sub, n], i) => {
+      const y = 318 + i * 128, t0 = .6 + i * .8;
+      say(name, 120, y + 34, u, t0, { size: 34, weight: 800, mono: true });
+      say(sub, 120, y + 72, u, t0 + .2, { size: 28, weight: 500, mono: true, color: INK.dim, cps: 40 });
+      const hk = clamp((u - t0 - .3) / .55);
+      if (hk >= 1) { ctx.fillStyle = 'rgba(89,96,108,.10)'; ctx.fillRect(BX, y, HB, 76); }
+      boxS('c1h' + i, BX, y, HB, 76, hk, INK.dim, { lw: 4.5 });
+      say('IP+TCP 헤더 52B', BX + 24, y + 50, u, t0 + .8, { size: 28, weight: 700, color: INK.dim, cps: 34 });
+      boxS('c1d' + i, PX, y, n * SC, 76, clamp((u - t0 - .85) / .35), INK.k, { lw: 6 });
+      say(n + 'B', PX + n * SC / 2, y + 50, u, t0 + 1.15, { size: 32, weight: 800, mono: true, align: 'center' });
+      say('데이터', PX + n * SC + 24, y + 50, u, t0 + 1.3, { size: 28, weight: 600, color: INK.dim });
+    });
+    // MSS: the same segment could carry 1448B of data
+    const y = 576;
+    say('MSS', 120, y + 34, u, 2.8, { size: 34, weight: 800, mono: true });
+    say('세그먼트 1개 최대 데이터', 120, y + 72, u, 2.95, { size: 28, weight: 500, color: INK.dim, cps: 34 });
+    const hk = clamp((u - 2.9) / .45);
+    if (hk >= 1) { ctx.fillStyle = 'rgba(89,96,108,.10)'; ctx.fillRect(BX, y, HB, 76); }
+    boxS('c1mh', BX, y, HB, 76, hk, INK.dim, { lw: 4.5 });
+    say('헤더 52B', BX + 24, y + 50, u, 3.3, { size: 28, weight: 700, color: INK.dim });
+    boxS('c1md', PX, y, 1800 - PX, 76, clamp((u - 3.0) / 1.2), INK.k, { lw: 6 });
+    say('1448B까지 채울 수 있음 (막대는 축약)', PX + 26, y + 50, u, 3.8, { size: 28, weight: 700, cps: 30 });
+    // break marks: the long box is shortened
+    const kb = clamp((u - 4.3) / .3);
+    ctx.save(); ctx.fillStyle = BOARD; if (kb > 0) ctx.fillRect(1668, y - 8, 22, 92); ctx.restore();
+    stroke('c1b1', [[1660, y + 90], [1678, y - 14]], kb, INK.k, { lw: 5 });
+    stroke('c1b2', [[1680, y + 90], [1698, y - 14]], clamp(kb * 2 - 1), INK.k, { lw: 5 });
+    // notes under the drawing
+    [['MoveReq 초당 10~20회', '캐릭터가 움직이는 동안 계속', 120, 4.8], ['SkillUseReq 입력 즉시', '이동 패킷 사이에 끼어서 나감', 700, 5.9]].forEach(([a, b, x, t0], i) => {
+      stroke('c1n' + i, [[x, 712], [x - 2, 804]], clamp((u - t0) / .25), INK.k, { lw: 5 });
+      say(a, x + 26, 746, u, t0 + .1, { size: 32, weight: 800 });
+      say(b, x + 26, 794, u, t0 + .5, { size: 28, weight: 500, color: INK.dim, cps: 34 });
+    });
+    sticky(1300, 690, 480, 250, clamp((u - 7.0) / .35), { rot: -.025 }, (w) => {
+      txt('헤더 비율', 34, 54, { size: 30, weight: 700, color: INK.dim });
+      txt('68%', 30, 170, { size: 118, weight: 800, color: INK.r });
+      txt('52B ÷ (52B + 24B), MoveReq', 34, 222, { size: 27, weight: 600, mono: true, color: INK.k });
+    });
+    foot('* 패킷 크기 · 빈도는 예시. 헤더 = IPv4 20 + TCP 20 + 타임스탬프 옵션 12', u, 6.0);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 02 · Nagle 규칙 — draw client · send buffer · server, then walk two packets through
+// ═════════════════════════════════════════════════════════════
+function sNagle(t) {
+  const [S, E] = HEAD[1];
+  onBoard(t, S, E, u => {
+    chHeader(u, 1);
+    say('Nagle 알고리즘 (RFC 896)', 120, 262, u, .2, { size: 38, weight: 800 });
+    say('TCP 소켓 기본값 ON. 1바이트 입력마다 41바이트 패킷이 나가던 문제를 막으려고 만든 규칙', 120, 308, u, .5, { size: 28, weight: 500, color: INK.dim, cps: 60 });
+    const NODES = [[120, 300, 'Game Client', 'send()', true], [640, 400, 'TCP 송신 버퍼', '커널 · Nagle', false], [1500, 300, 'Game Server', '수신', false]];
+    NODES.forEach(([x, w, lab, sub, mono], i) => {
+      const t0 = .3 + i * .3;
+      boxS('c2n' + i, x, 380, w, 200, clamp((u - t0) / .5), INK.k, { lw: 5.5 });
+      const ty = i === 1 ? 426 : 466;
+      say(lab, x + w / 2, ty, u, t0 + .4, { size: 32, weight: 800, align: 'center' });
+      say(sub, x + w / 2, ty + 38, u, t0 + .6, { size: 28, weight: 500, align: 'center', mono, color: INK.dim });
+    });
+    // MoveReq: client → buffer → server, then the in-flight note
+    arrowS('c2m1', 425, 425, 634, 425, clamp((u - 2.0) / .45), INK.k, { lw: 5 });
+    say('MoveReq', 530, 408, u, 2.05, { size: 26, weight: 700, mono: true, align: 'center' });
+    arrowS('c2m2', 1046, 425, 1494, 425, clamp((u - 2.5) / 1.0), INK.k, { lw: 5 });
+    say('MoveReq', 1270, 408, u, 2.6, { size: 28, weight: 700, mono: true, align: 'center' });
+    const fw = say('ACK 미수신 1개', 1270, 648, u, 2.6, { size: 30, weight: 800, color: INK.b, align: 'center' });
+    // SkillUseReq: client → buffer, held in the buffer
+    arrowS('c2s1', 425, 520, 634, 520, clamp((u - 3.0) / .45), INK.k, { lw: 5 });
+    say('SkillUseReq', 530, 556, u, 3.05, { size: 26, weight: 700, mono: true, align: 'center', cps: 30 });
+    boxS('c2sp', 690, 490, 300, 58, clamp((u - 3.5) / .35), INK.k, { lw: 4.5 });
+    say('SkillUseReq', 840, 530, u, 3.6, { size: 28, weight: 700, mono: true, align: 'center', cps: 30 });
+    ringS('c2ring', 840, 519, 178, 52, clamp((u - 3.95) / .45), INK.r, { lw: 5 });
+    say('보류', 840, 632, u, 4.2, { size: 34, weight: 800, color: INK.r, align: 'center' });
+    // ACK returns, the note no longer holds, the held packet goes out
+    arrowS('c2a', 1494, 482, 1046, 482, clamp((u - 5.4) / 1.4), INK.b, { lw: 5, dash: [16, 11] });
+    say('ACK', 1270, 518, u, 5.8, { size: 28, weight: 800, color: INK.b, align: 'center', mono: true });
+    if (fw) strike('c2x1', 1270 - fw / 2 - 8, 1270 + fw / 2 + 8, 638, clamp((u - 6.75) / .25), INK.b);
+    strike('c2x2', 700, 980, 520, clamp((u - 7.0) / .25), INK.k);
+    arrowS('c2s2', 1046, 556, 1494, 556, clamp((u - 7.0) / 1.0), INK.k, { lw: 6 });
+    say('SkillUseReq', 1270, 592, u, 7.2, { size: 28, weight: 700, mono: true, align: 'center', cps: 30 });
+    // the three rules, written out
+    const RULES = [['바로 전송', '앞 패킷의 ACK를 이미 받았을 때', INK.g, 8.2], ['바로 전송', '모인 데이터가 MSS를 채웠을 때', INK.g, 8.9], ['보류', 'ACK 안 받은 작은 세그먼트가 있을 때', INK.r, 9.6]];
+    RULES.forEach(([a, b, col, t0], i) => {
+      const y = 740 + i * 76;
+      ringS('c2r' + i, 152, y - 11, 22, 22, clamp((u - t0) / .3), INK.k, { lw: 4 });
+      txt(String(i + 1), 152, y - 1, { size: 26, weight: 800, mono: true, align: 'center', alpha: clamp((u - t0 - .2) / .1) });
+      say(a, 196, y, u, t0 + .2, { size: 34, weight: 800, color: col });
+      say(b, 380, y, u, t0 + .4, { size: 30, weight: 600, cps: 34 });
+    });
+    ringS('c2r3', 520, 882, 440, 44, clamp((u - 10.2) / .5), INK.r, { lw: 5 });
+    say('이동 · 스킬 패킷은 작아서', 1090, 856, u, 10.4, { size: 34, weight: 800 });
+    say('세 번째 경우에 자주 걸린다', 1090, 906, u, 10.9, { size: 34, weight: 800 });
+    arrowS('c2arr', 1072, 876, 980, 882, clamp((u - 11.4) / .4), INK.r, { lw: 5 });
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 03 · Delayed ACK — the sequence diagram, drawn as the clock runs down
+// ═════════════════════════════════════════════════════════════
+const SQ = { cx: 560, sx: 1000, y0: 300, py: 6.9, ax: 168 };
+const sy = ms => SQ.y0 + ms * SQ.py;
+function sDelayed(t) {
+  const [S, E] = HEAD[2];
+  onBoard(t, S, E, u => {
+    chHeader(u, 2);
+    const ms = clamp((u - 1.2) / 6.6) * 90, { cx, sx, ax } = SQ;
+    clock(ms, clamp((u - 1.2) / .3) * (1 - p(u, 12.6, .3)));
+    [[cx, 'Client'], [sx, 'Server']].forEach(([x, lab], i) => {
+      const t0 = .1 + i * .15;
+      boxS('c3b' + i, x - 100, 222, 200, 58, clamp((u - t0) / .4), INK.k, { lw: 5 });
+      say(lab, x, 262, u, t0 + .3, { size: 30, weight: 800, align: 'center' });
+      stroke('c3l' + i, [[x, 288], [x, sy(92)]], clamp((u - .4 - i * .1) / .8), INK.k, { lw: 4 });
+    });
+    // time axis
+    const ka = clamp((u - .5) / .7);
+    stroke('c3ax', [[ax + 6, sy(0)], [ax + 6, sy(90)]], ka, INK.faint, { lw: 3 });
+    for (let m = 0; m <= 90; m += 10) {
+      const kk = clamp((ka * 90 - m) / 10); if (kk <= 0) continue;
+      stroke('c3tk' + m, [[ax, sy(m)], [ax + (m % 20 ? 12 : 20), sy(m)]], 1, INK.faint, { lw: 3, pen: false });
+      if (m % 20 === 0) txt(m + ' ms', ax - 10, sy(m) + 8, { size: 24, weight: 600, mono: true, align: 'right', color: INK.dim, alpha: kk });
+    }
+    const seg = (a, b) => clamp((ms - a) / (b - a));
+    // MoveReq
+    arrowS('c3m', cx, sy(0), sx, sy(15), seg(0, 15), INK.k, { lw: 5 });
+    if (ms > 1) say('MoveReq', (cx + sx) / 2 - 20, sy(5) - 14, u, 1.3, { size: 28, weight: 700, mono: true, align: 'center' });
+    // SkillUseReq written at 10 ms, held until 70 ms
+    if (ms >= 10) {
+      hatch(cx - 17, sy(10), 34, sy(Math.min(ms, 70)) - sy(10), INK.r);
+      say('write(SkillUseReq)', cx - 58, sy(10) + 10, u, 1.2 + 10 / 90 * 6.6, { size: 28, weight: 700, mono: true, align: 'right', cps: 40 });
+    }
+    if (ms >= 30) say('Nagle 보류', cx - 58, sy(30) + 6, u, 1.2 + 30 / 90 * 6.6, { size: 34, weight: 800, color: INK.r, align: 'right' });
+    // server delays its ACK 15 → 55
+    if (ms >= 15) {
+      const y1 = sy(15), y2 = sy(Math.min(ms, 55));
+      stroke('c3br', [[sx + 20, y1], [sx + 36, y1], [sx + 36, y2], [sx + 20, y2]], 1, INK.b, { lw: 5, pen: false });
+      if (ms < 55) PEN = { x: sx + 36, y: y2, col: INK.b };
+    }
+    if (ms >= 18) { say('Delayed ACK', sx + 56, sy(31), u, 1.2 + 18 / 90 * 6.6, { size: 32, weight: 800, color: INK.b }); say('40 ms', sx + 56, sy(31) + 40, u, 1.2 + 22 / 90 * 6.6, { size: 32, weight: 800, color: INK.b, mono: true }); }
+    // ACK back at 55 → 70, SkillUseReq out at 70 → 85
+    arrowS('c3a', sx, sy(55), cx, sy(70), seg(55, 70), INK.b, { lw: 5, dash: [16, 11] });
+    if (ms > 56) say('ACK', (cx + sx) / 2 + 30, sy(61) - 14, u, 1.2 + 56 / 90 * 6.6, { size: 28, weight: 800, mono: true, color: INK.b, align: 'center' });
+    arrowS('c3s', cx, sy(70), sx, sy(85), seg(70, 85), INK.k, { lw: 6.5 });
+    if (ms > 71) say('SkillUseReq', (cx + sx) / 2 - 20, sy(75) - 16, u, 1.2 + 71 / 90 * 6.6, { size: 28, weight: 700, mono: true, align: 'center', cps: 30 });
+    say('85 ms 도착', sx + 30, sy(85) + 12, u, 8.0, { size: 32, weight: 800 });
+    // circle the wait, and put the number on a sticky
+    ringS('c3ring', cx, sy(40), 44, 224, clamp((u - 6.2) / .6), INK.r, { lw: 5 });
+    sticky(640, 530, 330, 136, clamp((u - 6.5) / .35), { rot: -.03 }, () => txt('+60 ms', 165, 106, { size: 92, weight: 800, color: INK.r, align: 'center' }));
+    arrowS('c3sa', 634, 600, 614, 600, clamp((u - 6.9) / .25), INK.r, { lw: 5, head: 16 });
+    // redraw the alternative beside it: the same skill packet with TCP_NODELAY
+    arrowS('c3g', cx, sy(10), sx, sy(25), clamp((u - 9.2) / .8), INK.g, { lw: 4.5, dash: [12, 10] });
+    say('NODELAY면 25 ms', sx - 22, sy(25) + 42, u, 10.0, { size: 30, weight: 800, color: INK.g, align: 'right' });
+    // steps, right column
+    const STEPS = [
+      [0, INK.k, 'MoveReq 전송', 'ACK를 기다리는 상태가 된다'],
+      [10, INK.k, 'SkillUseReq write()', 'ACK 전이라 버퍼에 보류'],
+      [15, INK.b, '서버 수신, ACK 보류', '보낼 응답이 없어 40 ms 대기'],
+      [70, INK.b, '70 ms에 ACK 도착', '그제야 Skill 전송, 85 ms 도착'],
+    ];
+    STEPS.forEach(([m0, col, title, desc], i) => {
+      const t0 = 1.2 + m0 / 90 * 6.6 + .1; if (u < t0) return;
+      const y = 340 + i * 116, x = 1330;
+      ringS('c3st' + i, x + 18, y - 10, 20, 20, clamp((u - t0) / .3), col, { lw: 4 });
+      txt(String(i + 1), x + 18, y - 1, { size: 24, weight: 800, mono: true, align: 'center', color: col, alpha: clamp((u - t0 - .2) / .1) });
+      say(title, x + 56, y, u, t0 + .2, { size: 30, weight: 800, color: col });
+      say(desc, x + 56, y + 40, u, t0 + .55, { size: 28, weight: 500, color: INK.dim, cps: 34 });
+    });
+    stroke('c3nb', [[1330, 800], [1318, 800], [1318, 950], [1330, 950]], clamp((u - 10.6) / .35), INK.b, { lw: 5 });
+    say('서버가 그사이 보낼 데이터가', 1346, 840, u, 10.9, { size: 30, weight: 700 });
+    say('있으면 ACK가 실려 와서', 1346, 884, u, 11.3, { size: 30, weight: 700 });
+    say('보류가 짧아진다', 1346, 928, u, 11.7, { size: 30, weight: 700 });
+    foot('* 수치는 예시: RTT 30 ms, Linux 서버 delayed ACK 40 ms', u, 1.0);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 04 · 손실 — two sequence diagrams side by side, same loss of A
+// ═════════════════════════════════════════════════════════════
+function sLoss(t) {
+  const [S, E] = HEAD[3];
+  onBoard(t, S, E, u => {
+    chHeader(u, 3);
+    const ms = clamp((u - 1.2) / 8.2) * 280, Y0 = 330, PY = 2.05, y = m => Y0 + m * PY;
+    clock(ms, clamp((u - 1.2) / .3) * (1 - p(u, 12.6, .3)));
+    const seg = (a, b) => clamp((ms - a) / (b - a)), at = m => 1.2 + m / 280 * 8.2;
+    stroke('c4div', [[960, 236], [962, 912]], clamp((u - .3) / .6), INK.faint, { lw: 3 });
+    [[120, 'Nagle 켜짐', INK.r], [980, 'TCP_NODELAY', INK.g]].forEach(([X, title, col], side) => {
+      const t0 = .2 + side * .3, cx = X + 250, sx = X + 620, id = 'c4' + side;
+      say(title, X + 20, 262, u, t0, { size: 34, weight: 800, color: col });
+      [[cx, 'Client'], [sx, 'Server']].forEach(([x, lab], j) => {
+        say(lab, x, 302, u, t0 + .2, { size: 28, weight: 800, align: 'center' });
+        stroke(id + 'l' + j, [[x, 316], [x, y(280)]], clamp((u - t0 - .3) / .8), INK.k, { lw: 4 });
+      });
+      for (let m = 0; m <= 280; m += 40) txt(m + ' ms', X + 10, y(m) + 8, { size: 22, weight: 600, mono: true, color: INK.faint, alpha: clamp((u - t0 - .4) / .4) });
+      if (u < 1.2) return;
+      // A is lost on both sides
+      const mid = .45, ka = seg(0, 15);
+      arrowS(id + 'A', cx, y(0), lerp(cx, sx, mid), y(15 * mid), Math.min(1, ka / mid) * .86, INK.k, { lw: 5 });
+      txt('A', cx - 24, y(0) + 9, { size: 26, weight: 800, mono: true, align: 'right' });
+      if (ka >= mid) {
+        const lx = lerp(cx, sx, mid), ly = y(15 * mid), kx = clamp((ms - 7) / 4);
+        stroke(id + 'x1', [[lx - 12, ly - 12], [lx + 12, ly + 12]], clamp(kx * 2), INK.r, { lw: 5 });
+        stroke(id + 'x2', [[lx + 12, ly - 12], [lx - 12, ly + 12]], clamp(kx * 2 - 1), INK.r, { lw: 5 });
+        say('손실', lx + 24, ly + 10, u, at(9), { size: 28, weight: 800, color: INK.r });
+      }
+      if (side === 0) {
+        // B, C, D wait in the send buffer until A's ACK returns
+        if (ms > 10) hatch(cx - 15, y(10), 30, y(Math.min(ms, 230)) - y(10), INK.r);
+        if (ms > 10) wr('B·C·D 보류', cx - 26, y(20) + 8, clamp((ms - 10) / 20), { size: 26, weight: 800, color: INK.r, align: 'right' });
+        if (ms > 40) { say('dup ACK 없음', sx + 20, y(60), u, at(40), { size: 28, weight: 800, color: INK.dim }); say('받은 게 없으니', sx + 20, y(60) + 34, u, at(48), { size: 26, weight: 500, color: INK.dim }); }
+        // RTO timer
+        const y2 = y(Math.min(ms, 200));
+        stroke(id + 'rto', [[cx + 26, y(0)], [cx + 40, y(0)], [cx + 40, y2], [cx + 26, y2]], 1, INK.r, { lw: 5, pen: false });
+        if (ms < 200) PEN = { x: cx + 40, y: y2, col: INK.r };
+        if (ms > 20) { const w = say('RTO 타이머', cx + 58, y(80), u, at(20), { size: 30, weight: 800, color: INK.r }); say('최소 200 ms', cx + 58, y(80) + 36, u, at(26), { size: 28, weight: 700, mono: true, color: INK.r });
+          stroke(id + 'rtoul', [[cx + 58, y(80) + 48], [cx + 58 + 190, y(80) + 46]], clamp((u - at(40)) / .3), INK.r, { lw: 4 }); }
+        arrowS(id + 'A2', cx, y(200), sx, y(215), seg(200, 215), INK.k, { lw: 6.5 });
+        if (ms > 202) say('A만 재전송 · B·C·D는 계속 보류', (cx + sx) / 2 + 28, y(205) - 14, u, at(202), { size: 26, weight: 800, align: 'center', cps: 40 });
+        if (ms > 216) say('A 215 ms', sx + 14, y(215) + 8, u, at(216), { size: 26, weight: 800 });
+        arrowS(id + 'aA', sx, y(215), cx, y(230), seg(215, 230), INK.b, { lw: 4, dash: [12, 9] });
+        if (ms > 229) say('A의 ACK 도착', cx - 26, y(218) + 8, u, at(229), { size: 24, weight: 800, color: INK.b, align: 'right' });
+        arrowS(id + 'BCD', cx, y(230), sx, y(245), seg(230, 245), INK.k, { lw: 6.5 });
+        if (ms > 231) say('B·C·D', cx - 26, y(230) + 22, u, at(231), { size: 24, weight: 800, mono: true, align: 'right' });
+        if (ms > 246) say('B·C·D 245 ms', sx + 14, y(245) + 10, u, at(246), { size: 26, weight: 800, color: INK.r });
+        if (ms > 252) say('delayed ACK에 걸리면 ≈285 ms', sx - 10, y(268) + 4, u, at(252), { size: 24, weight: 600, color: INK.dim, align: 'right', cps: 40 });
+        sticky(438, 552, 320, 140, clamp((u - at(250)) / .35), { rot: .015 }, () => {
+          txt('B·C·D 도착 (즉시 ACK 시)', 20, 40, { size: 24, weight: 700, color: INK.dim });
+          txt('245 ms', 160, 120, { size: 90, weight: 800, color: INK.r, align: 'center' });
+        });
+      } else {
+        // B, C, D go out right away and arrive ahead of A
+        [['B', 10], ['C', 20], ['D', 30]].forEach(([n, m]) => {
+          arrowS(id + n, cx, y(m), sx, y(m + 15), seg(m, m + 15), INK.k, { lw: 4 });
+          if (ms > m) txt(n, cx - 24, y(m) + 8, { size: 24, weight: 800, mono: true, align: 'right' });
+          arrowS(id + n + 'd', sx, y(m + 15), cx, y(m + 30), seg(m + 15, m + 30), INK.b, { lw: 3.5, dash: [10, 8] });
+        });
+        if (ms > 45) {
+          say('dup ACK ×3', 1250, 548, u, at(45), { size: 30, weight: 800, color: INK.b });
+          say('뒤 패킷마다 A를 다시 요청', 1250, 586, u, at(52), { size: 26, weight: 600, color: INK.dim });
+          stroke(id + 'dl', [[1430, 524], [1520, 470], [1586, 424]], clamp((u - at(58)) / .3), INK.b, { lw: 3.5 });
+        }
+        arrowS(id + 'A2', cx, y(60), sx, y(75), seg(60, 75), INK.k, { lw: 6.5 });
+        if (ms > 61) say('A 빠른 재전송', cx - 24, y(60) + 8, u, at(61), { size: 26, weight: 800, align: 'right' });
+        if (ms > 110) { say('뒤 패킷이 먼저 도착해', 1250, 660, u, at(110), { size: 26, weight: 600, color: INK.dim }); say('손실을 빨리 알아챈다', 1250, 696, u, at(118), { size: 26, weight: 600, color: INK.dim }); }
+        sticky(1262, 740, 300, 150, clamp((u - at(78)) / .35), { rot: -.025, col: '#ffe45e' }, () => {
+          txt('75 ms에 A~D 전달', 22, 40, { size: 26, weight: 700, color: INK.dim });
+          txt('75 ms', 150, 126, { size: 92, weight: 800, color: INK.g, align: 'center' });
+        });
+      }
+    });
+    say('Nagle은 작은 세그먼트를 하나만 날려 둔다 — 그게 빠지면 dup ACK가 안 생겨 RTO까지 기다린다', W / 2, 960, u, 9.6, { size: 30, weight: 800, align: 'center', cps: 70 });
+    foot('* 예시: RTT 30 ms, Linux 최소 RTO 200 ms. 메시지가 드물면 NODELAY여도 dup ACK가 모자라 RTO로 갈 수 있다', u, 10.2, 1004);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 05 · TCP_NODELAY — the code card taped on, arrival bars redrawn with the fix
+// ═════════════════════════════════════════════════════════════
+const NOD_CODE = [
+  '// 서버 (C++, Linux)',
+  'int one = 1;',
+  'setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,',
+  '           &one, sizeof one);',
+  '',
+  '// 클라 (Unity · C#)',
+  'socket.NoDelay = true;',
+  '',
+  '// 클라 (Unreal)',
+  'Socket->SetNoDelay(true);',
+];
+function codeCard(lines, size, lh, x0, y0) {
+  lines.forEach((ln, i) => txt(ln, x0, y0 + i * lh, { size, weight: 500, mono: true, color: ln.startsWith('//') ? '#7a808a' : INK.k }));
+}
+function sNoDelay(t) {
+  const [S, E] = HEAD[4];
+  onBoard(t, S, E, u => {
+    chHeader(u, 4);
+    const CX = 120, CY = 232, CS = 26, LH = 38;
+    paper(CX, CY, 800, 470, clamp((u - .2) / .5), { rot: -.01 }, () => {
+      txt('socket options', 36, 48, { size: 24, weight: 600, mono: true, color: '#7a808a' });
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 70, 800, 1.5);
+      codeCard(NOD_CODE, CS, LH, 40, 114);
+      // green marker underlines where the option is set (on the card)
+      font(CS, 500, true); const cw = ctx.measureText('M').width;
+      const ul = (id, row, c0, n, t0) => { const x = 40 + c0 * cw, yy = 114 + row * LH + 10;
+        stroke(id, [[x - 4, yy], [x + n * cw + 4, yy - 2]], clamp((u - t0) / .4), INK.g, { lw: 5 }); };
+      ul('c5u1', 2, 28, 11, 1.0); ul('c5u2', 6, 6, 16, 1.7); ul('c5u3', 9, 8, 16, 2.4);
+    });
+    // arrival bars
+    const BX = 1000, SC = 7.4;
+    say('SkillUseReq 서버 도착 시각', BX, 262, u, 1.2, { size: 36, weight: 800 });
+    const ROWS = [
+      ['Nagle ON', [[0, 10, INK.faint, ''], [10, 70, INK.r, '보류 60 ms'], [70, 85, INK.k, '']], 85, INK.r, 1.6, 340],
+      ['TCP_NODELAY', [[0, 10, INK.faint, ''], [10, 25, INK.g, '']], 25, INK.g, 3.0, 470],
+    ];
+    ROWS.forEach(([lab, segs, end, col, t0, yy], i) => {
+      say(lab, BX, yy - 14, u, t0, { size: 28, weight: 800, mono: true, color: col });
+      const grow = clamp((u - t0 - .2) / 1.1) * end;
+      segs.forEach(([s0, s1, c, l], j) => {
+        const e1 = Math.min(s1, grow); if (e1 <= s0) return;
+        const x0 = BX + s0 * SC, w = (e1 - s0) * SC;
+        if (c === INK.r) hatch(x0, yy, w, 52, INK.r);
+        else if (c !== INK.faint) { ctx.fillStyle = rgba(c, .12); ctx.fillRect(x0, yy, w, 52); }
+        boxS('c5b' + i + j, x0, yy, (s1 - s0) * SC, 52, (e1 - s0) / (s1 - s0), c === INK.faint ? INK.faint : c, { lw: 4.5 });
+        if (l && e1 === s1) { const lw = tw(l, 28, 800); ctx.fillStyle = BOARD; rr(x0 + w / 2 - lw / 2 - 12, yy + 8, lw + 24, 36, 8); ctx.fill();
+          txt(l, x0 + w / 2, yy + 37, { size: 28, weight: 800, color: INK.r, align: 'center' }); }
+      });
+      if (grow >= end - .01) say(end + ' ms', BX + end * SC + 16, yy + 40, u, t0 + 1.3, { size: 34, weight: 800, color: col, mono: true });
+    });
+    sticky(1420, 424, 300, 150, clamp((u - 4.6) / .35), { rot: .03 }, () => {
+      txt('TCP_NODELAY', 20, 40, { size: 24, weight: 700, mono: true, color: INK.dim });
+      txt('25 ms', 150, 126, { size: 92, weight: 800, color: INK.g, align: 'center' });
+    });
+    arrowS('c5sa', 1412, 494, 1322, 490, clamp((u - 4.95) / .3), INK.g, { lw: 4, head: 16 });
+    const kx = clamp((u - 1.4) / .6);
+    stroke('c5ax', [[BX, 600], [BX + 100 * SC, 600]], kx, INK.faint, { lw: 3 });
+    for (let m = 0; m <= 100; m += 20) {
+      stroke('c5t' + m, [[BX + m * SC, 592], [BX + m * SC, 608]], clamp(kx * 5 - m / 25), INK.faint, { lw: 3, pen: false });
+      txt(String(m), BX + m * SC, 640, { size: 24, weight: 600, mono: true, align: 'center', color: INK.dim, alpha: kx });
+    }
+    say('ms · 0 = MoveReq 전송, 10 = 스킬 입력 · 03과 같은 예시 조건', BX + 100 * SC, 682, u, 1.8, { size: 24, weight: 500, color: INK.dim, align: 'right', cps: 60 });
+    // which socket, which direction
+    [[120, INK.k, '클라 소켓에 설정', '클라 → 서버 방향: 이동 · 스킬 입력', '이 방향 ACK는 서버(Linux)가 보냄, 타이머 40 ms부터', 5.2],
+     [975, INK.k, '서버 소켓에 설정', '서버 → 클라 방향: 주변 상태 · 판정 결과', '이 방향 ACK는 클라(Windows)가 보냄, 타이머 기본 200 ms', 6.4]].forEach(([x, col, a, b, c, t0], i) => {
+      stroke('c5d' + i, [[x, 752], [x - 2, 912]], clamp((u - t0) / .3), INK.g, { lw: 6 });
+      say(a, x + 28, 790, u, t0 + .1, { size: 34, weight: 800, color: col });
+      say(b, x + 28, 840, u, t0 + .5, { size: 30, weight: 600, cps: 36 });
+      say(c, x + 28, 890, u, t0 + 1.0, { size: 27, weight: 500, color: INK.dim, cps: 44 });
+    });
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 06 · 패킷 수 비용 — per-message vs per-tick send, numbers on the right
+// ═════════════════════════════════════════════════════════════
+function sCost(t) {
+  const [S, E] = HEAD[5];
+  onBoard(t, S, E, u => {
+    chHeader(u, 5);
+    const PB = 1.3, HB = 52 * PB, MB = 30 * PB, PH = 32;
+    const drawPkt = (x, yy, n, al) => {
+      if (al <= 0) return;
+      ctx.save(); ctx.globalAlpha *= al; ctx.lineWidth = 3; ctx.strokeStyle = INK.dim;
+      ctx.fillStyle = 'rgba(89,96,108,.22)'; ctx.fillRect(x, yy - PH / 2, HB, PH); ctx.strokeRect(x, yy - PH / 2, HB, PH);
+      ctx.strokeStyle = INK.k;
+      for (let j = 0; j < n; j++) { const X = x + HB + 4 + j * (MB + 4); ctx.fillStyle = 'rgba(255,228,94,.9)'; ctx.fillRect(X, yy - PH / 2, MB, PH); ctx.strokeRect(X, yy - PH / 2, MB, PH); }
+      ctx.restore();
+    };
+    const LANES = [
+      { y: 222, col: INK.r, title: 'TCP_NODELAY만', sub: '메시지마다 send() 6번 → 패킷 최대 6개', batched: false },
+      { y: 548, col: INK.g, title: 'TCP_NODELAY + 틱 배칭', sub: '틱마다 send() 1번 → 패킷 1개', batched: true },
+    ];
+    LANES.forEach((L, i) => {
+      const t0 = .3 + i * .5, Y = L.y;
+      boxS('c6lane' + i, 120, Y, 980, 290, clamp((u - t0) / .6), rgba(L.col, .55), { lw: 3.5 });
+      say(L.title, 152, Y + 54, u, t0 + .3, { size: 32, weight: 800, color: L.col });
+      say(L.sub, 152, Y + 98, u, t0 + .6, { size: 28, weight: 600, color: INK.dim, cps: 40 });
+      const ly = Y + 205;
+      boxS('c6s' + i, 152, ly - 46, 170, 92, clamp((u - t0 - .5) / .4), INK.k, { lw: 5 });
+      say('Server', 237, ly + 10, u, t0 + .8, { size: 28, weight: 800, align: 'center' });
+      boxS('c6c' + i, 898, ly - 46, 170, 92, clamp((u - t0 - .7) / .4), INK.k, { lw: 5 });
+      say('Client', 983, ly + 10, u, t0 + 1.0, { size: 28, weight: 800, align: 'center' });
+      stroke('c6w' + i, [[326, ly], [894, ly]], clamp((u - t0 - .9) / .4), INK.faint, { lw: 3 });
+      for (let c = 0; c < 6; c++) {
+        const tt = 1.2 + c * 2.2;
+        if (L.batched) { const f = p(u, tt, 2), w = HB + 6 * (MB + 4); if (f > 0 && f < 1) drawPkt(lerp(334, 888 - w, f), ly, 6, Math.min(1, f * 8, (1 - f) * 8) * PEEL); }
+        else for (let j = 0; j < 6; j++) { const f = p(u, tt + j * .3, 2); if (f > 0 && f < 1) drawPkt(lerp(334, 888 - HB - MB - 4, f), ly + (j % 2 ? 22 : -22), 1, Math.min(1, f * 8, (1 - f) * 8) * PEEL); }
+      }
+    });
+    say('틱 1회 = 50 ms (화면은 느리게 재생)', 1100, 878, u, 1.6, { size: 24, weight: 500, color: INK.dim, align: 'right', cps: 50 });
+    // the one cross-out of the video: the worst case
+    const kx = clamp((u - 5.0) / .5);
+    stroke('c6x1', [[1030, 240], [1086, 296]], clamp(kx * 2), INK.r, { lw: 8 });
+    stroke('c6x2', [[1086, 240], [1030, 296]], clamp(kx * 2 - 1), INK.r, { lw: 8 });
+    // numbers
+    const SX = 1160;
+    say('5,000 CCU · 서버 송신', SX, 262, u, 2.2, { size: 34, weight: 800 });
+    say('초당 패킷', SX, 318, u, 2.9, { size: 28, weight: 600, color: INK.dim });
+    say('600,000', SX, 412, u, 3.0, { size: 92, weight: 800, color: INK.r, cps: 14 });
+    say('pps', SX + tw('600,000', 92, 800) + 16, 412, u, 3.5, { size: 36, weight: 800, color: INK.r });
+    say('100,000', SX, 508, u, 3.4, { size: 92, weight: 800, color: INK.g, cps: 14 });
+    say('pps', SX + tw('100,000', 92, 800) + 16, 508, u, 3.9, { size: 36, weight: 800, color: INK.g });
+    const BARS = [['대역폭 (헤더 포함)', [['394 Mbps', 1], ['186 Mbps', 186 / 394]], 572, 4.2], ['헤더 비율', [['63%', .63], ['22%', .22]], 736, 5.4]];
+    BARS.forEach(([lab, vals, yy, t0], i) => {
+      say(lab, SX, yy, u, t0, { size: 28, weight: 600, color: INK.dim });
+      vals.forEach(([v, f], j) => {
+        const col = j ? INK.g : INK.r, by = yy + 20 + j * 54, w = 330 * f, kb = clamp((u - t0 - .2 - j * .25) / .6);
+        if (kb >= 1) hatch(SX, by, w, 38, col, 1, 13);
+        boxS('c6bar' + i + j, SX, by, w, 38, kb, col, { lw: 4 });
+        say(v, SX + w + 18, by + 32, u, t0 + .7 + j * .25, { size: 34, weight: 800, color: col, mono: true });
+      });
+    });
+    say('빨강은 최악의 경우: send()마다 패킷 1개', SX, 902, u, 5.6, { size: 26, weight: 700, color: INK.r, cps: 36 });
+    say('Nagle을 켜 두면 패킷은 모이지만 ACK 대기가 생긴다. 모으는 일은 서버 코드가 틱 단위로 한다.', 120, 958, u, 7.6, { size: 30, weight: 800, cps: 50 });
+    foot('* 수치는 예시: 20Hz 틱, 클라당 틱마다 메시지 6개 × 30B, 헤더 52B', u, 3.0, 1004);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  CH 07 · 확인할 지표 — a printout taped on, values circled and explained
+// ═════════════════════════════════════════════════════════════
+const TERM = [
+  "$ ss -ti '( sport = :7777 )'",
+  '  cubic rto:232 rtt:31.2/4.1 ato:40 mss:1448',
+  '',
+  '$ nstat -az TcpExtDelayedACKs TcpRetransSegs',
+  '  TcpExtDelayedACKs 18234   TcpRetransSegs 412',
+  '',
+  '$ sar -n DEV 1 1 | grep eth0',
+  '  IFACE    rxpck/s     txpck/s',
+  '  eth0     98520.00    101233.00',
+];
+function sCheck(t) {
+  const [S, E] = HEAD[6];
+  onBoard(t, S, E, u => {
+    chHeader(u, 6);
+    const PX = 120, PY = 226, FS = 26, LH = 54, TX = 36, TY = 108;
+    font(FS, 500, true); const cw = ctx.measureText('M').width;
+    const at = (row, tok) => { const c = TERM[row].indexOf(tok); return [TX + (c + tok.length / 2) * cw, TY + row * LH - 9, tok.length * cw]; };
+    const MARKS = [
+      [[[1, 'rto:232'], [1, 'ato:40']], INK.b, 2.6, 'rto:232 · ato:40', '재전송 타이머 · 지연 ACK 타이머 (ms)', 300],
+      [[[4, 'TcpRetransSegs 412']], INK.r, 4.0, 'TcpRetransSegs', '재전송 세그먼트 누적 수, 증가 속도를 본다', 440],
+      [[[8, '101233.00'], [7, 'txpck/s']], INK.g, 5.4, 'txpck/s', 'NODELAY 적용 후 늘어나는 송신 pps', 580],
+    ];
+    paper(PX, PY, 880, 590, clamp((u - .2) / .5), { rot: 0 }, () => {
+      txt('game-server-01', TX, 46, { size: 22, weight: 600, mono: true, color: '#7a808a' });
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 66, 880, 1.5);
+      TERM.forEach((ln, i) => txt(ln, TX, TY + i * LH, { size: FS, weight: ln.startsWith('$') ? 700 : 500, mono: true, color: ln.startsWith('$') ? INK.k : '#3b4048' }));
+      // marker rings on the printout
+      MARKS.forEach(([toks, col, t0], i) => toks.forEach(([row, tok], j) => { const [x, yy, w] = at(row, tok); ringS('c7r' + i + j, x, yy, w / 2 + 11, 24, clamp((u - t0 - j * .25) / .4), col, { lw: 4.5 }); }));
+    });
+    MARKS.forEach(([toks, col, t0, title, desc, ny], i) => {
+      const [x, yy, w] = at(...toks[0]), rx = PX + x + w / 2 + 11, ry = PY + yy, nx = 1060;
+      stroke('c7lead' + i, [[rx + 4, ry], [lerp(rx, nx, .6), lerp(ry, ny - 10, .8)], [nx - 14, ny - 10]], clamp((u - t0 - .4) / .35) * PEEL, col, { lw: 3.5 });
+      say(title, nx, ny, u, t0 + .6, { size: 32, weight: 800, mono: true, color: col });
+      say(desc, nx, ny + 42, u, t0 + .9, { size: 28, weight: 600, color: INK.dim, cps: 36 });
+    });
+    sticky(1080, 650, 560, 230, clamp((u - 6.8) / .35), { rot: -.02 }, () => {
+      txt('입력 → 서버 수신', 28, 50, { size: 30, weight: 800, color: INK.k });
+      txt('p99', 28, 150, { size: 96, weight: 800, color: INK.k });
+      txt('게임 서버 로그로 남긴다. 최종 판단 기준', 28, 202, { size: 26, weight: 600, color: INK.dim });
+    });
+    say('NODELAY 적용 전후로 p99 지연 · 재전송 · pps를 같이 비교한다', 120, 934, u, 8.2, { size: 34, weight: 800, cps: 40 });
+    foot('* 출력 값은 예시. 포트 7777은 게임 서버 포트 예시', u, 1.0, 994);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  OUTRO — the chain redrawn once, then the takeaway written out
+// ═════════════════════════════════════════════════════════════
+const OUTRO = {
+  nodes: [[INK.k, 'Nagle', 'ACK 전 작은 패킷 보류'], [INK.b, 'Delayed ACK', 'ACK를 40~200 ms 늦춤'], [INK.r, '손실', 'RTO까지 대기'], [INK.g, 'TCP_NODELAY', 'send() 즉시 전송'], [INK.g, '틱 배칭', '패킷 수를 다시 줄임']],
+  footer: 'Nagle + Delayed ACK · Loss → RTO → TCP_NODELAY → 틱 배칭',
+};
+function sOutro(t) {
+  const S = DURATION - 5.5; if (t < S) return;
+  const v = t - S, n = OUTRO.nodes.length, xs = OUTRO.nodes.map((_, i) => lerp(260, 1660, i / (n - 1))), y = 420;
+  say('정리', 120, 134, v, .05, { size: 56, weight: 800 });
+  stroke('o-ul', [[120, 156], [232, 152]], clamp((v - .3) / .25), INK.k, { lw: 5 });
+  OUTRO.nodes.forEach(([col, lab, sub], i) => {
+    const t0 = .3 + i * .3;
+    ringS('o-n' + i, xs[i], y, 66, 62, clamp((v - t0) / .35), col, { lw: 6 });
+    txt(String(i + 1), xs[i], y + 16, { size: 46, weight: 800, mono: true, align: 'center', color: col, alpha: clamp((v - t0 - .25) / .1) });
+    if (i) arrowS('o-a' + i, xs[i - 1] + 82, y, xs[i] - 82, y, clamp((v - t0 + .05) / .25), INK.faint, { lw: 4 });
+    say(lab, xs[i], y + 128, v, t0 + .2, { size: 32, weight: 800, color: col, align: 'center' });
+    say(sub, xs[i], y + 172, v, t0 + .35, { size: 26, weight: 600, color: INK.dim, align: 'center', cps: 40 });
+  });
+  const [lx, lw] = sayParts([['TCP_NODELAY를', INK.g], [' 켜고, ', INK.k], ['틱마다', INK.g], [' 모아서 보낸다.', INK.k]], W / 2, 800, v, 1.8, { size: 72, weight: 800, align: 'center', cps: 22 });
+  stroke('o-tl', [[lx, 828], [lx + lw * .5, 834], [lx + lw, 824]], clamp((v - 3.0) / .4), INK.g, { lw: 7 });
+  say(OUTRO.footer, W / 2, 900, v, 2.6, { size: 24, weight: 600, color: INK.dim, align: 'center', mono: true, cps: 60 });
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; PEN = null; PEEL = 1;
+  board(t);
+  sTitle(t); sSmall(t); sNagle(t); sDelayed(t); sLoss(t); sNoDelay(t); sCost(t); sCheck(t); sOutro(t);
+  const erasing = eraser(t);
+  boardFrame(); progress(t); tray(erasing);
+  if (!erasing) drawPen();
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(7,10,19,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [DURATION - 5.5, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 42.4;   // ch03 sequence diagram complete: hold circled, +60 ms sticky, NODELAY redraw beside it
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
