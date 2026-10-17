@@ -1,0 +1,668 @@
+<meta charset="utf-8">
+<title>TCP Retransmission Whiteboard Vertical</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 9:16 stage (a glass whiteboard drawn on canvas), a slim transport bar under it, chapter chips below. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="TCP 재전송 화이트보드 세로 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="22" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../tcp-retransmission-board-wide/">전체 영상 (PC)</a><a href="../tcp-retransmission/">2D 원본</a><a href="../tcp-retransmission/article.html">설명</a><a href="../tcp-retransmission/terms.html">용어집</a></nav>
+</div>
+<!-- A ~21 s vertical cut of ../tcp-retransmission-board-wide/; no notes of its own (설명 · 용어집 are ../tcp-retransmission/article.html and terms.html). -->
+<section class="notes" id="notes" hidden></section>
+<script>
+// ─────────────────────────────────────────────────────────────
+//  TCP Retransmission Whiteboard Vertical — ~21 s cut: dup ACK ×3 vs the RTO timer running twice, then the receive buffer with its hole.
+//  Every frame is a pure function of time: renderAt(t).
+// ─────────────────────────────────────────────────────────────
+const W = 1080, H = 1920, DURATION = 21.5;
+// ── board kit: liquid-chalk strokes, handwriting-placed text, stickies, taped printouts, eraser ──
+// Every frame is a pure function of t. Wobble comes from a seed hashed from each stroke's id, so a stroke looks the same every frame.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// Liquid-chalk markers on this glass board: white = structure and data segments, cyan = ACK and what we measure,
+// red = loss / the stall, amber = the RTO timer, green = recovery and the fix.
+const INK = { k: '#eef1f4', b: '#56d4ff', r: '#ff6262', a: '#ffc23d', g: '#4fe08c', dim: '#a1abb8', faint: '#5f6a78' };
+// The same roles written on paper (printouts, stickies): dark inks so they read on white and yellow.
+const PINK = { k: '#1d2128', b: '#1559b8', r: '#cf2622', a: '#a35a00', g: '#11804a', dim: '#5a616d' };
+const PAPER_INK = new Set(Object.values(PINK));
+const MARKER = { [PINK.b]: INK.b, [PINK.r]: INK.r, [PINK.a]: INK.a, [PINK.g]: INK.g, [INK.b]: INK.b, [INK.r]: INK.r, [INK.a]: INK.a, [INK.g]: INK.g };
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function txt(s, x, y, o = {}) {
+  const { size = 30, weight = 600, color = INK.k, align = 'left', alpha = 1, mono = false, ls = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono); if (ls) ctx.letterSpacing = ls + 'px';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, x, y); ctx.restore();
+}
+
+// The marker in hand: the last stroke or line of text still being drawn this frame.
+let PEN = null;
+let PEEL = 1;   // stickies and taped paper (and what is written on them) come off the board just before the eraser passes
+
+// stroke(id, points, k, color): a marker line drawn along its path up to fraction k, with a seeded hand wobble.
+// On the dark glass a liquid-chalk line carries a faint halo; on paper it does not.
+function stroke(id, pts, k, col, o = {}) {
+  if (k <= 0 || pts.length < 2) return;
+  const { lw = 6, amp = 1.8, alpha = 1, dash = null, pen = true, halo = !PAPER_INK.has(col) } = o;
+  const r = rng(hash(id)), f1 = .007 + r() * .009, f2 = .024 + r() * .018, p1 = r() * 6.283, p2 = r() * 6.283, A = amp * (.6 + r() * .8);
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); segs.push(L); total += L; }
+  if (total < .5) return;
+  const lim = total * clamp(k), path = new Path2D();
+  let s = 0, first = true, tip = null;
+  for (let i = 0; i < segs.length && s < lim; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], L = segs[i];
+    if (L < 1e-6) continue;
+    const nx = -(y1 - y0) / L, ny = (x1 - x0) / L, n = Math.max(1, Math.ceil(L / 6));
+    for (let j = 0; j <= n; j++) {
+      let d = L * j / n; const last = s + d >= lim; if (last) d = lim - s;
+      const ss = s + d, off = A * (.65 * Math.sin(ss * f1 + p1) + .35 * Math.sin(ss * f2 + p2));
+      const x = x0 + (x1 - x0) * d / L + nx * off, y = y0 + (y1 - y0) * d / L + ny * off;
+      if (first) { path.moveTo(x, y); first = false; } else path.lineTo(x, y);
+      tip = [x, y];
+      if (last) break;
+    }
+    s += L;
+  }
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (dash) ctx.setLineDash(dash);
+  if (halo) { ctx.save(); ctx.globalAlpha *= .13; ctx.strokeStyle = col; ctx.lineWidth = lw * 2.8; ctx.stroke(path); ctx.restore(); }
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(path);
+  // wet-chalk sheen along the line
+  ctx.globalAlpha *= halo ? .28 : .16; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1, lw * .2);
+  ctx.translate(lw * .14, -lw * .14); ctx.stroke(path);
+  ctx.restore();
+  if (k < 1 && pen && tip) setPen(tip[0], tip[1], col);
+}
+// pen position in canvas space, so strokes drawn on a taped card (inside its transform) still put the marker in the right place
+function setPen(x, y, col) {
+  const m = ctx.getTransform(), c = MARKER[col] || INK.k;   // gray notes are written with the white marker
+  PEN = { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, col: c };
+}
+function arrowS(id, x0, y0, x1, y1, k, col, o = {}) {
+  if (k <= 0) return;
+  const kl = clamp(k / .86), kh = clamp((k - .86) / .14 + 1e-9), L = o.head || 22, a = Math.atan2(y1 - y0, x1 - x0);
+  stroke(id, [[x0, y0], [x1, y1]], kl, col, o);
+  const oh = { ...o, dash: null, amp: .5 };
+  stroke(id + 'h1', [[x1, y1], [x1 - L * Math.cos(a - .44), y1 - L * Math.sin(a - .44)]], clamp(kh * 2), col, oh);
+  stroke(id + 'h2', [[x1, y1], [x1 - L * Math.cos(a + .44), y1 - L * Math.sin(a + .44)]], clamp(kh * 2 - 1), col, oh);
+}
+// a polyline with a head on its last leg
+function pathArrow(id, pts, k, col, o = {}) {
+  if (k <= 0) return;
+  stroke(id, pts, clamp(k / .9), col, o);
+  const kh = clamp((k - .9) / .1 + 1e-9), [x0, y0] = pts[pts.length - 2], [x1, y1] = pts[pts.length - 1], a = Math.atan2(y1 - y0, x1 - x0), L = o.head || 22;
+  const oh = { ...o, dash: null, amp: .5 };
+  stroke(id + 'h1', [[x1, y1], [x1 - L * Math.cos(a - .44), y1 - L * Math.sin(a - .44)]], clamp(kh * 2), col, oh);
+  stroke(id + 'h2', [[x1, y1], [x1 - L * Math.cos(a + .44), y1 - L * Math.sin(a + .44)]], clamp(kh * 2 - 1), col, oh);
+}
+function boxS(id, x, y, w, h, k, col, o = {}) {
+  const r = rng(hash(id + 'b')), j = () => (r() - .5) * 5;
+  stroke(id, [[x - 5 + j(), y + j()], [x + w + j(), y + j()], [x + w + j(), y + h + j()], [x + j(), y + h + j()], [x + 2, y - 9]], k, col, o);
+}
+function ringS(id, cx, cy, rx, ry, k, col, o = {}) {
+  const r = rng(hash(id + 'r')), a0 = -2.4 + r() * .8, ph = r() * 6, pts = [];
+  for (let i = 0; i <= 80; i++) { const a = a0 + i / 80 * Math.PI * 2 * 1.1, q = 1 + .035 * Math.sin(a * 2 + ph) + i / 80 * .06; pts.push([cx + Math.cos(a) * rx * q, cy + Math.sin(a) * ry * q]); }
+  stroke(id, pts, k, col, { amp: .8, ...o });
+}
+// a hand-drawn X (loss)
+function xmark(id, x, y, s, k, col, lw = 6) {
+  stroke(id + 'a', [[x - s, y - s], [x + s, y + s]], clamp(k * 2), col, { lw, amp: .6 });
+  stroke(id + 'b', [[x + s, y - s], [x - s, y + s]], clamp(k * 2 - 1), col, { lw, amp: .6 });
+}
+// a check mark (the fix)
+function checkS(id, x, y, s, k, col, lw = 6) { stroke(id, [[x - s * .45, y], [x - s * .1, y + s * .35], [x + s * .5, y - s * .4]], k, col, { lw, amp: .5 }); }
+// a filled marker dot
+function dotS(x, y, r, col, a = 1) { if (a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore(); }
+// hatching for waiting time; lines are anchored to the board so they do not slide while the region grows
+function hatch(x, y, w, h, col, a = 1, step = 15) {
+  if (w <= 0 || h <= 0 || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = rgba(col, .1); ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = rgba(col, .85); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath();
+  const c0 = Math.floor((x - y - h) / step) * step;
+  for (let c = c0; c < x + w - y; c += step) { ctx.moveTo(c + y, y); ctx.lineTo(c + y + h, y + h); }
+  ctx.stroke(); ctx.restore();
+}
+
+// wr: text written left to right up to fraction k (a clip that follows the pen). Set in a readable face, placed with a slight hand tilt.
+function wr(s, x, y, k, o = {}) {
+  if (k <= 0 || !s) return 0;
+  const { size = 30, weight = 700, color = INK.k, align = 'left', mono = false, alpha = 1, rot = null, ls = 0 } = o;
+  ctx.save(); font(size, weight, mono); if (ls) ctx.letterSpacing = ls + 'px';
+  const w = ctx.measureText(s).width, X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  const r = rot ?? ((hash(s) % 1000) / 1000 - .5) * .012;
+  ctx.globalAlpha *= alpha; ctx.translate(X, y); ctx.rotate(r);
+  if (k < 1) { ctx.beginPath(); ctx.rect(-8, -size * 1.2, (w + 16) * k, size * 1.75); ctx.clip(); }
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, 0, 0);
+  ctx.restore();
+  if (k < 1) setPen(X + w * k, y - size * .2, color);
+  return w;
+}
+const wk = (u, t0, s, cps = 26) => clamp((u - t0) / Math.max(.22, s.length / cps));
+function say(s, x, y, u, t0, o = {}) { return wr(s, x, y, wk(u, t0, s, o.cps || 26), o); }
+// several colored runs on one line, written in sequence
+function sayParts(parts, x, y, u, t0, o = {}) {
+  const { size = 30, weight = 700, align = 'left', cps = 26, mono = false } = o;
+  font(size, weight, mono);
+  const ws = parts.map(([s]) => ctx.measureText(s).width), tot = ws.reduce((a, b) => a + b, 0);
+  let X = align === 'center' ? x - tot / 2 : align === 'right' ? x - tot : x, tt = t0;
+  parts.forEach(([s, col], i) => { const d = Math.max(.1, s.length / cps); wr(s, X, y, clamp((u - tt) / d), { ...o, align: 'left', color: col, rot: 0 }); X += ws[i]; tt += d; });
+  return [x - (align === 'center' ? tot / 2 : align === 'right' ? tot : 0), tot];
+}
+// strike a written line through (the reasoning "this no longer holds")
+function strike(id, x0, x1, y, k, col, o = {}) { stroke(id, [[x0, y + 3], [x1, y - 3]], k, col, { lw: 5, ...o }); }
+
+// sticky note: slapped on (slight overshoot in scale, shadow settles), content drawn in local coords (0,0 = top-left)
+function sticky(x, y, w, h, k, o, fn) {
+  if (k <= 0 || PEEL <= 0) return;
+  const { rot = -.02, col = '#ffe45e' } = o || {};
+  const kk = eo(clamp(k)), sc = 1 + (1 - kk) * .1;
+  ctx.save(); ctx.globalAlpha *= clamp(k * 3) * PEEL; ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot); ctx.scale(sc, sc);
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 16 + (1 - kk) * 24; ctx.shadowOffsetY = 7 + (1 - kk) * 16; ctx.shadowOffsetX = 3;
+  ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2 - 10);
+  ctx.quadraticCurveTo(w / 2 - 6, h / 2 + 1, w / 2 - 30, h / 2 + 3); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2); g.addColorStop(0, col); g.addColorStop(1, shade(col, -.07));
+  ctx.fillStyle = g; ctx.fill(); ctx.restore();
+  ctx.fillStyle = 'rgba(120,90,0,.06)'; ctx.fillRect(-w / 2, -h / 2, w, h * .16);
+  ctx.translate(-w / 2, -h / 2); fn(w, h); ctx.restore();
+}
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); const c = v => Math.round(clamp(v + v * f, 0, 255)); return `rgb(${c(n >> 16 & 255)},${c(n >> 8 & 255)},${c(n & 255)})`; }
+// taped paper (printouts): two strips of masking tape on the top corners
+function paper(x, y, w, h, k, o, fn) {
+  if (k <= 0 || PEEL <= 0) return;
+  const { rot = -.008, col = '#f7f6f1', tape = true } = o || {};
+  const kk = eo(clamp(k));
+  ctx.save(); ctx.globalAlpha *= clamp(k * 2.5) * PEEL; ctx.translate(x + w / 2, y + h / 2 + (1 - kk) * 24); ctx.rotate(rot);
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 8;
+  ctx.fillStyle = col; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.restore();
+  ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.lineWidth = 1; ctx.strokeRect(-w / 2, -h / 2, w, h);
+  if (tape) [[-w / 2 + 18, -h / 2 + 2, -.5], [w / 2 - 18, -h / 2 + 2, .5]].forEach(([tx, ty, a]) => {
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(a); ctx.fillStyle = 'rgba(226,212,170,.85)'; ctx.fillRect(-46, -15, 92, 30);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(-46, -15, 92, 8); ctx.restore();
+  });
+  ctx.translate(-w / 2, -h / 2); fn(w, h); ctx.restore();
+}
+
+// the marker in hand, drawn at the tip of whatever is being drawn
+function drawPen(sc = 1) {
+  if (!PEN) return;
+  const { x, y, col } = PEN;
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.rotate(.62);
+  ctx.save(); ctx.translate(12, 24); ctx.rotate(-.05); ctx.fillStyle = 'rgba(0,0,0,.35)'; rr(20, -14, 220, 30, 13); ctx.fill(); ctx.restore();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-1, 0); ctx.lineTo(15, -6); ctx.lineTo(15, 6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#c9ccd1'; ctx.beginPath(); ctx.moveTo(13, -7); ctx.lineTo(36, -14); ctx.lineTo(36, 14); ctx.lineTo(13, 7); ctx.closePath(); ctx.fill();
+  const g = ctx.createLinearGradient(0, -14, 0, 14); g.addColorStop(0, '#5a616b'); g.addColorStop(.5, '#3a4048'); g.addColorStop(1, '#22262c');
+  ctx.fillStyle = g; rr(34, -14, 172, 28, 5); ctx.fill();
+  ctx.fillStyle = col; ctx.fillRect(46, -14, 9, 28); ctx.fillRect(150, -14, 40, 28);
+  rr(200, -15, 44, 30, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(204, -12, 36, 6); ctx.fillRect(40, -12, 160, 4);
+  ctx.restore();
+}
+function eraserAt(x, y, rot = .06, sc = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc, sc);
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; rr(-40, -96, 110, 222, 16); ctx.fill();
+  ctx.fillStyle = '#d8d5cb'; rr(-62, -112, 26, 224, 6); ctx.fill();
+  const g = ctx.createLinearGradient(-40, 0, 52, 0); g.addColorStop(0, '#6a7480'); g.addColorStop(1, '#46505b');
+  ctx.fillStyle = g; rr(-44, -114, 96, 228, 14); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; rr(-36, -104, 14, 208, 6); ctx.fill();
+  ctx.restore();
+}
+// ── glass board in the ops room (portrait): wall, reflections, ghosting, standoffs, floating tray ──
+const BG = (() => {
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const b = c.getContext('2d');
+  let g = b.createLinearGradient(0, 0, W * .5, H); g.addColorStop(0, '#1c242e'); g.addColorStop(1, '#0f141a');
+  b.fillStyle = g; b.fillRect(0, 0, W, H);
+  b.save(); b.filter = 'blur(28px)';
+  [[60, 40, 300, 200, '#3d8cff', .07], [400, 34, 300, 200, '#2fc2b0', .06], [740, 40, 300, 200, '#ffad42', .05]]
+    .forEach(([x, y, w, h, col, a]) => { b.fillStyle = rgba(col, a); b.fillRect(x, y, w, h); b.fillStyle = rgba(col, a * .9); b.fillRect(x + 24, y + 130, w * .55, 26); });
+  b.restore();
+  b.save(); b.filter = 'blur(40px)'; b.fillStyle = 'rgba(210,230,240,.05)'; b.beginPath(); b.moveTo(760, -40); b.lineTo(940, -40); b.lineTo(300, H + 40); b.lineTo(120, H + 40); b.fill(); b.restore();
+  b.save(); b.filter = 'blur(2px)'; const R = rng(42); b.lineCap = 'round';
+  for (let i = 0; i < 22; i++) {
+    const x = 80 + R() * (W - 260), y = 160 + R() * (H - 400), L = 120 + R() * 300, a = (R() - .5) * .6, bend = (R() - .5) * 70;
+    b.strokeStyle = `rgba(200,215,230,${.025 + R() * .03})`; b.lineWidth = 6 + R() * 10;
+    b.beginPath(); b.moveTo(x, y); b.quadraticCurveTo(x + L * .5, y + L * .5 * Math.sin(a) + bend, x + L, y + L * Math.sin(a)); b.stroke();
+  }
+  b.restore();
+  return c;
+})();
+function board() { ctx.drawImage(BG, 0, 0); }
+const TRAY_Y = 1872;
+function boardFrame() {
+  ctx.save(); ctx.strokeStyle = 'rgba(170,215,205,.16)'; ctx.lineWidth = 3; ctx.strokeRect(10, 10, W - 20, TRAY_Y - 14);
+  ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = 1; ctx.strokeRect(16, 16, W - 32, TRAY_Y - 26); ctx.restore();
+  [[40, 40], [W - 40, 40], [40, TRAY_Y - 40], [W - 40, TRAY_Y - 40]].forEach(([x, y]) => {
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.arc(x + 3, y + 5, 19, 0, 7); ctx.fill();
+    const g = ctx.createRadialGradient(x - 6, y - 6, 2, x, y, 18); g.addColorStop(0, '#f2f4f6'); g.addColorStop(.5, '#a9b0b8'); g.addColorStop(1, '#5d646c');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 17, 0, 7); ctx.fill(); ctx.restore();
+  });
+  const g = ctx.createLinearGradient(0, TRAY_Y, 0, H); g.addColorStop(0, '#9aa1a9'); g.addColorStop(.3, '#5e656e'); g.addColorStop(1, '#2c3137');
+  ctx.fillStyle = g; ctx.fillRect(0, TRAY_Y, W, H - TRAY_Y);
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(0, TRAY_Y - 3, W, 3);
+}
+const TRAY = [[INK.k, 110], [INK.b, 260], [INK.r, 410], [INK.a, 560], [INK.g, 710]];
+function tray(erasing) {
+  for (const [col, x] of TRAY) {
+    if (PEN && PEN.col === col) continue;
+    ctx.save(); ctx.translate(x, TRAY_Y + 20); ctx.scale(1.3, 1.3);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; rr(4, 3, 104, 14, 7); ctx.fill();
+    const g = ctx.createLinearGradient(0, -8, 0, 8); g.addColorStop(0, '#5a616b'); g.addColorStop(1, '#262a30');
+    ctx.fillStyle = g; rr(0, -8, 80, 16, 4); ctx.fill(); ctx.fillStyle = col; rr(76, -9, 30, 18, 6); ctx.fill(); ctx.fillRect(8, -8, 6, 16); ctx.fillRect(50, -8, 16, 16);
+    ctx.restore();
+  }
+  if (!erasing) { ctx.save(); ctx.translate(940, TRAY_Y + 18); ctx.rotate(Math.PI / 2); ctx.scale(.5, .5); eraserAt(0, 0, 0); ctx.restore(); }
+}
+function progress(t) {
+  const a = clamp(Math.min(t, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(220,230,240,.12)'; ctx.fillRect(60, TRAY_Y - 22, W - 120, 4);
+  ctx.fillStyle = rgba(INK.k, .7); ctx.fillRect(60, TRAY_Y - 22, (W - 120) * clamp(t / DURATION), 4);
+  ctx.restore();
+}
+// chapter chips for the player; the board itself keeps one header for the whole cut
+const HEAD = [
+  [1.6, 11.0, '01', 'Fast vs RTO'],
+  [11.0, 17.2, '02', 'HOL 블로킹'],
+];
+const OUT_S = 17.2, WIPE1 = 11.0;
+// two erases: the picture zone before the HOL beat, then the whole board before the end card
+const ERASES = [[WIPE1, 380, 1680], [OUT_S, 0, H]];
+const eraseK = (t, E) => eio(p(t, E - .75, .65));
+const eraserPos = (e, y0, y1) => [W / 2 + Math.sin(e * Math.PI * 5) * 330, lerp(y0 - 150, y1 + 150, e)];
+function onBoardV(t, E, y0, y1, fn) {
+  if (t >= E) return;
+  const e = eraseK(t, E);
+  ctx.save();
+  if (e > 0) { const [, ey] = eraserPos(e, y0, y1); ctx.beginPath(); ctx.rect(0, 0, W, y0); ctx.rect(0, ey - 30, W, H); ctx.clip(); }
+  PEEL = 1 - p(t, E - .92, .2);
+  fn(t);
+  PEEL = 1;
+  ctx.restore();
+}
+function eraser(t) {
+  let any = false;
+  for (const [E, y0, y1] of ERASES) {
+    const e = eraseK(t, E), fade = 1 - p(t, E, 1.4);
+    if (e <= 0 || fade <= 0) continue;
+    const pts = []; for (let q = 0; q <= e + 1e-6; q += .01) pts.push(eraserPos(Math.min(q, e), y0, y1));
+    if (pts.length > 1) stroke('smear' + E, pts, 1, '#b5c0cc', { lw: 230, alpha: .035 * fade, pen: false, amp: 6, halo: false });
+    if (e < 1) { any = true; const [x, y] = eraserPos(e, y0, y1); eraserAt(x, y, Math.PI / 2 + .08 + Math.sin(e * 30) * .05, 1.2); }
+  }
+  if (any) PEN = null;
+  return any;
+}
+
+// ── header: stays on the board until the end card ──────────────
+function sHeader(t) {
+  onBoardV(t, OUT_S, 0, H, u => {
+    say('TCP · DUP ACK · RTO · HOL', 64, 150, u, .1, { size: 30, weight: 600, mono: true, color: INK.dim, ls: 3, cps: 50 });
+    const [lx] = sayParts([['사라진', INK.r], [' 패킷 하나가', INK.k]], 60, 252, u, .3, { size: 82, weight: 800, cps: 16 });
+    const w0 = tw('사라진', 82, 800);
+    stroke('h-hole', [[lx - 12, 172], [lx + w0 + 12, 172], [lx + w0 + 12, 276], [lx - 12, 276], [lx - 12, 172]], clamp((u - .8) / .45), INK.r, { lw: 5, dash: [16, 11] });
+    sayParts([['전부를 멈춘다', INK.k]], 60, 350, u, .9, { size: 82, weight: 800, cps: 16 });
+  });
+}
+function clock(ms, a) { if (a > 0) txt(`t = ${Math.round(ms)} ms`, 1016, 150, { size: 38, weight: 700, mono: true, align: 'right', color: INK.a, alpha: a }); }
+// caption slot (y 1500–1640): one plain line + one small line; swapped with a short fade
+function caption(t, rows) {
+  for (const [s, e, line, foot] of rows) {
+    if (t < s || t >= e) continue;
+    const a = 1 - p(t, e - .25, .25), u = t - s;
+    ctx.save(); ctx.globalAlpha *= a;
+    say(line, 60, 1572, u, .05, { size: 46, weight: 800, cps: 30 });
+    if (foot) say(foot, 60, 1630, u, .5, { size: 30, weight: 500, color: INK.dim, cps: 60 });
+    ctx.restore();
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  Beat 1 · the dense stream (dup ACK ×3), then the sparse one redrawn under it while the RTO timer runs
+// ═════════════════════════════════════════════════════════════
+function sTwoKinds(t) {
+  onBoardV(t, WIPE1, 380, 1680, u => {
+    const X = ms => 90 + ms * 1.0, y1 = 680, y2 = 1080, END = 900;
+    const n1 = (u - 2.3) * 300, n2 = (u - 4.7) * 170;
+    clock(u < 4.7 ? clamp(n1, 0, END) : clamp(n2, 0, END), clamp((u - 2.3) / .3) * (1 - p(u, WIPE1 - 1, .3)));
+    [[y1, 'Fast Retransmit', '패킷이 촘촘할 때', INK.g, 1.7], [y2, 'RTO 타임아웃', '패킷이 띄엄띄엄할 때', INK.r, 4.2]].forEach(([y, n, sub, col, t0], i) => {
+      say(n, 60, y - (i ? 176 : 150), u, t0, { size: 46, weight: 800, color: col, cps: 30 });
+      say(sub, 60, y - (i ? 128 : 102), u, t0 + .25, { size: 34, weight: 500, color: INK.dim, cps: 34 });
+      stroke('v3r' + i, [[X(0) - 14, y], [X(END), y]], clamp((u - t0 - .3) / .5), INK.faint, { lw: 3.5 });
+    });
+    // row 1
+    for (let m = 0; m <= END; m += 20) {
+      if (n1 < m) break;
+      if (m === 100) { xmark('v3x1', X(m), y1, 15, clamp((n1 - m) / 20), INK.r, 6); continue; }
+      stroke('v3t' + m, [[X(m), y1 - 16], [X(m), y1 + 16]], clamp((n1 - m) / 12), INK.k, { lw: 4.5, amp: .4 });
+    }
+    [140, 160, 180].forEach((m, j) => { if (n1 >= m + 4) stroke('v3d' + j, [[X(m), y1 + 52], [X(m), y1 + 26]], clamp((n1 - m - 4) / 10), INK.b, { lw: 5, amp: .3 }); });
+    if (n1 >= 186) say('dup ACK × 3', X(160) - 70, y1 + 104, u, 2.3 + 186 / 300, { size: 38, weight: 800, color: INK.b, cps: 30 });
+    if (n1 >= 180) stroke('v3rt1', [[X(180), y1 - 30], [X(180), y1 + 30]], clamp((n1 - 180) / 15), INK.g, { lw: 8, amp: .3 });
+    if (n1 > 100) hatch(X(100), y1 - 62, X(Math.min(n1, 200)) - X(100), 24, INK.g);
+    if (n1 >= 205) say('정지 ≈ 100ms', X(210), y1 - 38, u, 2.3 + 205 / 300, { size: 36, weight: 800, color: INK.g, cps: 30 });
+    sticky(600, 440, 420, 170, clamp((u - 3.6) / .35), { rot: -.02 }, () => {
+      txt('촘촘할 때 · 정지 (약 1 RTT)', 24, 44, { size: 28, weight: 700, color: PINK.dim });
+      txt('≈100', 22, 146, { size: 100, weight: 800, color: PINK.g });
+      txt('ms', 30 + tw('≈100', 100, 800), 146, { size: 42, weight: 800, color: PINK.g });
+    });
+    // row 2
+    [0, 350, 600, 850].forEach(m => { if (n2 >= m) stroke('v3s' + m, [[X(m), y2 - 16], [X(m), y2 + 16]], clamp((n2 - m) / 12), INK.k, { lw: 4.5, amp: .4 }); });
+    if (n2 >= 100) xmark('v3x2', X(100), y2, 15, clamp((n2 - 100) / 20), INK.r, 6);
+    const timer = (id, from, to, lab, cx) => {
+      if (n2 < from) return;
+      const e = Math.min(n2, to), yb = y2 - 48;
+      stroke(id, [[X(from), yb + 12], [X(from), yb], [X(e), yb]].concat(n2 >= to ? [[X(to), yb + 12]] : []), 1, INK.a, { lw: 6, pen: false });
+      if (n2 < to) setPen(X(e), yb, INK.a);
+      if (n2 >= to) say(lab, X(cx), yb - 18, u, 4.7 + to / 170, { size: 34, weight: 800, mono: true, color: INK.a, align: 'center', cps: 30 });
+    };
+    timer('v3rto1', 100, 300, 'RTO 200ms', 200);
+    if (n2 >= 300) xmark('v3x3', X(300), y2, 15, clamp((n2 - 300) / 20), INK.r, 6);
+    if (n2 >= 310) say('재전송도 손실', X(300), y2 + 62, u, 4.7 + 310 / 170, { size: 34, weight: 800, color: INK.r, align: 'center', cps: 30 });
+    if (n2 >= 360) say('dup ACK 부족', X(640), y2 + 62, u, 4.7 + 360 / 170, { size: 34, weight: 800, color: INK.b, align: 'center', cps: 30 });
+    timer('v3rto2', 300, 700, 'RTO 400ms (×2)', 520);
+    if (n2 >= 700) stroke('v3ok', [[X(700), y2 - 30], [X(700), y2 + 30]], clamp((n2 - 700) / 15), INK.g, { lw: 8, amp: .3 });
+    if (n2 > 100) hatch(X(100), y2 + 86, X(Math.min(n2, 720)) - X(100), 26, INK.r);
+    if (n2 >= 722) say('정지 620ms', X(410), y2 + 168, u, 4.7 + 722 / 170, { size: 42, weight: 800, color: INK.r, align: 'center' });
+    sticky(560, 1290, 460, 196, clamp((u - 9.0) / .35), { rot: .025 }, () => {
+      txt('띄엄띄엄할 때 · 정지', 26, 46, { size: 30, weight: 700, color: PINK.dim });
+      txt('620', 24, 168, { size: 124, weight: 800, color: PINK.r });
+      txt('ms', 34 + tw('620', 124, 800), 168, { size: 48, weight: 800, color: PINK.r });
+    });
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  Beat 2 · the receive buffer with its hole, then what the app sees
+// ═════════════════════════════════════════════════════════════
+function sHOL(t) {
+  if (t < WIPE1) return;
+  onBoardV(t, OUT_S, 0, H, u => {
+    const v = u - WIPE1, rt = 3.4, ARR = [rt, .6, .9, 1.2, 1.5, 1.8], BX = i => 60 + i * 162, BY = 540, BW = 150, BH = 124;
+    say('클라 커널 수신 버퍼', 60, 500, v, .3, { size: 46, weight: 800, cps: 24 });
+    for (let i = 0; i < 6; i++) {
+      const x = BX(i), seq = i + 3, at = ARR[i], arrived = v >= at;
+      if (i === 0) {
+        if (!arrived) stroke('v4hole', [[x, BY], [x + BW, BY], [x + BW, BY + BH], [x, BY + BH], [x, BY]], clamp((v - .4) / .35), INK.r, { lw: 5, dash: [12, 9] });
+        else { ctx.fillStyle = rgba(INK.g, .16); ctx.fillRect(x, BY, BW, BH); boxS('v4b3', x, BY, BW, BH, clamp((v - at) / .25), INK.g, { lw: 5.5 }); }
+        say('Seq 3', x + BW / 2, BY + 54, v, .5, { size: 34, weight: 800, mono: true, align: 'center', color: arrived ? INK.g : INK.r });
+        say(arrived ? '재전송' : '아직 없음', x + BW / 2, BY + 98, v, arrived ? at + .1 : .7, { size: 30, weight: 700, align: 'center', color: arrived ? INK.g : INK.r });
+        continue;
+      }
+      const ka = clamp((v - at) / .25); if (ka <= 0) continue;
+      boxS('v4b' + seq, x, BY, BW, BH, ka, INK.k, { lw: 5 });
+      say('Seq ' + seq, x + BW / 2, BY + 54, v, at + .08, { size: 34, weight: 800, mono: true, align: 'center' });
+      say('대기', x + BW / 2, BY + 98, v, at + .2, { size: 30, weight: 500, align: 'center', color: INK.dim });
+    }
+    if (v < rt + .3) {
+      arrowS('v4rp', BX(0) + 75, 770, BX(0) + 75, 686, clamp((v - 1.0) / .3), INK.r, { lw: 6 });
+      say('앱은 3번부터만', BX(0) + 110, 744, v, 1.2, { size: 38, weight: 800, color: INK.r, cps: 26 });
+      say('읽을 수 있음', BX(0) + 110, 792, v, 1.6, { size: 38, weight: 800, color: INK.r, cps: 26 });
+    } else {
+      const bx1 = BX(5) + BW;
+      stroke('v4done', [[BX(0), BY + BH + 18], [BX(0), BY + BH + 34], [bx1, BY + BH + 34], [bx1, BY + BH + 18]], clamp((v - rt - .5) / .45), INK.g, { lw: 5 });
+      say('기다리던 3~8이 한꺼번에', 60, 760, v, rt + .8, { size: 38, weight: 800, color: INK.g, cps: 28 });
+    }
+    // buffer → app (pipe going down), blocked until 3 arrives
+    boxS('v4app', 560, 880, 460, 150, clamp((v - .5) / .45), INK.b, { lw: 5.5 });
+    say('게임 앱', 790, 942, v, .8, { size: 42, weight: 800, align: 'center', color: INK.b });
+    say(v > rt + .5 ? '3·4·5·6·7·8' : 'recv()', 790, 994, v, v > rt + .5 ? rt + .6 : 1.0, { size: 34, weight: 700, mono: true, align: 'center', color: v > rt + .5 ? INK.g : INK.dim, cps: 24 });
+    arrowS('v4pipe', 790, 712, 790, 872, clamp((v - .9) / .3), v > rt + .3 ? INK.g : INK.faint, { lw: v > rt + .3 ? 8 : 4.5 });
+    if (v < rt + .35) stroke('v4wall', [[750, 790], [830, 790]], clamp((v - 1.9) / .2), INK.r, { lw: 9 });
+    const mw = say('막힘', 850, 802, v, 2.0, { size: 36, weight: 800, color: INK.r });
+    if (v > rt + .3) strike('v4wx', 844, 856 + mw, 790, clamp((v - rt - .3) / .25), INK.g);
+    // what the app sees over time
+    const tx0 = 90, tx1 = 990, ty = 1250, TX = s => lerp(tx0, tx1, s / 6);
+    say('앱이 받은 메시지', 60, 1150, v, .9, { size: 40, weight: 800, cps: 26 });
+    stroke('v4tl', [[tx0, ty], [tx1, ty]], clamp((v - 1.0) / .5), INK.faint, { lw: 3.5 });
+    const msgs = [0, .3, .6]; for (let j = 0; j < 6; j++) msgs.push(rt + .3 + j * .03); for (let s2 = 4.2; s2 <= 6; s2 += .3) msgs.push(s2);
+    msgs.forEach((s2, j) => { const burst = s2 > rt && s2 < rt + .6; if (v >= s2) dotS(TX(s2) + (burst ? (j % 2) * 11 : 0), ty - (burst ? (j % 3) * 20 : 0), 10, burst ? INK.r : INK.k); });
+    if (v >= rt) {
+      stroke('v4gap', [[TX(.7), ty + 28], [TX(.7), ty + 44], [TX(rt - .1), ty + 44], [TX(rt - .1), ty + 28]], clamp((v - rt) / .35), INK.r, { lw: 5 });
+      say('아무것도 안 옴', TX((.7 + rt) / 2), ty + 100, v, rt + .2, { size: 38, weight: 800, color: INK.r, align: 'center' });
+      ringS('v4burst', TX(rt + .35), ty - 20, 40, 58, clamp((v - rt - .45) / .35), INK.r, { lw: 5 });
+      say('한꺼번에', TX(rt + .35) - 50, ty - 96, v, rt + .6, { size: 38, weight: 800, color: INK.r });
+    }
+    sticky(560, 1330, 460, 160, clamp((v - 4.4) / .35), { rot: -.02 }, () => {
+      txt('TCP 연결 하나 =', 26, 44, { size: 30, weight: 700, color: PINK.dim });
+      txt('한 줄', 24, 138, { size: 92, weight: 800, color: PINK.r });
+    });
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  End card
+// ═════════════════════════════════════════════════════════════
+const OUTRO = { link: ['jungrok5.github.io/motion-graphics/', 'tcp-retransmission-board-wide'] };
+function sOutro(t) {
+  if (t < OUT_S) return;
+  const v = t - OUT_S;
+  const [lx] = sayParts([['TCP는 ', INK.k], ['빠진', INK.r], [' 패킷을', INK.k]], W / 2, 820, v, .1, { size: 84, weight: 800, align: 'center', cps: 26 });
+  sayParts([['기다리느라 늦어진다.', INK.k]], W / 2, 940, v, .6, { size: 84, weight: 800, align: 'center', cps: 26 });
+  const ux = lx + tw('TCP는 ', 84, 800), uw = tw('빠진', 84, 800);
+  stroke('o-ul', [[ux, 850], [ux + uw / 2, 856], [ux + uw + 4, 846]], clamp((v - 1.3) / .3), INK.r, { lw: 8 });
+  say('전체 영상 · 설명 · 용어집', W / 2, 1180, v, 1.5, { size: 40, weight: 700, color: INK.dim, align: 'center', cps: 60 });
+  OUTRO.link.forEach((l, i) => say(l, W / 2, 1250 + i * 50, v, 1.8 + i * .3, { size: 34, weight: 600, mono: true, color: INK.b, align: 'center', cps: 110 }));
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; PEN = null; PEEL = 1;
+  board();
+  sHeader(t); sTwoKinds(t); sHOL(t); sOutro(t);
+  onBoardV(t, WIPE1, 380, 1680, () => caption(t, [
+    [2.3, 4.7, 'dup ACK 3개면 바로 재전송', '* 수치는 예시: 패킷 20ms 간격, 100ms 지점 손실'],
+    [4.7, WIPE1, '띄엄띄엄하면 RTO까지 기다린다', '* 예시: 원본 · 첫 재전송 2번 손실, 리눅스 RTO 최소 200ms'],
+  ]));
+  onBoardV(t, OUT_S, 0, H, () => caption(t, [[WIPE1 + .5, OUT_S, '하나가 빠지면 뒤에 온 것도 전부 대기', '이동 · 스킬 · 채팅이 같은 연결이면 모두 같이 멈춘다']]));
+  const erasing = eraser(t);
+  boardFrame(); progress(t); tray(erasing);
+  if (!erasing) drawPen(1.25);
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(7,10,19,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [OUT_S, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 9.8;   // beat 1 complete: dup ACK ×3 ≈100 ms above, RTO 200 → 400 ms (2번 손실) and the 620 ms sticky below
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
