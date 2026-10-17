@@ -1,0 +1,1001 @@
+<meta charset="utf-8">
+<title>Skill Journey Flow Vertical</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 9:16 stage, a slim transport bar under it, chapter chips below. Night route-map look (traceroute hops · NOC weathermap). */
+  :root {
+    --bg: #04060a; --surface: #0b1012; --line: #1c2828; --fg: #e9f1ee; --dim: #8fa39d;
+    --accent: #52ffa0; --live: #ffb23e; --text2: #c2d1cc;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(8,14,14,.8); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(82,255,160,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(82,255,160,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="내 스킬 하나가 상대 화면에 뜨기까지 — 패킷 한 개의 경로와 쌓이는 시간 세로 요약"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../skill-journey-flow-wide/">전체 영상 (PC)</a><a href="../skill-journey/">2D 원본</a><a href="../skill-journey/article.html">설명</a><a href="../skill-journey/terms.html">용어집</a></nav>
+</div>
+<!-- The chapter notes, 설명 and 용어집 live with the full video: ../skill-journey-flow-wide/ and ../skill-journey/. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">{"imports": {"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}}</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Skill Journey Flow Vertical — 내 스킬 하나가 상대 화면에 뜨기까지 (~21s, 1080×1920, mobile)
+//  The ~20 s cut of ../skill-journey-flow-wide/ (흐름과 관계를 빛으로): the same night route map, the same lit
+//  fiber and the same "time wall" behind ONE packet — the camera rides with the packet from my PC through
+//  the ISP, the backbone and the IDC, waits for the server tick, and arrives at the other player's PC where
+//  the interpolation buffer adds the tallest cliff. Then the route stands up as a tower of time (221 ms).
+//  Every frame is a pure function of time: renderAt(t).
+//  Facts follow ../skill-journey/index.html (example: 20Hz · RTT 50ms):
+//    my screen ~25 ms (prediction) · uplink one-way 25 ms · tick wait 0~50 ms (avg 25) · tick ~12 ms
+//    downlink ~25 ms · frame 8 · interpolation buffer ~100 ms · render 16 → ≈ 221 ms
+//    the 100 ms buffer applies when events are also played at the interpolated time
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1080, H = 1920, DURATION = 21;
+const FOV = 46;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math ─────────────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+const fract = x => x - Math.floor(x);
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+function interpK(K, x) {   // piecewise-linear lookup in [[x, y], …] (x ascending)
+  if (x <= K[0][0]) return K[0][1];
+  for (let i = 1; i < K.length; i++) if (x <= K[i][0]) { const [x0, y0] = K[i - 1], [x1, y1] = K[i]; return x1 > x0 ? lerp(y0, y1, (x - x0) / (x1 - x0)) : y1; }
+  return K[K.length - 1][1];
+}
+
+// ── timeline ─────────────────────────────────────────────────
+// [start, end, number, title] — chapters (route progress + chapter chips)
+const HEAD = [
+  [0, 2.6, '01', '출발'],
+  [2.6, 7.0, '02', '업링크'],
+  [7.0, 10.6, '03', '서버 틱'],
+  [10.6, 15.0, '04', '보간 버퍼'],
+  [15.0, DURATION, '05', '다 더하면'],
+];
+const END_AT = 18.4;                       // end card
+const OUTRO_AT = END_AT;
+const T_TICK = [6.6, 8.6, 10.6];           // server tick pulses (one every 2 s of video = one 50 ms tick)
+const T_MORPH = 15.0;                      // the route stands up as a tower of time
+
+// ── palette (night route map · NOC weathermap) ───────────────
+const HEX = { sig: '#52ffa0', me: '#6cc8ff', them: '#ff6fd8', amber: '#ffb23e', red: '#ff4f62', gold: '#ffe08a', dev: '#86a59d', ink: '#e9f1ee' };
+const COL = Object.fromEntries(Object.entries(HEX).map(([k, v]) => [k, new THREE.Color(v)]));
+const INK = HEX.ink, DIM = 'rgba(196,214,208,.76)', SIG = HEX.sig, ME = HEX.me, THEM = HEX.them, AMB = HEX.amber, RED = HEX.red, GOLD = HEX.gold, LAB = '#a8f5cc';
+
+// ── three setup ──────────────────────────────────────────────
+const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.setPixelRatio(1); gl.setSize(W, H, false);
+gl.setClearColor(0x03050a, 1);
+gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .05, 600);
+const composer = new EffectComposer(gl);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .55, .4, .7);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const U = { uPx: { value: H / (2 * Math.tan(THREE.MathUtils.degToRad(FOV / 2))) }, uTime: { value: 0 } };
+const blendAdd = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendEquation: THREE.AddEquation };
+
+// soft additive glows: round gaussian sprites
+const GVS = `
+attribute float size; attribute float alpha; attribute vec3 color;
+uniform float uPx, uGain;
+varying vec3 vC;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  gl_PointSize = clamp(size * uPx / d, 1.5, 160.0);
+  vC = color * alpha * uGain;
+  gl_Position = projectionMatrix * mv;
+  if (alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const GFS = `varying vec3 vC; void main() { vec2 c = gl_PointCoord * 2.0 - 1.0; float d = dot(c, c); if (d > 1.0) discard; gl_FragColor = vec4(vC * (exp(-d * 5.0) + .15 * exp(-d * 1.5)), 1.0); }`;
+// station beacons: a thin ring with a dot (hop marker)
+const RFS = `varying vec3 vC; void main() { vec2 c = gl_PointCoord * 2.0 - 1.0; float d = length(c); if (d > 1.0) discard;
+  float aa = fwidth(d) * 1.3; float ring = 1.0 - smoothstep(.1, .1 + aa, abs(d - .78)); float core = 1.0 - smoothstep(.26 - aa, .26, d);
+  gl_FragColor = vec4(vC * (ring * .9 + core * 1.2 + .12 * exp(-d * d * 3.0)), 1.0); }`;
+const LVS = `
+attribute vec3 color; attribute float alpha;
+uniform float uGain;
+varying vec3 vC;
+void main() { vC = color * alpha * uGain; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const LFS = `varying vec3 vC; void main() { gl_FragColor = vec4(vC, 1.0); }`;
+const gMat = (g, fs = GFS) => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: GVS, fragmentShader: fs, ...blendAdd });
+const lMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: LVS, fragmentShader: LFS, ...blendAdd });
+
+class PB {   // point builder
+  constructor() { this.p = []; this.s = []; this.a = []; this.c = []; }
+  add(v, size, alpha, col) { this.p.push(v.x, v.y, v.z); this.s.push(size); this.a.push(alpha); this.c.push(col.r, col.g, col.b); return this; }
+  build(gain = 1, order = 1, fs = GFS) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(this.s, 1));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    const o = new THREE.Points(g, gMat(gain, fs)); o.frustumCulled = false; o.renderOrder = order; scene.add(o); return o;
+  }
+}
+class LB {   // line-segment builder
+  constructor() { this.p = []; this.a = []; this.c = []; }
+  add(v1, v2, a1, col, a2 = a1) { this.p.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z); this.a.push(a1, a2); this.c.push(col.r, col.g, col.b, col.r, col.g, col.b); return this; }
+  poly(pts, a, col, closed = false) { for (let i = 0; i < pts.length - (closed ? 0 : 1); i++) this.add(pts[i], pts[(i + 1) % pts.length], a, col); return this; }
+  build(gain = 1, order = 3) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    const o = new THREE.LineSegments(g, lMat(gain)); o.frustumCulled = false; o.renderOrder = order; scene.add(o); return o;
+  }
+}
+const setGain = (o, g) => { o.material.uniforms.uGain.value = g; o.visible = g > .002; };
+
+// ═════════════════════════════════════════════════════════════
+//  THE ROUTE — 29 stations, one Catmull-Rom path through all of them
+// ═════════════════════════════════════════════════════════════
+// [name, detail, ms label, kind, ms on arrival, ms on leaving]  (cumulative ms from the button press — the budget of 06)
+//   arrival < leaving = a wait at this station (the time wall rises as a cliff); between stations ms grows along the link.
+//   The split of 10 ms inside the client and 12 ms inside the tick is only for drawing the wall; on screen only the 2D labels are shown.
+const STN = [
+  ['키 입력', 'OS 입력 이벤트', '~0ms', 'me', 0, 0],
+  ['게임 루프', '다음 프레임에 읽음', '0~16ms', 'me', 0, 7],
+  ['예측 실행', '애니메이션 먼저', '즉시', 'me', 7, 7],
+  ['패킷 생성', 'UseSkillReq', '<1ms', 'me', 7, 8],
+  ['직렬화 · 암호화', 'protobuf → 바이트', '<1ms', 'me', 8, 9],
+  ['send()', '커널 송신 버퍼', '<1ms', 'me', 9, 9.5],
+  ['NIC', '랜카드 · 와이파이로', '<1ms', 'me', 9.5, 10],
+  ['공유기 · 와이파이', '', '2ms', 'up', 12, 12],
+  ['ISP 망', '', '8ms', 'up', 18, 18],
+  ['인터넷 백본', '', '16ms', 'up', 26, 26],
+  ['IDC 방화벽 · DDoS 필터', '', '23ms', 'up', 33, 33],
+  ['로드밸런서', '', '24ms', 'up', 34, 34],
+  ['NIC → 커널', '수신 버퍼', '<1ms', 'srv', 35, 35],
+  ['I/O 스레드', 'recv · 복호화 · 역직렬화', '<1ms', 'srv', 35, 35],
+  ['세션 확인', '누구의 패킷인지', '<1ms', 'srv', 35, 35],
+  ['존 메시지 큐', '다음 틱까지 대기', '0~50ms', 'queue', 35, 60],
+  ['검증', '쿨다운 · 사거리 · 마나 · 치트', '', 'tick', 60, 63],
+  ['판정', '데미지 · 상태 변경', '', 'tick', 63, 66],
+  ['AOI 조회', '주변 플레이어 32명', '', 'tick', 66, 69],
+  ['브로드캐스트', 'SkillCastNoti · DamageNoti', '', 'tick', 69, 72],
+  ['송신 큐 → I/O', '직렬화 · 암호화 · send', '<1ms', 'srv', 72, 72],
+  ['인터넷 백본', '', '', 'down', null, null],
+  ['상대 ISP', '', '', 'down', null, null],
+  ['상대 공유기', '', '', 'down', null, null],
+  ['NIC → recv', '복호화 · 역직렬화', '<1ms', 'them', 97, 97],
+  ['다음 프레임', '게임 루프가 읽음', '0~16ms', 'them', 97, 105],
+  ['보간 버퍼', '일부러 과거를 그림', '~100ms', 'buf', 105, 205],
+  ['애니 · 이펙트', '스킬 모션 재생', '즉시', 'them', 205, 205],
+  ['화면 출력', 'vsync', '~16ms', 'them', 205, 221],
+];
+const KIND = { me: HEX.me, up: HEX.sig, srv: HEX.gold, queue: HEX.amber, tick: HEX.gold, down: HEX.sig, them: HEX.them, buf: HEX.red };
+// world positions (x, z): my home front-left, the IDC at the back, the other player's home front-right
+const POS = [];
+for (let i = 0; i < 7; i++) POS.push([-31 + i * 1.33, 9]);
+POS.push([-19.4, 6.0], [-15.4, 1.2], [-11.8, -3.6], [-9.4, -7.6], [-7.7, -10.3]);
+for (let i = 0; i < 9; i++) POS.push([-6 + i * 1.5, -12]);
+POS.push([10.6, -5.2], [15.2, .8], [19.4, 6.0]);
+for (let i = 0; i < 5; i++) POS.push([23 + i * 2.4, 9]);
+const NS = STN.length, SEG = 40, NSMP = (NS - 1) * SEG + 1;
+const CURVE = new THREE.CatmullRomCurve3(POS.map(([x, z]) => V(x, 0, z)), false, 'centripetal');
+const PA = new Float32Array(NSMP * 3), SL = new Float32Array(NSMP);
+{ const q = new THREE.Vector3(); let px = 0, pz = 0;
+  for (let k = 0; k < NSMP; k++) { CURVE.getPoint(k / (NSMP - 1), q); PA[k * 3] = q.x; PA[k * 3 + 2] = q.z; SL[k] = k ? SL[k - 1] + Math.hypot(q.x - px, q.z - pz) : 0; px = q.x; pz = q.z; } }
+const LEN = SL[NSMP - 1];
+const SS = STN.map((_, i) => SL[i * SEG]);
+// dwell span around a station where its wait is drawn (s offsets)
+const DW = STN.map((st, i) => { const a = st[4], b = st[5]; if (a == null || !(b > a)) return null; if (i === NS - 1) return [-.6, 0]; if (i === 26) return [-.45, .45]; return [-.25, .25]; });
+const KN = [];
+STN.forEach((st, i) => { const a = st[4], b = st[5]; if (a == null) return; if (DW[i]) KN.push([SS[i] + DW[i][0], a], [SS[i] + DW[i][1], b]); else KN.push([SS[i], a]); });
+const HS = new Float32Array(NSMP); for (let k = 0; k < NSMP; k++) HS[k] = interpK(KN, SL[k]);
+const msAt = s => interpK(KN, s);
+const TOTAL = 221, KH = .03;              // wall: 1 ms = .03 world units of height
+// 06: the unfolded route — x proportional to cumulative ms (the budget bar)
+const BY0 = .3, BHT = 12, BZ = 0;   // 05: the unfolded route stands up as a tower of time (y ∝ cumulative ms)
+const BUDGET = [['입력 · 처리', 10, HEX.me], ['업링크', 25, HEX.sig], ['틱 대기', 25, HEX.amber], ['틱 처리', 12, HEX.gold], ['다운링크', 25, HEX.sig], ['프레임', 8, '#c58cff'], ['보간 버퍼', 100, HEX.red], ['렌더', 16, HEX.them]];
+const BCUM = BUDGET.reduce((a, b) => (a.push((a.at(-1) ?? 0) + b[1]), a), []);   // 10 35 60 72 97 105 205 221
+const CUR = new Float32Array(NSMP * 3);   // current sample positions (morph of the map layout and the time axis)
+let MORPH = 0;
+function idxAt(s) { s = clamp(s, 0, LEN); let lo = 0, hi = NSMP - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (SL[m] <= s) lo = m; else hi = m; } return [lo, hi, SL[hi] > SL[lo] ? (s - SL[lo]) / (SL[hi] - SL[lo]) : 0]; }
+function posAt(s, out = new THREE.Vector3()) { const [a, b, f] = idxAt(s); return out.set(lerp(CUR[a * 3], CUR[b * 3], f), lerp(CUR[a * 3 + 1], CUR[b * 3 + 1], f), lerp(CUR[a * 3 + 2], CUR[b * 3 + 2], f)); }
+const stPos = (i, y = 0) => posAt(SS[i]).add(V(0, y, 0));
+const midS = (i, j) => (SS[i] + SS[j]) / 2;
+
+// ── the packet: arc length s along the route as a pure function of t ──
+function track(list) {   // [station, t arrive, t leave] | ['hold', t]
+  const K = [];
+  for (const e of list) {
+    if (e[0] === 'hold') { K.push([e[1], K[K.length - 1][1]]); continue; }
+    const [i, ta, tl] = e;
+    if (DW[i]) K.push([ta, SS[i] + DW[i][0]], [tl ?? ta + .3, SS[i] + DW[i][1]]); else K.push([ta, SS[i]]);
+  }
+  return K;
+}
+const TRK = track([                                    // the packet, stage by stage (≈ 12 s)
+  [0, 2.7], [1, 2.85, 3.05], [2, 3.15], [3, 3.3, 3.4], [4, 3.5, 3.6], [5, 3.7, 3.8], [6, 3.9, 4.0],
+  [7, 4.45], [8, 4.95], [9, 5.45], [10, 5.95], [11, 6.35], [12, 6.75],
+  [13, 7.05], [14, 7.3], [15, 7.6, 8.6], [16, 8.9, 9.05], [17, 9.25, 9.4], [18, 9.6, 9.75], [19, 9.95, 10.1], [20, 10.4],
+  [24, 11.6], [25, 11.9, 12.2], [26, 12.5, 14.0], [27, 14.25], [28, 14.5, 14.85],
+]);
+const ARRIVE = {}; { const by = {}; TRK.forEach(([t, s]) => { for (let i = 0; i < NS; i++) if (by[i] == null && s >= SS[i] + (DW[i] ? DW[i][0] : 0) - .01) by[i] = t; }); Object.assign(ARRIVE, by); }
+function headAt(t) {
+  const s = t < 15.5 ? interpK(TRK, t) : LEN;
+  return { s, vis: win(t, .6, 15.4, .4), wall: eo(p(t, 2.6, .4)) };
+}
+
+
+// ═════════════════════════════════════════════════════════════
+//  WORLD
+// ═════════════════════════════════════════════════════════════
+// region boxes on the floor: [label, cx, cz, half x, half z, colour]
+const BOXES = [['내 집', -25.6, 7.4, 8.4, 3.8, HEX.me], ['ISP', -15.4, 1.2, 2.3, 2.0, HEX.dev], ['IDC · 데이터센터', 0, -14.4, 10.6, 4.8, HEX.gold], ['상대 ISP', 15.2, .8, 2.3, 2.0, HEX.dev], ['상대 집', 27.4, 7.4, 9.8, 3.8, HEX.them]];
+const TICKBOX = [2.25, -12, 3.05, 1.15];   // around 검증 … 브로드캐스트 (x 0 … 4.5)
+const GU = {
+  uBox: { value: BOXES.map(b => new THREE.Vector4(b[1], b[2], b[3], b[4])) }, uBoxC: { value: BOXES.map(b => new THREE.Color(b[5])) }, uBoxA: { value: BOXES.map(() => 0) },
+  uTick: { value: new THREE.Vector4(...TICKBOX) }, uTickA: { value: 0 }, uTickP: { value: 0 },
+  uPulse: { value: new THREE.Vector4(TICKBOX[0], TICKBOX[1], 0, 0) }, uDim: { value: 1 }, uGrid: { value: 1 },
+};
+const GROUND = (() => {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: GU, depthWrite: false, depthTest: false,
+    vertexShader: `varying vec2 vP; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `
+uniform vec4 uBox[5]; uniform vec3 uBoxC[5]; uniform float uBoxA[5];
+uniform vec4 uTick, uPulse; uniform float uTickA, uTickP, uDim, uGrid;
+varying vec2 vP;
+float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r; }
+void main() {
+  vec3 col = vec3(.010, .014, .020);
+  // dot grid (1 unit) and faint 10-unit lines: the map floor
+  float fw = fwidth(vP.x);
+  float d = length(fract(vP + .5) - .5);
+  col += vec3(.11, .17, .16) * (1.0 - smoothstep(.03, .03 + fw * 1.3, d)) * .55 * uGrid;
+  vec2 gm = abs(fract(vP / 10.0 + .5) - .5) * 10.0;
+  col += vec3(.03, .055, .055) * (1.0 - smoothstep(0.0, fw * 1.3, min(gm.x, gm.y))) * uGrid;
+  // places: dashed rounded outlines with a faint fill
+  for (int k = 0; k < 5; k++) {
+    if (uBoxA[k] <= 0.0) continue;
+    float sd = sdBox(vP - uBox[k].xy, uBox[k].zw, .9); float f = fwidth(sd);
+    float edge = 1.0 - smoothstep(f, f * 2.4, abs(sd));
+    float dash = step(.42, fract((vP.x * .7071 + vP.y * .7071) * 1.4));
+    col += uBoxC[k] * (edge * (.35 + .45 * dash) * .55 + step(sd, 0.0) * .018) * uBoxA[k];
+  }
+  // the zone tick: a frame around the tick stations that flashes on every tick, and a ring that sweeps the IDC floor
+  if (uTickA > 0.0) {
+    float sd = sdBox(vP - uTick.xy, uTick.zw, .35); float f = fwidth(sd);
+    col += vec3(1.0, .82, .42) * (1.0 - smoothstep(f, f * 2.6, abs(sd))) * (.45 + 1.4 * uTickP) * uTickA;
+    col += vec3(1.0, .75, .3) * step(sd, 0.0) * .06 * uTickP * uTickA;
+  }
+  if (uPulse.w > 0.0) {
+    float r = length(vP - uPulse.xy); float f = fwidth(r);
+    col += vec3(1.0, .8, .38) * (1.0 - smoothstep(f * 2.0, f * 7.0, abs(r - uPulse.z))) * uPulse.w * .8;
+  }
+  col *= 1.0 - smoothstep(34.0, 70.0, length(vP - vec2(0.0, -1.0)));
+  gl_FragColor = vec4(col * uDim, 1.0);
+}`,
+  });
+  const o = new THREE.Mesh(new THREE.PlaneGeometry(180, 180).rotateX(-Math.PI / 2), mat);
+  o.frustumCulled = false; o.renderOrder = -10; scene.add(o); return o;
+})();
+
+// ── the fiber: a lit ribbon along the route (flowing light = traffic); in 06 it stands up and becomes the budget bar ──
+const HEAT = `vec3 heat(float m) { vec3 c = mix(vec3(.32, 1.0, .63), vec3(1.0, .86, .38), smoothstep(0.0, 60.0, m)); c = mix(c, vec3(1.0, .6, .2), smoothstep(60.0, 110.0, m)); return mix(c, vec3(1.0, .3, .38), smoothstep(110.0, 170.0, m)); }`;
+const RU = {
+  uHead: { value: 0 }, uReveal: { value: 0 }, uM: { value: 0 }, uGain: { value: 1 }, uFlow: { value: 1 }, uTime: U.uTime,
+  uSecA: { value: new THREE.Vector3() }, uSecR: { value: new THREE.Vector4(SS[6], SS[12], SS[20], SS[24]) },
+  uC: { value: BUDGET.map(b => new THREE.Color(b[2])) }, uB: { value: BCUM.slice(0, 7) }, uHi: { value: -1 },
+};
+const RIB = (() => {
+  const g = new THREE.BufferGeometry(), n = NSMP * 2;
+  const aS = new Float32Array(n), aSide = new Float32Array(n), aH = new Float32Array(n), idx = [];
+  for (let k = 0; k < NSMP; k++) { aS[k * 2] = aS[k * 2 + 1] = SL[k]; aSide[k * 2] = -1; aSide[k * 2 + 1] = 1; aH[k * 2] = aH[k * 2 + 1] = HS[k]; if (k) idx.push(k * 2 - 2, k * 2 - 1, k * 2, k * 2 - 1, k * 2 + 1, k * 2); }
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  g.setAttribute('aS', new THREE.BufferAttribute(aS, 1)); g.setAttribute('aSide', new THREE.BufferAttribute(aSide, 1)); g.setAttribute('aH', new THREE.BufferAttribute(aH, 1));
+  g.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({ uniforms: RU, ...blendAdd, side: THREE.DoubleSide,
+    vertexShader: `attribute float aS, aSide, aH; varying float vS, vSide, vH; void main() { vS = aS; vSide = aSide; vH = aH; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+uniform float uHead, uReveal, uTime, uM, uGain, uFlow, uHi; uniform vec3 uSecA; uniform vec4 uSecR; uniform vec3 uC[8]; uniform float uB[7];
+varying float vS, vSide, vH;
+void main() {
+  if (vS > uReveal) discard;
+  float core = exp(-vSide * vSide * 4.0);
+  float trav = step(vS, uHead);
+  float flow = pow(fract(vS * .5 - uTime * .7), 16.0) * uFlow;
+  vec3 g = vec3(.32, 1.0, .63);
+  vec3 col = g * core * (.2 + .5 * trav + 1.1 * flow);
+  float up = step(uSecR.x, vS) * step(vS, uSecR.y), sv = step(uSecR.y, vS) * step(vS, uSecR.z), dn = step(uSecR.z, vS) * step(vS, uSecR.w);
+  col += (g * up * uSecA.x + vec3(1.0, .82, .42) * sv * uSecA.y + g * dn * uSecA.z) * (.3 + .9 * core);
+  // bar mode: colour by budget stage, thin gaps at the stage boundaries
+  vec3 sc = uC[0]; int si = 0;
+  for (int k = 0; k < 7; k++) if (vH >= uB[k]) { sc = uC[k + 1]; si = k + 1; }
+  float gap = 1.0; for (int k = 0; k < 7; k++) gap = min(gap, smoothstep(.35, 1.1, abs(vH - uB[k])));
+  float edge = smoothstep(.72, .98, abs(vSide));
+  float hi = (uHi < -.5 || float(si) == uHi) ? 1.0 : .28;
+  vec3 bar = sc * (.34 + .5 * edge + .12 * core) * gap * hi;
+  col = mix(col, bar, uM);
+  gl_FragColor = vec4(col * uGain, 1.0);
+}` });
+  const o = new THREE.Mesh(g, mat); o.frustumCulled = false; o.renderOrder = 2; scene.add(o); return o;
+})();
+
+// ── the time wall: a curtain above the path, height = cumulative ms when the packet passed there ──
+const WU = { uHead: { value: 0 }, uGain: { value: 0 }, uTime: U.uTime };
+const WALL = (() => {
+  const g = new THREE.BufferGeometry(), n = NSMP * 2;
+  const aS = new Float32Array(n), aH = new Float32Array(n), aV = new Float32Array(n), idx = [];
+  for (let k = 0; k < NSMP; k++) { aS[k * 2] = aS[k * 2 + 1] = SL[k]; aH[k * 2] = aH[k * 2 + 1] = HS[k]; aV[k * 2] = 0; aV[k * 2 + 1] = 1; if (k) idx.push(k * 2 - 2, k * 2 - 1, k * 2, k * 2 - 1, k * 2 + 1, k * 2); }
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  g.setAttribute('aS', new THREE.BufferAttribute(aS, 1)); g.setAttribute('aH', new THREE.BufferAttribute(aH, 1)); g.setAttribute('aV', new THREE.BufferAttribute(aV, 1));
+  g.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({ uniforms: WU, ...blendAdd, side: THREE.DoubleSide,
+    vertexShader: `attribute float aS, aH, aV; varying float vS, vMs, vV, vTop; void main() { vS = aS; vMs = aH * aV; vV = aV; vTop = aH; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+uniform float uHead, uGain, uTime; varying float vS, vMs, vV, vTop;
+${HEAT}
+void main() {
+  if (vS > uHead || vTop < .05) discard;
+  vec3 c = heat(vMs);
+  float fw = fwidth(vMs);
+  float grid = (1.0 - smoothstep(fw * .6, fw * 1.8, abs(fract(vMs / 25.0 + .5) - .5) * 25.0)) * step(2.0, vMs);
+  float a = .035 + .2 * pow(vV, 3.0) + .3 * grid;
+  float lead = exp(-(uHead - vS) * 2.5) * .5 * vV;
+  gl_FragColor = vec4(c * (a + lead) * uGain, 1.0);
+}` });
+  const o = new THREE.Mesh(g, mat); o.frustumCulled = false; o.renderOrder = 3; scene.add(o); return o;
+})();
+// the wall's top edge (bright) and a vertical post at every station that has been passed
+const TOP = (() => {
+  const g = new THREE.BufferGeometry(), n = (NSMP - 1) * 2;
+  const aS = new Float32Array(n), aH = new Float32Array(n);
+  for (let k = 0; k < NSMP - 1; k++) { aS[k * 2] = SL[k]; aS[k * 2 + 1] = SL[k + 1]; aH[k * 2] = HS[k]; aH[k * 2 + 1] = HS[k + 1]; }
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  g.setAttribute('aS', new THREE.BufferAttribute(aS, 1)); g.setAttribute('aH', new THREE.BufferAttribute(aH, 1));
+  const mat = new THREE.ShaderMaterial({ uniforms: WU, ...blendAdd,
+    vertexShader: `attribute float aS, aH; varying float vS, vH; void main() { vS = aS; vH = aH; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uHead, uGain; varying float vS, vH; ${HEAT} void main() { if (vS > uHead || vH < .05) discard; gl_FragColor = vec4(heat(vH) * 1.25 * uGain, 1.0); }` });
+  const o = new THREE.LineSegments(g, mat); o.frustumCulled = false; o.renderOrder = 4; scene.add(o); return o;
+})();
+const POSTS = (() => { const lb = new LB(); for (let i = 0; i < NS; i++) lb.add(V(0, 0, 0), V(0, 1, 0), 0, new THREE.Color(KIND[STN[i][3]]), 0); return lb.build(1, 4); })();
+
+// station beacons, the packet, ambient traffic, queue pellets, bursts
+const BEAC = (() => { const pb = new PB(); for (let i = 0; i < NS; i++) pb.add(V(0, 0, 0), .62, 0, new THREE.Color(KIND[STN[i][3]])); return pb.build(1, 6, RFS); })();
+const NTR = 12;
+const PKT = (() => { const pb = new PB(); pb.add(V(0, 0, 0), 2.4, 0, new THREE.Color('#9effcf')); pb.add(V(0, 0, 0), .5, 0, new THREE.Color('#ffffff')); for (let k = 0; k < NTR; k++) pb.add(V(0, 0, 0), .32 * (1 - k / NTR) + .06, 0, new THREE.Color('#bfffe0')); return pb.build(1, 9); })();
+const NAMB = 150;
+const AMBD = (() => { const R = rng(31); return Array.from({ length: NAMB }, (_, k) => { const arm = k % 3; return { arm, rev: R() < .45, sp: .05 + R() * .07, ph: R(), off: (R() - .5) * .34, sz: .1 + R() * .08 }; }); })();
+const AMB_R = [[SS[6] + .3, SS[12]], [SS[20], SS[24]], [SS[12], SS[20]]];   // uplink arm, downlink arm, inside the server
+const AMBP = (() => { const pb = new PB(); AMBD.forEach(d => pb.add(V(0, 0, 0), d.sz, 0, d.arm === 2 ? COL.gold : new THREE.Color('#7dffc0'))); return pb.build(1, 5); })();
+const NQ = 7;
+const QP = (() => { const pb = new PB(); for (let k = 0; k < NQ; k++) pb.add(V(0, 0, 0), .2, 0, COL.amber); return pb.build(1, 7); })();
+const NB = 56;
+const BURST = (() => { const R = rng(55), pb = new PB(), d = []; for (let k = 0; k < NB * 2; k++) { const side = k < NB ? 0 : 1; d.push({ side, a: R() * Math.PI * 2, r: .15 + R() * .9, v: .8 + R() * 1.6, ph: R() * .5 }); pb.add(V(0, 0, 0), .07 + R() * .08, 0, side ? COL.them : COL.me); } const o = pb.build(1, 8); o.userData.d = d; return o; })();
+// 05: snapshots waiting in the interpolation buffer
+const NSN = 5;
+const SNAP = (() => { const pb = new PB(); for (let k = 0; k < NSN; k++) pb.add(V(0, 0, 0), .26, 0, COL.red); return pb.build(1, 7); })();
+
+// ── 04: the broadcast — 32 arcs fanning out of the server to the players in view ──
+const NAOI = 32, ASEG = 10;
+const AOI_C = V(-6 + 7 * 1.5, 0, -12);
+const AOI_PTS = Array.from({ length: NAOI }, (_, k) => { const an = (k / NAOI) * Math.PI * 2 + .1; const r = 2.5 + .35 * Math.sin(k * 2.3); return V(AOI_C.x + Math.cos(an) * r, 2.4 + .45 * Math.sin(k * 1.7), AOI_C.z + Math.sin(an) * r * .8); });
+const AU = { uWave: { value: -1 }, uGain: { value: 0 } };
+const AOIL = (() => {
+  const pos = [], au = [];
+  AOI_PTS.forEach(P => { for (let s = 0; s < ASEG; s++) for (const e of [s, s + 1]) { const u = e / ASEG; pos.push(lerp(AOI_C.x, P.x, u), .15 + (P.y - .15) * Math.sin(u * Math.PI / 2), lerp(AOI_C.z, P.z, u)); au.push(u); } });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aU', new THREE.Float32BufferAttribute(au, 1));
+  const mat = new THREE.ShaderMaterial({ uniforms: AU, ...blendAdd,
+    vertexShader: `attribute float aU; varying float vU; void main() { vU = aU; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uWave, uGain; varying float vU; void main() { float w = exp(-pow((vU - uWave) * 7.0, 2.0)); float done = step(vU, uWave); gl_FragColor = vec4(vec3(1.0, .85, .45) * (.06 + .3 * done + 1.6 * w) * uGain, 1.0); }` });
+  const o = new THREE.LineSegments(g, mat); o.frustumCulled = false; o.renderOrder = 5; scene.add(o); return o;
+})();
+const AOIR = (() => { const pb = new PB(); AOI_PTS.forEach(P => pb.add(P, .3, 1, COL.them)); return pb.build(0, 6, RFS); })();
+
+// ── devices along the route (wireframes): PCs, routers, ISP buildings, backbone rings, firewall, LB, racks, DB ──
+const DB_C = V(1.5, 0, -15.6);
+const DEV = (() => {
+  const lb = new LB(), dc = COL.dev, A = .5;
+  const rotY = (v, a) => V(v.x * Math.cos(a) + v.z * Math.sin(a), v.y, -v.x * Math.sin(a) + v.z * Math.cos(a));
+  const box = (c, w, h, d, a = 0, col = dc, al = A) => {
+    const P = [[-1, 0, -1], [1, 0, -1], [1, 0, 1], [-1, 0, 1], [-1, 1, -1], [1, 1, -1], [1, 1, 1], [-1, 1, 1]].map(([x, y, z]) => rotY(V(x * w / 2, y * h, z * d / 2), a).add(c));
+    [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([i, j]) => lb.add(P[i], P[j], al, col));
+    return P;
+  };
+  const circle = (c, r, n, axis, a = 0, col = dc, al = A) => { const pts = []; for (let k = 0; k < n; k++) { const an = k / n * Math.PI * 2; let v = axis === 'y' ? V(Math.cos(an) * r, 0, Math.sin(an) * r) : V(0, Math.sin(an) * r, Math.cos(an) * r); if (axis !== 'y') v = rotY(v, a); pts.push(v.add(c)); } lb.poly(pts, al, col, true); };
+  const dirAt = i => { const a = posAtRaw(SS[i] - .3), b = posAtRaw(SS[i] + .3); return Math.atan2(b.x - a.x, b.z - a.z); };
+  // monitors: my PC behind the client stations, the other player's PC behind theirs
+  const monitor = (cx, cz, col) => {
+    box(V(cx, .7, cz), 4.2, 2.3, .1, 0, col, .36);
+    box(V(cx, .82, cz + .02), 3.9, 2.05, .02, 0, col, .16);
+    lb.add(V(cx, 0, cz), V(cx, .7, cz), .36, col); lb.add(V(cx - .7, 0, cz), V(cx + .7, 0, cz), .36, col);
+  };
+  monitor(-27, 5.6, COL.me); monitor(27.8, 5.6, COL.them);
+  // routers (with antennas) and ISP buildings
+  for (const i of [7, 23]) { const c = posAtRaw(SS[i]), a = dirAt(i); box(c, 1.3, .32, .8, a + Math.PI / 2); for (const sx of [-.45, .45]) { const b = rotY(V(sx, .32, -.3), a + Math.PI / 2).add(c); lb.add(b, b.clone().add(V(0, .8, 0)), A, dc); } }
+  for (const i of [8, 22]) { const c = posAtRaw(SS[i]), a = dirAt(i); box(c, 1.9, 2.4, 1.6, a); for (let y = .5; y < 2.4; y += .45) { const q = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, z]) => rotY(V(x * .95, y, z * .8), a).add(c)); lb.poly(q, .22, dc, true); } }
+  // backbone: three rings the fiber runs through
+  for (const i of [9, 21]) { const a = dirAt(i); for (const o of [-.9, 0, .9]) { const c = posAtRaw(SS[i] + o); circle(c.add(V(0, 1.1, 0)), 1.1, 28, 'x', a, COL.sig, .32); } }
+  // IDC firewall: a brick wall across the path with an opening
+  { const i = 10, c = posAtRaw(SS[i]), a = dirAt(i) + Math.PI / 2, wv = 3.2, hv = 1.5;
+    for (let y = 0; y <= hv + .01; y += .3) { const l = rotY(V(-wv / 2, y, 0), a).add(c), r = rotY(V(wv / 2, y, 0), a).add(c); lb.add(l, r, .38, COL.red); }
+    for (let row = 0; row < 5; row++) for (let x = -wv / 2 + (row % 2 ? .3 : 0); x <= wv / 2; x += .6) { const b0 = rotY(V(x, row * .3, 0), a).add(c), b1 = rotY(V(x, row * .3 + .3, 0), a).add(c); lb.add(b0, b1, .26, COL.red); } }
+  // load balancer
+  { const c = posAtRaw(SS[11]); box(c, .9, .5, .9, dirAt(11)); }
+  // racks along the back of the IDC, the DB in front of them
+  for (let k = 0; k < 7; k++) { const c = V(-6 + k * 2, 0, -17.4); box(c, 1.4, 3.0, .9, 0, dc, .4); for (let y = .35; y < 3; y += .33) lb.add(V(c.x - .62, y, c.z + .45), V(c.x + .62, y, c.z + .45), .2, dc); }
+  circle(DB_C.clone(), .75, 28, 'y', 0, COL.them, .45); circle(DB_C.clone().add(V(0, 1.0, 0)), .75, 28, 'y', 0, COL.them, .45); circle(DB_C.clone().add(V(0, .5, 0)), .75, 28, 'y', 0, COL.them, .2);
+  for (let k = 0; k < 6; k++) { const an = k / 6 * Math.PI * 2; lb.add(DB_C.clone().add(V(Math.cos(an) * .75, 0, Math.sin(an) * .75)), DB_C.clone().add(V(Math.cos(an) * .75, 1, Math.sin(an) * .75)), .35, COL.them); }
+  return lb.build(1, 1);
+})();
+function posAtRaw(s) { const [a, b, f] = idxAt(s); return V(lerp(PA[a * 3], PA[b * 3], f), 0, lerp(PA[a * 3 + 2], PA[b * 3 + 2], f)); }
+// 04: dashed link from 판정 to the DB (async write) and its slow pellet
+const DBL = (() => { const lb = new LB(), a = posAtRaw(SS[17]); for (let k = 0; k < 12; k += 2) lb.add(V(lerp(a.x, DB_C.x, k / 12), .05, lerp(a.z, DB_C.z, k / 12)), V(lerp(a.x, DB_C.x, (k + 1) / 12), .05, lerp(a.z, DB_C.z, (k + 1) / 12)), .9, COL.them); return lb.build(0, 4); })();
+const DBP = (() => new PB().add(V(0, 0, 0), .35, 0, COL.them).build(1, 7))();
+// 05: "when does it show" — level lines across the other player's wall at 25 / 120 / 221 ms
+const LEVELS = [[25, '내 화면 · 시전 시작 (예측)', HEX.me], [120, '내 화면 · 데미지 확정', HEX.sig], [221, '상대 화면 · 내 스킬이 보임', HEX.them]];
+const LEVX = [18.6, 34.6], LEVZ = 9;
+const LEVL = (() => { const lb = new LB(); LEVELS.forEach(([ms, , c]) => { for (let x = LEVX[0]; x < LEVX[1] - .01; x += .5) lb.add(V(x, ms * KH, LEVZ), V(Math.min(x + .3, LEVX[1]), ms * KH, LEVZ), .9, new THREE.Color(c)); });
+  for (let ms = 0; ms <= 225; ms += 25) lb.add(V(LEVX[1], ms * KH, LEVZ), V(LEVX[1] + (ms % 50 ? .2 : .45), ms * KH, LEVZ), .7, new THREE.Color('#9fb8b0'));
+  lb.add(V(LEVX[1], 0, LEVZ), V(LEVX[1], 225 * KH, LEVZ), .6, new THREE.Color('#9fb8b0'));
+  const o = lb.build(0, 4); return o; })();
+
+
+// ── camera (pure function of t): keyframes [t, target, yaw°, pitch°, distance, screen offset x, y] ──
+const CK = [
+  [0, V(-4, 0, -2), -28, 50, 92, 0, -260],
+  [2.3, V(-4, 0, -2), -26, 48, 88, 0, -260],
+  [3.3, V(-24.5, .3, 7.4), -14, 36, 24, 0, 40],
+  [4.2, V(-20, .3, 5), -12, 36, 27, 0, 40],
+  [6.6, V(-9.5, .6, -8), -4, 34, 27, 0, 40],
+  [7.4, V(-.5, .8, -12.3), 0, 30, 25, 0, 40],
+  [10.3, V(1.5, .8, -12.3), 0, 30, 25, 0, 40],
+  [11.3, V(18, 1.2, 2.2), -14, 30, 30, 0, 40],
+  [12.3, V(27.6, 2.4, 8.4), -4, 16, 25, 0, 0],
+  [14.8, V(27.6, 2.4, 8.4), -6, 16, 24.5, 0, 0],
+  [16.0, V(0, BY0 + BHT / 2, BZ), 0, 4, 27, 0, -110],
+  [DURATION, V(0, BY0 + BHT / 2, BZ), 0, 4, 27, 0, -110],
+];
+function cameraAt(t) {
+  let i = 0; while (i < CK.length - 2 && t > CK[i + 1][0]) i++;
+  const A = CK[i], B = CK[i + 1], k = eio(p(t, A[0], B[0] - A[0]));
+  const tgt = A[1].clone().lerp(B[1], k), yaw = THREE.MathUtils.degToRad(lerp(A[2], B[2], k)), pit = THREE.MathUtils.degToRad(lerp(A[3], B[3], k)), r = lerp(A[4], B[4], k);
+  camera.position.set(tgt.x + Math.sin(yaw) * Math.cos(pit) * r, tgt.y + Math.sin(pit) * r, tgt.z + Math.cos(yaw) * Math.cos(pit) * r);
+  camera.lookAt(tgt);
+  camera.setViewOffset(W, H, lerp(A[5], B[5], k), lerp(A[6], B[6], k), W, H);
+  camera.updateMatrixWorld();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE UPDATE
+// ═════════════════════════════════════════════════════════════
+const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+let HEADS = 0;
+function update3D(t) {
+  U.uTime.value = t;
+  // morph: the map layout → a vertical tower of time (y proportional to cumulative ms)
+  MORPH = eio(p(t, T_MORPH, 1.4));
+  const m = MORPH;
+  for (let k = 0; k < NSMP; k++) {
+    CUR[k * 3] = lerp(PA[k * 3], 0, m);
+    CUR[k * 3 + 1] = lerp(0, BY0 + BHT * HS[k] / TOTAL, m);
+    CUR[k * 3 + 2] = lerp(PA[k * 3 + 2], BZ, m);
+  }
+  cameraAt(t);
+  const hd = headAt(t); HEADS = hd.s;
+
+  // fiber ribbon: flat on the ground on the map; a 1.6-unit wide band facing the camera in the tower
+  {
+    const P = RIB.geometry.attributes.position, wid = lerp(.17, 1.6, m);
+    for (let k = 0; k < NSMP; k++) {
+      const a = Math.max(0, k - 1), b = Math.min(NSMP - 1, k + 1);
+      let tx = PA[b * 3] - PA[a * 3], tz = PA[b * 3 + 2] - PA[a * 3 + 2]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+      let sx = lerp(-tz, 1, m), sz = lerp(tx, 0, m); const sl = Math.hypot(sx, sz) || 1; sx /= sl; sz /= sl;
+      const cx = CUR[k * 3], cy = CUR[k * 3 + 1] + .02, cz = CUR[k * 3 + 2], h = wid / 2;
+      P.setXYZ(k * 2, cx - sx * h, cy, cz - sz * h);
+      P.setXYZ(k * 2 + 1, cx + sx * h, cy, cz + sz * h);
+    }
+    P.needsUpdate = true;
+    RU.uReveal.value = LEN * eio(p(t, .2, 1.8)) + (t > 2.2 ? 1 : 0);
+    RU.uHead.value = hd.vis > .01 ? hd.s : LEN;
+    RU.uM.value = m; RU.uFlow.value = 1 - m;
+    RU.uSecA.value.set(0, 0, 0);
+    RU.uGain.value = 1 - .45 * p(t, END_AT, .8);
+    RU.uHi.value = -1;
+  }
+  // time wall
+  {
+    const g = hd.wall * (1 - m);
+    WU.uGain.value = g; WALL.visible = TOP.visible = g > .002;
+    WU.uHead.value = hd.s + .001;
+    if (WALL.visible) {
+      const P = WALL.geometry.attributes.position, T = TOP.geometry.attributes.position, sc = KH * (1 - m);
+      for (let k = 0; k < NSMP; k++) { const x = CUR[k * 3], z = CUR[k * 3 + 2], y = HS[k] * sc; P.setXYZ(k * 2, x, .03, z); P.setXYZ(k * 2 + 1, x, y + .03, z); }
+      for (let k = 0; k < NSMP - 1; k++) { T.setXYZ(k * 2, CUR[k * 3], HS[k] * sc + .03, CUR[k * 3 + 2]); T.setXYZ(k * 2 + 1, CUR[k * 3 + 3], HS[k + 1] * sc + .03, CUR[k * 3 + 5]); }
+      P.needsUpdate = T.needsUpdate = true;
+    }
+    const Pp = POSTS.geometry.attributes;
+    for (let i = 0; i < NS; i++) {
+      const sx = SS[i] + (DW[i] ? DW[i][1] : 0), c = posAt(sx, _v), h = msAt(sx) * KH * (1 - m);
+      Pp.position.setXYZ(i * 2, c.x, .03, c.z); Pp.position.setXYZ(i * 2 + 1, c.x, h + .03, c.z);
+      const on = WU.uHead.value >= sx - .01 && h > .05 ? 1 : 0;
+      Pp.alpha.setX(i * 2, on * .25); Pp.alpha.setX(i * 2 + 1, on * .9);
+    }
+    Pp.position.needsUpdate = Pp.alpha.needsUpdate = true;
+    setGain(POSTS, g);
+  }
+  // station beacons
+  {
+    const A = BEAC.geometry.attributes, head = RU.uHead.value, live = hd.vis;
+    for (let i = 0; i < NS; i++) {
+      const c = stPos(i, .04);
+      A.position.setXYZ(i, c.x, c.y, c.z);
+      const near = Math.exp(-Math.pow((head - SS[i]) / .7, 2)) * live, passed = head >= SS[i] - .01 ? 1 : 0;
+      let al = (.45 + .4 * passed + 1.6 * near) * eo(p(t, .3 + SS[i] / LEN * 1.6, .4));
+      if (i >= 21 && i <= 23) al *= .8;
+      A.alpha.setX(i, al * (1 - m));
+      A.size.setX(i, (i >= 21 && i <= 23 ? .5 : .62) * (1 + .5 * near));
+    }
+    A.position.needsUpdate = A.alpha.needsUpdate = A.size.needsUpdate = true;
+  }
+  // the packet + its comet trail
+  {
+    const A = PKT.geometry.attributes, vis = hd.vis * (1 - m);
+    const c = posAt(hd.s, _v); const y = .35;
+    A.position.setXYZ(0, c.x, y, c.z); A.alpha.setX(0, vis * .5);
+    A.position.setXYZ(1, c.x, y, c.z); A.alpha.setX(1, vis * 1.6);
+    for (let k = 0; k < NTR; k++) { const q = posAt(hd.s - (k + 1) * .16, _w); A.position.setXYZ(2 + k, q.x, y, q.z); A.alpha.setX(2 + k, vis * (hd.s - (k + 1) * .16 > 0 ? .9 * (1 - k / NTR) : 0)); }
+    A.position.needsUpdate = A.alpha.needsUpdate = true;
+  }
+  // ambient traffic
+  {
+    const A = AMBP.geometry.attributes, g = (1 - m) * eo(p(t, .8, 1));
+    AMBD.forEach((d, k) => {
+      const [s0, s1] = AMB_R[d.arm], f = fract(t * d.sp * (d.arm === 2 ? .7 : 1) + d.ph), s = d.rev ? lerp(s1, s0, f) : lerp(s0, s1, f);
+      const c = posAt(s, _v);
+      A.position.setXYZ(k, c.x + d.off, .22, c.z + d.off * .6);
+      A.alpha.setX(k, g * Math.sin(f * Math.PI) * (d.arm === 2 ? .35 : .55));
+    });
+    A.position.needsUpdate = A.alpha.needsUpdate = true;
+  }
+  // server tick: pulse ring, frame flash, the queue fills between ticks
+  {
+    const on = win(t, 6.3, 10.9, .4) * (1 - m);
+    let last = -99; for (const tt of T_TICK) if (t >= tt) last = tt;
+    const since = t - last;
+    GU.uTickA.value = on;
+    GU.uTickP.value = since < 2 ? Math.exp(-since * 4) : 0;
+    GU.uPulse.value.z = since < 2 ? .4 + since * 11 : 0; GU.uPulse.value.w = since < 2 ? on * Math.max(0, 1 - since / 1.0) : 0;
+    const A = QP.geometry.attributes, q = posAtRaw(SS[15]);
+    for (let k = 0; k < NQ; k++) {
+      const born = last + .25 + k * .26, al = on * (t > born && since < 2 ? eo(p(t, born, .25)) : 0) * (since > 1.98 ? 0 : 1);
+      A.position.setXYZ(k, q.x - .2 - (k % 4) * .28, .2, q.z + .55 + Math.floor(k / 4) * .3);
+      A.alpha.setX(k, al * .9);
+    }
+    A.position.needsUpdate = A.alpha.needsUpdate = true;
+    setGain(QP, 1);
+  }
+  // broadcast fan + the DB branch
+  {
+    const tb = ARRIVE[19] ?? 9.95, fan = win(t, tb - .2, 11.0, .3) * (1 - m);
+    AU.uWave.value = (t - tb) / .7; AU.uGain.value = fan;
+    AOIL.visible = fan > .002; setGain(AOIR, fan * eo(p(t, tb + .3, .4)) * .9);
+    const db = win(t, 9.3, 10.9, .3) * (1 - m); setGain(DBL, db * .8);
+    const A = DBP.geometry.attributes, a = posAtRaw(SS[17]), f = fract((t - 9.3) / 1.6);
+    A.position.setXYZ(0, lerp(a.x, DB_C.x, f), .25, lerp(a.z, DB_C.z, f)); A.alpha.setX(0, db * Math.sin(f * Math.PI)); A.position.needsUpdate = A.alpha.needsUpdate = true;
+  }
+  // bursts: 예측 실행 (my screen plays it first) and 화면 출력 (it finally shows on theirs)
+  {
+    const A = BURST.geometry.attributes, D = BURST.userData.d;
+    const t0s = [ARRIVE[2] ?? 3.15, ARRIVE[28] ?? 14.5], ok = [t > 2.6 && t < 7, t > 13.5 && t < 15.6];
+    const c0 = [posAtRaw(SS[2]), posAtRaw(SS[28])];
+    D.forEach((d, k) => {
+      const u = t - t0s[d.side] - d.ph, life = 1.6;
+      if (!ok[d.side] || u < 0 || m > .01) { A.alpha.setX(k, 0); return; }
+      const f = fract(u / life), rep = Math.floor(u / life);
+      const c = c0[d.side];
+      A.position.setXYZ(k, c.x + Math.cos(d.a) * d.r * f * 1.2, .2 + f * d.v * 1.4, c.z + Math.sin(d.a) * d.r * f * .8);
+      A.alpha.setX(k, (1 - f) * (rep < 2 ? 1 : .35) * 1.1);
+    });
+    A.position.needsUpdate = A.alpha.needsUpdate = true;
+  }
+  // interpolation buffer snapshots
+  {
+    const A = SNAP.geometry.attributes, on = win(t, 11.8, 14.9, .4) * (1 - m), c = posAtRaw(SS[26]), q = posAtRaw(SS[25]);
+    for (let k = 0; k < NSN; k++) {
+      const f = fract((t - 11.8) / 1.0 + k / NSN), x = lerp(q.x + .5, c.x + .9, f);
+      A.position.setXYZ(k, x, .3 + .6 * f, c.z + .5);
+      A.alpha.setX(k, on * Math.sin(f * Math.PI) * .9);
+    }
+    A.position.needsUpdate = A.alpha.needsUpdate = true;
+  }
+  setGain(LEVL, 0);
+  GU.uBoxA.value = BOXES.map((b, i) => eo(p(t, .2 + i * .2, .8)) * (1 - m));
+  GU.uGrid.value = 1 - .55 * m; GU.uDim.value = 1 - .3 * p(t, END_AT, 1);
+  setGain(DEV, eo(p(t, .2, 1.0)) * (1 - m));
+  bloom.strength = .5 + .25 * GU.uTickP.value;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  2D OVERLAY
+// ═════════════════════════════════════════════════════════════
+const X0 = 60, X1 = 1020, CX = 540;
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#fff', align = 'left', alpha = 1, mono = false, ls = 0, blur = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (blur > .3) ctx.filter = `blur(${blur.toFixed(1)}px)`;
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false, ls = 0) { ctx.save(); ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; if (ls) ctx.letterSpacing = ls + 'px'; const w = ctx.measureText(s).width; ctx.restore(); return w; }
+function fit(s, maxW, size, weight = 800, mono = false, min = 34) { let z = size; while (z > min && tw(s, z, weight, mono) > maxW) z -= 1; return z; }
+function proj(v) { const q = v.clone().project(camera); return { x: (q.x + 1) / 2 * W, y: (1 - q.y) / 2 * H, behind: q.z > 1 }; }
+const shadow = (b = 18) => { ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = b; };
+function hopMark(x, y, r, col, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r * .38, 0, 7); ctx.fill(); ctx.restore();
+}
+// in-scene tag: name (+ ms) with a short leader up from the station
+function tag(i, a, o = {}) {
+  if (a <= 0) return;
+  const { name = STN[i][0], ms = '', col = KIND[STN[i][3]], up = 70, align = 'center', dx = 0, size = 38 } = o;
+  const P = proj(stPos(i)); if (P.behind) return;
+  const x = P.x + dx, y = P.y - up;
+  ctx.save(); ctx.globalAlpha *= a * .6; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P.x, P.y - 16); ctx.lineTo(P.x, y + 10); if (dx) ctx.lineTo(x, y + 10); ctx.stroke(); ctx.restore();
+  ctx.save(); shadow(14);
+  txt(name, x, y - (ms ? 44 : 0), { size, weight: 800, color: INK, align, alpha: a });
+  if (ms) txt(ms, x, y, { size: 36, weight: 700, mono: true, color: col, align, alpha: a });
+  ctx.restore();
+}
+// caption: lines fade + un-blur, on a dark strip
+function caption(lines, t, t0, t1, o = {}) {
+  const { size = 62, y = 1640, col2 = DIM } = o;
+  const out = 1 - eio(p(t, t1 - .35, .35)); if (out <= 0 || t < t0) return;
+  const kb = eo(p(t, t0, .35)) * out;
+  ctx.save(); ctx.globalAlpha = kb; const bh = lines.length * size * 1.3 + 90;
+  const g = ctx.createLinearGradient(0, y - size - 50, 0, y - size - 50 + bh); g.addColorStop(0, 'rgba(2,4,6,0)'); g.addColorStop(.25, 'rgba(2,4,6,.8)'); g.addColorStop(.8, 'rgba(2,4,6,.8)'); g.addColorStop(1, 'rgba(2,4,6,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, y - size - 50, W, bh); ctx.restore();
+  lines.forEach((l, i) => {
+    const k = eo(p(t, t0 + i * .2, .45)), sz = i ? fit(l, X1 - X0, size * .72, 700, false, 38) : fit(l, X1 - X0, size, 800, false, 46);
+    txt(l, CX, y + i * size * 1.3 + (1 - k) * 12, { size: sz, weight: i ? 700 : 800, color: i ? col2 : INK, align: 'center', alpha: k * out, blur: (1 - k) * 10 });
+  });
+}
+// HUD: topic + chapter on top, the route-progress line under them
+function header(t) {
+  const a = eo(p(t, .1, .6));
+  ctx.save(); ctx.globalAlpha = a; shadow(10);
+  ctx.strokeStyle = SIG; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(X0 + 4, 104); ctx.lineTo(X0 + 22, 90); ctx.lineTo(X0 + 40, 104); ctx.stroke();
+  [[X0 + 4, 104], [X0 + 22, 90], [X0 + 40, 104]].forEach(([x, y], i) => { ctx.fillStyle = i === 1 ? GOLD : SIG; ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fill(); });
+  txt('내 스킬 하나가 상대 화면에', X0 + 60, 110, { size: 32, weight: 700, color: 'rgba(233,241,238,.92)' });
+  let cur = HEAD[0]; for (const h of HEAD) if (t >= h[0]) cur = h;
+  txt(t >= END_AT ? '정리' : `${cur[2]}  ${cur[3]}`, X1, 110, { size: 32, weight: 700, color: 'rgba(233,241,238,.92)', align: 'right' });
+  ctx.shadowBlur = 0;
+  const segs = HEAD.map(h => [h[0], Math.min(h[1], END_AT)]).concat([[END_AT, DURATION]]), n = segs.length, y = 146;
+  const xs = segs.map((_, i) => lerp(X0 + 6, X1 - 6, i / (n - 1)));
+  ctx.strokeStyle = 'rgba(160,220,200,.25)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[n - 1], y); ctx.stroke();
+  let fx = xs[0]; segs.forEach(([s, e], i) => { if (t >= s) fx = i < n - 1 ? lerp(xs[i], xs[i + 1], clamp((t - s) / (e - s))) : xs[i]; });
+  ctx.strokeStyle = SIG; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(fx, y); ctx.stroke();
+  segs.forEach(([s], i) => { const on = t >= s; ctx.fillStyle = on ? (i === n - 1 ? GOLD : SIG) : '#0a1213'; ctx.strokeStyle = on ? (i === n - 1 ? GOLD : SIG) : 'rgba(160,220,200,.4)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(xs[i], y, 8, 0, 7); ctx.fill(); ctx.stroke(); });
+  ctx.shadowColor = SIG; ctx.shadowBlur = 16; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(fx, y, 5.5, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function vignette() {
+  const g = ctx.createRadialGradient(CX, H * .52, H * .25, CX, H * .52, H * .72);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.6)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const tp = ctx.createLinearGradient(0, 0, 0, 470); tp.addColorStop(0, 'rgba(2,4,6,.92)'); tp.addColorStop(.6, 'rgba(2,4,6,.6)'); tp.addColorStop(1, 'rgba(2,4,6,0)');
+  ctx.fillStyle = tp; ctx.fillRect(0, 0, W, 470);
+  const b = ctx.createLinearGradient(0, H * .78, 0, H); b.addColorStop(0, 'rgba(2,4,6,0)'); b.addColorStop(1, 'rgba(2,4,6,.75)');
+  ctx.fillStyle = b; ctx.fillRect(0, H * .78, W, H * .22);
+}
+// the running total under the HUD
+function counter(t) {
+  const a = win(t, 2.55, END_AT + .1, .4); if (a <= 0) return;
+  const ms = t < 15.2 ? msAt(HEADS) : TOTAL, hot = ms > 150 ? '#ff8a96' : ms > 55 ? GOLD : INK;
+  ctx.save(); ctx.globalAlpha = a; shadow(20);
+  txt(t > 15.2 ? '버튼부터 상대 화면까지' : '버튼부터 누적', X0, 236, { size: 40, weight: 700, color: LAB });
+  const num = (t > 15.2 ? '≈ ' : '') + Math.round(ms), nw = tw(num, 150, 700, true, -3);
+  txt(num, X0, 386, { size: 150, weight: 700, mono: true, color: hot, ls: -3 });
+  txt('ms', X0 + nw + 16, 386, { size: 54, weight: 700, color: SIG });
+  ctx.restore();
+  ctx.save(); shadow(10); txt('* 수치는 예시 · 20Hz · RTT 50ms', X1, 236, { size: 30, weight: 600, color: 'rgba(214,232,226,.62)', align: 'right', alpha: a }); ctx.restore();
+}
+
+// ── title (0 – 2.6) ──────────────────────────────────────────
+function sTitle(t) {
+  const a = 1 - eio(p(t, 2.3, .5)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt('UseSkillReq → SkillCastNoti', CX, 300, { size: 34, weight: 600, color: DIM, align: 'center', mono: true, ls: 2, alpha: eo(p(t, .1, .6)) });
+  shadow(24);
+  const L = [[[['내', ME], [' 스킬 하나가', INK]], 470, .3], [[['상대', THEM], [' 화면에', INK]], 610, .55], [[['뜨기까지', INK]], 750, .8]];
+  L.forEach(([line, y, t0]) => {
+    const k = eo(p(t, t0, .7)), tot = line.reduce((s, [w]) => s + tw(w, 124, 800, false, -2), 0); let x = CX - tot / 2;
+    line.forEach(([w, c]) => { txt(w, x, y + (1 - k) * 26, { size: 124, weight: 800, color: c, alpha: k, blur: (1 - k) * 12, ls: -2 }); x += tw(w, 124, 800, false, -2); });
+  });
+  ctx.restore();
+}
+
+// ── scene tags per beat ──────────────────────────────────────
+function sTags(t) {
+  // my PC
+  { const a = win(t, 2.7, 4.3, .3); tag(2, a, { name: '예측 실행 → 내 화면', col: ME, up: 120, size: 36 }); }
+  // the network hops
+  [[7, '공유기 · 와이파이', '2ms', 4.3], [9, '인터넷 백본', '16ms', 5.3], [10, 'IDC 방화벽', '23ms', 5.8]].forEach(([i, name, ms, t0]) => tag(i, win(t, t0, 7.0, .3), { name, ms, col: SIG, up: 66, size: 34 }));
+  // the server
+  tag(15, win(t, 7.4, 9.0, .3), { name: '존 메시지 큐', ms: '0~50ms', col: AMB, up: 110 });
+  tag(17, win(t, 8.9, 10.6, .3), { name: '틱 처리', ms: '~12ms', col: GOLD, up: 110 });
+  { const a = win(t, 7.0, 10.0, .3); if (a > 0) { const P = proj(V(TICKBOX[0], 0, TICKBOX[1] + 1.4)); ctx.save(); shadow(12); txt('틱 · 50ms마다', P.x, P.y + 60, { size: 34, weight: 800, color: GOLD, align: 'center', alpha: a }); ctx.restore(); } }
+  { const tb = ARRIVE[19] ?? 9.95, a = win(t, tb + .2, 10.9, .3); if (a > 0) { const P = proj(V(AOI_C.x, 3.2, AOI_C.z - 1.4)); ctx.save(); shadow(12); txt('주변 32명에게 전파', P.x, P.y - 20, { size: 34, weight: 800, color: '#ffb8ea', align: 'center', alpha: a }); ctx.restore(); } }
+  // the other player's PC
+  tag(24, win(t, 11.4, 12.6, .3), { name: '상대 PC 도착', ms: '', col: THEM, up: 80, size: 34, align: 'right', dx: -24 });
+  { const a = win(t, 12.4, 15.1, .3); if (a > 0) { const c = posAtRaw(SS[26]); c.y = 150 * KH; const P = proj(c); ctx.save(); shadow(14);
+    txt('보간 버퍼', P.x - 40, P.y - 40, { size: 40, weight: 800, color: '#ff9aa6', align: 'right', alpha: a });
+    txt('~100ms', P.x - 40, P.y + 12, { size: 44, weight: 800, mono: true, color: RED, align: 'right', alpha: a }); ctx.restore(); } }
+  tag(28, win(t, 14.4, 15.2, .25), { name: '상대 화면', ms: '221ms', col: THEM, up: 70, size: 34 });
+}
+
+// ── 05 · the tower of time ───────────────────────────────────
+const BUD_V = [['입력 · 처리', 10, HEX.me], ['업링크', 25, HEX.sig], ['틱 대기', 25, HEX.amber], ['틱 처리', 12, HEX.gold], ['다운링크', 25, HEX.sig], ['프레임', 8, '#c58cff'], ['보간 버퍼', 100, HEX.red], ['렌더', 16, HEX.them]];
+function sTower(t) {
+  const a = win(t, 15.9, END_AT + .2, .4); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  let acc = 0;
+  const yAt = ms => proj(V(.8, BY0 + BHT * ms / TOTAL, BZ));
+  BUD_V.forEach(([lab, ms, col], i) => {
+    const s0 = acc; acc += ms; const k = eo(p(t, 16.0 + i * .12, .4)); if (k <= 0) return;
+    const P0 = yAt(s0), P1 = yAt(acc), y = (P0.y + P1.y) / 2, x = P0.x + 40;
+    const big = i === 6;
+    // small stages sit close together: spread their labels
+    const ly = big ? y : [0, 0, 0, 0, 0, 0, 0, 0][i] + y;
+    ctx.save(); ctx.globalAlpha *= k * .6; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P0.x + 8, y); ctx.lineTo(x - 8, ly); ctx.stroke(); ctx.restore();
+    ctx.save(); shadow(12);
+    if (big) { txt(lab, x, ly - 14, { size: 46, weight: 800, color: '#ff9aa6', alpha: k }); txt('~100ms', x, ly + 44, { size: 52, weight: 800, mono: true, color: RED, alpha: k }); }
+    else { txt(lab, x, ly + 12, { size: 34, weight: 700, color: INK, alpha: k }); txt(ms + 'ms', x + tw(lab, 34, 700) + 16, ly + 12, { size: 34, weight: 700, mono: true, color: col, alpha: k }); }
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ── end card ─────────────────────────────────────────────────
+function endCard(t) {
+  const v = t - END_AT, a = eio(p(v, 0, .5));
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(2,4,6,.8)'; ctx.fillRect(0, 0, W, H);
+  const k1 = eo(p(v, .2, .6)), k2 = eo(p(v, .5, .6)), k3 = eo(p(v, 1.0, .6)), k4 = eo(p(v, 1.4, .6));
+  ctx.save(); shadow(24);
+  [[[['내 화면은', INK]], 640, k1], [[['~25ms,', ME]], 790, k1], [[['상대 화면은', INK]], 980, k2], [[['200ms+.', THEM]], 1130, k2]].forEach(([line, y, k]) => {
+    const [w, c] = line[0]; txt(w, CX, y + (1 - k) * 20, { size: 124, weight: 800, color: c, align: 'center', alpha: k, blur: (1 - k) * 10, ls: -2 });
+  });
+  ctx.restore();
+  txt('예시 20Hz · RTT 50ms · 이벤트도 보간 시점에 재생할 때', CX, 1260, { size: fit('예시 20Hz · RTT 50ms · 이벤트도 보간 시점에 재생할 때', 960, 34, 600), weight: 600, color: DIM, align: 'center', alpha: k3 });
+  const url = 'jungrok5.github.io/motion-graphics/skill-journey', uw = tw(url, 30, 600, true);
+  ctx.save(); ctx.globalAlpha *= k4; ctx.fillStyle = 'rgba(82,255,160,.55)'; ctx.fillRect(CX - uw / 2 - 70, 1440, 44, 2); ctx.fillRect(CX + uw / 2 + 26, 1440, 44, 2); ctx.restore();
+  txt('전체 영상 · 설명 · 용어집', CX, 1390, { size: 38, weight: 700, color: DIM, align: 'center', alpha: k4 });
+  txt(url, CX, 1450, { size: 30, weight: 600, mono: true, color: SIG, align: 'center', alpha: k4 });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.shadowBlur = 0;
+  update3D(t);
+  composer.render();
+  ctx.drawImage(gl.domElement, 0, 0, W, H);
+  vignette();
+  sTitle(t); sTags(t); sTower(t);
+  counter(t);
+  caption(['내 화면엔 ~25ms 만에 보인다', '예측 실행 · 서버 승인은 아직'], t, 2.75, 4.35, { col2: ME });
+  caption(['패킷은 집 → ISP → 백본 → IDC', '편도 25ms (RTT 50ms의 절반)'], t, 4.45, 7.0, { col2: SIG });
+  caption(['다음 틱까지 줄 서서 기다린다', '0~50ms, 평균 25ms (20Hz)'], t, 7.15, 8.95, { col2: AMB });
+  caption(['틱에서 판정 ~12ms,', '주변 32명에게 전파'], t, 9.05, 10.6, { col2: GOLD });
+  caption(['다운링크 ~25ms를 지나', '상대 PC 도착 · 버튼부터 97ms'], t, 10.7, 12.4, { col2: SIG });
+  caption(['상대 클라는 일부러', '~100ms 과거를 그린다 (보간 버퍼)'], t, 12.5, 15.0, { col2: '#ff9aa6' });
+  caption(['가장 큰 몫은 보간 버퍼 ~100ms'], t, 15.6, 16.9, { col2: '#ff9aa6' });
+  caption(['이벤트를 받자마자 재생하면', '이 100ms는 빠진다'], t, 17.0, END_AT + .1, { col2: '#ff9aa6' });
+  if (t > END_AT) endCard(t);
+  header(t);
+  const fo = p(t, DURATION - .5, .5); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = HEAD.map(h => [h[0], h[2], h[3]]);
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 13.4;   // the packet waiting in the other player's interpolation buffer, the red cliff rising
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
