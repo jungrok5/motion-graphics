@@ -1,0 +1,1341 @@
+<meta charset="utf-8">
+<title>Boss Lag Flow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Night zone-map look (game HUD / ops panel). */
+  :root {
+    --bg: #060c0d; --surface: #0e1819; --line: #1f3433; --fg: #e8f2f0; --dim: #8aa3a0;
+    --accent: #5fe3ff; --live: #d9fbff; --text2: #bfd2cf;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(10,20,22,.8); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(95,227,255,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(95,227,255,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="보스가 뜨면 왜 렉이 걸릴까 — 존 지도 위 갱신 흐름 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="83" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:22</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../boss-lag/article.html">설명</a><a href="../boss-lag/terms.html">용어집</a><a href="../boss-lag/">2D 원본</a><a href="../boss-lag-flow/">세로 요약</a></nav>
+</div>
+<!-- Source text: same notes as ../boss-lag/index.html (its article.html / terms.html are the 설명 · 용어집 for this page). Not shown on this page. -->
+<section class="notes" id="notes" hidden>
+<p class="lede">MMO에서 보스가 등장하면 왜 렉이 걸리는지 설명하는 영상이다. 한곳에 모인 인원이 N명이면 서버가 보내야 할 상태 갱신은 N × (N − 1)로 늘고, 시야 반경을 넓히면 보이는 인원이 반경의 제곱으로 늘어 부담이 더 커진다. 게임은 보내는 양을 줄이거나 한곳에 모이는 인원을 나누는 방식으로 대응한다.</p>
+
+<article data-ch="01">
+<p>화면의 점 200개가 플레이어다. 평소에는 맵 전체에 흩어져 있어서 서로 보이지 않고, 서버가 서로에게 전해 줄 것도 적다.</p>
+<p>보스가 등장하면 플레이어가 보스 주변 타원 안으로 모여든다. 왼쪽 아래의 보스 주변 인원 숫자가 이동에 따라 올라가 최대 200명에 이른다. 같은 존, 같은 시야 안에 수십에서 수백 명이 들어오는 상황이 이후 모든 문제의 출발점이다.</p>
+</article>
+
+<article data-ch="02">
+<p>한 명이 움직이면 서버는 그 변화를 그 사람을 보고 있는 나머지 N − 1명에게 각각 복제해서 보낸다. N명 모두 움직이면 한 틱에 보내야 할 갱신은 <code>N × (N − 1)</code>이다. 왼쪽 그림에서 연결선이 인원 증가에 따라 빠르게 빽빽해진다.</p>
+<p>오른쪽 표는 이동만 계산한 틱당 브로드캐스트 수다.</p>
+<ul>
+<li><code>N = 10</code>: 90</li>
+<li><code>N = 50</code>: 2,450</li>
+<li><code>N = 100</code>: 9,900</li>
+<li><code>N = 200</code>: 39,800</li>
+</ul>
+<p>200명이면 틱당 39,800 갱신이고, 20Hz로 곱하면 초당 796,000 갱신이다. 갱신당 50바이트로 잡으면 약 40MB/s, 약 320Mbps가 존 서버 하나에서 나간다. 갱신은 보통 클라이언트마다 틱당 패킷 하나로 묶어 보내므로 패킷 수는 N × 20 = 4,000개 수준이고, 인원의 제곱으로 느는 것은 바이트다.</p>
+<p>이동뿐 아니라 공격, 이펙트, 버프 등 상태 하나가 바뀔 때마다 보는 사람 수만큼 복제된다. 그래서 비용은 인원의 제곱으로 늘고, 200명은 20명보다 갱신이 10배가 아니라 약 100배 많다.</p>
+</article>
+
+<article data-ch="03">
+<p>왼쪽은 시야 반경 r, 오른쪽은 반경 2r이다. 같은 필드에서 원 안에 들어온 점의 수가 각 패널 오른쪽 위에 보이는 인원으로 표시된다.</p>
+<ul>
+<li>반경이 2배면 면적은 4배이고, 보이는 인원은 밀도가 고르면 약 4배가 된다. 브로드캐스트 양은 N × 보이는 인원이므로 이것도 약 4배가 된다.</li>
+<li>주변에 누가 있는지 찾는 AOI 검색 비용도 r²에 비례한다. 확인해야 할 그리드 칸이 4배로 늘어난다.</li>
+<li>클라이언트도 4배를 받고 4배를 그린다. 다운링크, CPU, GPU 부담이 모두 늘어 클라이언트 FPS가 떨어진다.</li>
+<li>모두가 한 시야 안에 몰리면 결국 N × (N − 1)이 된다. 보스 앞에서는 반경이 넓을수록 이 최악의 경우에 빨리 도달한다.</li>
+</ul>
+</article>
+
+<article data-ch="04">
+<p>보스 전투는 이동 외에도 인원과 함께 곱으로 커지는 일을 더 만든다.</p>
+<ul>
+<li>광역기 판정: 한 번의 공격에 N명의 히트 체크와 데미지 계산을 하고, 그 결과를 다시 보는 사람들에게 알린다. 카드 예시에서는 16명 피격 × 보는 사람 200명으로 <code>DamageNoti</code> 3,200개가 생긴다.</li>
+<li>이펙트, 버프, 투사체: 버프의 시작, 종료, 중첩과 투사체의 생성, 이동, 소멸이 하나하나 브로드캐스트 대상이다.</li>
+<li>어그로와 AI 계산: 보스는 N명의 위협 목록을 다시 계산하고 타깃을 고르고 경로를 탐색한다.</li>
+<li>보스 HP와 페이즈 갱신: HP가 바뀔 때마다 참가자 200명 모두에게 갱신을 보내고, 페이즈 전환은 대량 이벤트를 한꺼번에 만든다.</li>
+</ul>
+</article>
+
+<article data-ch="05">
+<p>보스 주변 인원이 20명에서 200명으로 늘어나는 동안 다섯 개 지표가 함께 움직인다. 다섯 가지는 모두 인원 N에서 각각 나오는 결과다.</p>
+<ul>
+<li>존 로직 스레드 CPU: 틱이 50ms 예산을 넘는 순간 100%에 닿는다. 존 로직이 한 스레드에서 돌기 때문에 한 코어만 100%가 되고, 코어를 늘려도 해결되지 않는다.</li>
+<li>틱 처리시간: 200명에서 약 113ms로 예산 50ms를 넘는다. 존 전체가 서버렉에 걸린다.</li>
+<li>아웃바운드: 20Hz를 유지한다고 하면 약 318Mbps까지 오른다. 실제로는 틱이 113ms면 약 9Hz로 떨어진다. pps와 대역폭이 급등하고 송신 큐가 쌓인다.</li>
+<li>클라이언트 다운링크: 아웃바운드와 같은 기준(이동만, 20Hz)으로 약 200KB/s까지 오른다. 느린 회선부터 밀리고 끊긴다.</li>
+<li>클라이언트 FPS: 60에서 16까지 떨어진다. 수백 캐릭터와 이펙트를 그리느라 클라렉이 생긴다.</li>
+</ul>
+<p>인프라 쪽에서는 보스 시간대에 특정 존 서버만 아웃바운드 pps와 대역폭이 급등하고, 한 코어가 100%가 되고, 연결 끊김이 늘어나는 형태로 보인다. 위 수치는 인원에 따라 늘어나는 모양을 보여주기 위한 계산값이다.</p>
+</article>
+
+<article data-ch="06">
+<p>왼쪽 그림은 거리별 갱신 빈도다. 가까운 대상은 자주, 먼 대상은 드물게 갱신한다. 오른쪽에 게임이 쓰는 대응 방법 여섯 가지가 나온다.</p>
+<ul>
+<li>거리별 갱신 빈도(LOD): 가까우면 20Hz, 멀면 2~5Hz로 보낸다.</li>
+<li>시야 인원 상한: 가까운 K명만 상세하게 동기화하고 나머지는 요약 정보만 보낸다.</li>
+<li>혼잡 시 시야 반경 자동 축소: 인원이 몰린 곳에서만 반경을 줄인다.</li>
+<li>묶어 보내기와 델타 압축: 클라이언트마다 틱당 패킷 1개로 묶고, 바뀐 값만 보낸다.</li>
+<li>채널, 인스턴스 분리: 채널·인스턴스 사본으로 인원 자체를 나눈다. 보스 전용 스레드나 서버는 부하가 다른 존에 번지지 않게 격리할 뿐, 그 안의 N은 그대로다.</li>
+<li>클라이언트 그래픽 LOD와 이펙트 컬링: 멀리 있는 캐릭터와 남의 이펙트는 간략하게 그린다.</li>
+</ul>
+<p>정리하면 보스전 렉 대응은 보내는 양(N², r²)을 줄이거나 한곳에 모이는 N을 나누는 것이다.</p>
+</article>
+
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>존 (zone)</dt><dd>한 서버 프로세스나 스레드가 담당하는 게임 세계의 구역이다. 보스가 있는 존에 인원이 몰리면 그 존 서버만 부하가 튄다.</dd>
+<dt>틱</dt><dd>서버가 게임 세계를 한 번 갱신하는 주기다. 20Hz면 50ms마다 한 번이고, 이 시간이 한 틱의 처리 예산이다.</dd>
+<dt>브로드캐스트</dt><dd>한 플레이어의 상태 변화를 그 플레이어를 볼 수 있는 다른 플레이어 모두에게 복제해서 보내는 것이다. 인원이 N이면 한 명의 변화가 N − 1개의 갱신이 된다.</dd>
+<dt>N × (N − 1)</dt><dd>N명이 모두 서로를 볼 때 한 틱에 필요한 전송 수다. 인원의 제곱에 비례해서 늘어난다.</dd>
+<dt>AOI (Area of Interest)</dt><dd>플레이어 주변에서 서버가 정보를 보내 줄 범위다. 보통 시야 반경으로 정하고, 그리드로 나눠 주변 대상을 찾는다.</dd>
+<dt>시야 반경</dt><dd>AOI의 크기를 정하는 거리다. 반경이 2배면 면적은 4배, 보이는 인원은 밀도가 고르면 약 4배가 된다.</dd>
+<dt>pps (packets per second)</dt><dd>초당 패킷 수다. 작은 패킷이 많을 때는 대역폭보다 pps가 먼저 NIC나 커널 처리 한계에 걸리기도 한다.</dd>
+<dt>아웃바운드</dt><dd>서버에서 클라이언트 방향으로 나가는 트래픽이다. 브로드캐스트가 늘면 인바운드보다 훨씬 크게 증가한다.</dd>
+<dt>다운링크</dt><dd>클라이언트가 서버로부터 받는 방향의 회선이다. 수신량이 회선 속도를 넘으면 느린 회선부터 밀리고 끊긴다.</dd>
+<dt>광역기</dt><dd>한 번에 여러 대상을 맞히는 범위 공격이다. 피격 판정과 결과 알림이 피격 인원과 관전 인원의 곱만큼 생긴다.</dd>
+<dt>어그로</dt><dd>몬스터가 누구를 공격할지 정하는 위협 수치다. 보스는 참가자 N명의 위협 목록을 계속 다시 계산한다.</dd>
+<dt>LOD (Level of Detail)</dt><dd>거리나 중요도에 따라 상세도를 낮추는 기법이다. 서버는 갱신 빈도를, 클라이언트는 그래픽 품질을 낮춘다.</dd>
+<dt>델타 압축</dt><dd>이전에 보낸 상태와 비교해 바뀐 값만 보내는 방식이다. 패킷 크기를 줄인다.</dd>
+<dt>인스턴스 · 채널 분리</dt><dd>같은 지역을 여러 사본(채널, 인스턴스)으로 나눠 한곳에 모이는 인원을 줄이는 방식이다. 보스전을 별도 서버나 스레드로 떼는 것은 부하를 격리할 뿐 인원은 줄이지 않는다.</dd>
+</dl>
+</section>
+<script type="importmap">{"imports": {"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}}</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Boss Lag Flow — 보스가 뜨면 왜 렉이 걸릴까? (82.5s, 1920×1080, PC landscape)
+//  The full explainer of ../boss-lag/index.html (same 6 chapters, timing, numbers, footnotes, notes)
+//  in the 흐름과 관계를 빛으로 approach. The look comes from the game itself: a night zone map seen from
+//  above (terrain contours, AOI grid, the boss's aggro radius), players as class-coloured unit pips,
+//  every state update as a packet of light travelling along a link, combat telegraphs on the ground,
+//  and the numbers in an ops side panel. three.js renders offscreen; the 2D canvas #c composites it and
+//  draws the HUD, the boss marker, nameplates and the text panel. Every frame is a pure function of t.
+//    title  zone map, world-boss ping            01  crowd converges into the aggro radius
+//    02     one player → N − 1 packets, then all N × (N − 1) links (200 players = 39,800 arcs, vertex shader)
+//    03     view radius r → 2r, AOI grid cells light up      04  AoE telegraph · buffs/projectiles · aggro · HP
+//    05     ops panel: five strip charts rise with N          06  LOD rings · nearest K · radius shrink · channels
+//    outro  quest-route summary over the dimmed map
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 82.5;
+const FOV = 30;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math ─────────────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+const fract = x => x - Math.floor(x);
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const gauss = R => { let s = 0; for (let i = 0; i < 4; i++) s += R(); return (s - 2) / .577; };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── timeline ─────────────────────────────────────────────────
+// [start, end, number, title, subtitle] — same chapters as ../boss-lag/index.html
+const HEAD = [
+  [5.0, 15.0, '01', '사람이 몰린다', '보스가 뜨는 순간, 흩어져 있던 플레이어가 한곳으로'],
+  [15.0, 28.0, '02', '브로드캐스트는 N × (N − 1)', '한 명의 변화를 보는 사람 모두에게 복제해서 보낸다'],
+  [28.0, 41.0, '03', '시야가 넓으면 더 나빠진다', '반경이 2배면 보이는 사람은 약 4배'],
+  [41.0, 53.0, '04', '보스 전투가 더하는 것', '광역기 · 이펙트 · AI · HP 갱신도 모두 인원과 함께 곱으로 커진다'],
+  [53.0, 66.0, '05', '어디서 터지나', '서버 CPU · 틱 · 아웃바운드 · 클라 수신 · 렌더가 함께 오른다'],
+  [66.0, 77.0, '06', '게임은 이렇게 줄인다', '보내는 양을 줄이거나, 모이는 인원을 나눈다'],
+];
+const TAG = ['인원 집중', '브로드캐스트', '시야 반경', '보스 전투', '병목', '대응'];
+const OUTRO_AT = DURATION - 5.5;           // 77.0 → route summary
+const T_BOSS = 1.0;                        // world boss spawns (title)
+const T_CONV = 6.0;                        // 01 crowd converges
+const T_ONE = 15.4, T_ALL = 18.8, T_ALLEND = 21.8;   // 02 one → N − 1, then all, N 10 → 200
+const T_R1 = 28.8, T_R2 = 31.2;            // 03 view ring r, then 2r
+const B4 = [41.3, 44.1, 46.9, 49.7, 53.0]; // 04 beats: AoE, effects, aggro/AI, HP
+const T_N5 = 54.0, T_N5END = 60.0;         // 05 N 20 → 200
+const T_FAR = 66.4, T_K = 68.2, T_SH = 70.0, T_CH = 72.0;   // 06 cuts
+const I_AOE = [B4[0] + .9, B4[0] + 2.3];   // 04 AoE impacts (cast bar fills for .9 s first)
+
+// ── palette (night zone map · game HUD · ops panel) ──────────
+const HEX = { pkt: '#5fe3ff', mint: '#7dffd2', boss: '#ff5a48', amber: '#ffa040', gold: '#ffd36b', buff: '#86ff9a', ink: '#eef6f4' };
+const COL = Object.fromEntries(Object.entries(HEX).map(([k, v]) => [k, new THREE.Color(v)]));
+// unit-frame class colours for the player pips
+const CLASS = ['#f2c46d', '#6fb8ff', '#8be07a', '#f58fd0', '#c79bff', '#dfe8ea'].map(c => new THREE.Color(c));
+
+// ── three setup ──────────────────────────────────────────────
+const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.setPixelRatio(1); gl.setSize(W, H, false);
+gl.setClearColor(0x040809, 1);
+gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .05, 400);
+const composer = new EffectComposer(gl);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .6, .35, .72);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const U = { uPx: { value: H / (2 * Math.tan(THREE.MathUtils.degToRad(FOV / 2))) }, uFocus: { value: 10 }, uAperture: { value: .05 }, uTime: { value: 0 } };
+const blendAdd = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendEquation: THREE.AddEquation };
+
+// soft additive glows (halos, trails, effects): round gaussian sprites
+const GVS = `
+attribute float size; attribute float alpha; attribute vec3 color;
+uniform float uPx, uGain;
+varying vec3 vC;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  float s = max(size * uPx / d, 1.5);
+  gl_PointSize = s;
+  vC = color * alpha * uGain;
+  gl_Position = projectionMatrix * mv;
+  if (alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const GFS = `varying vec3 vC; void main() { vec2 c = gl_PointCoord * 2.0 - 1.0; float d = dot(c, c); if (d > 1.0) discard; gl_FragColor = vec4(vC * (exp(-d * 5.0) + .15 * exp(-d * 1.5)), 1.0); }`;
+// unit pips: class-coloured disc with a dark rim and a highlight, drawn with normal blending over the map
+const MVS = `
+attribute float size; attribute float alpha; attribute vec3 color;
+uniform float uPx;
+varying vec3 vC; varying float vA;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float d = max(-mv.z, 0.05);
+  gl_PointSize = clamp(size * uPx / d, 7.0, 46.0);
+  vC = color; vA = alpha;
+  gl_Position = projectionMatrix * mv;
+  if (alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const MFS = `
+varying vec3 vC; varying float vA;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0; float d = length(c);
+  float aa = fwidth(d) * 1.2;
+  float edge = 1.0 - smoothstep(1.0 - aa, 1.0, d);
+  float body = 1.0 - smoothstep(.66 - aa, .66, d);
+  vec3 col = mix(vec3(.015, .03, .035), vC * (1.0 + .45 * clamp(vA - 1.0, 0.0, 1.5)), body);
+  col += vec3(.55) * body * (1.0 - smoothstep(.0, .42, length(c - vec2(-.18, -.22))));
+  float a = edge * clamp(vA, 0.0, 1.0);
+  if (a <= 0.002) discard;
+  gl_FragColor = vec4(col, a);
+}`;
+const LVS = `
+attribute vec3 color; attribute float alpha;
+uniform float uGain;
+varying vec3 vC;
+void main() { vC = color * alpha * uGain; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const LFS = `varying vec3 vC; void main() { gl_FragColor = vec4(vC, 1.0); }`;
+const gMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: GVS, fragmentShader: GFS, ...blendAdd });
+const lMat = g => new THREE.ShaderMaterial({ uniforms: { ...U, uGain: { value: g } }, vertexShader: LVS, fragmentShader: LFS, ...blendAdd });
+
+class PB {   // point builder
+  constructor() { this.p = []; this.s = []; this.a = []; this.c = []; }
+  add(v, size, alpha, col) { this.p.push(v.x, v.y, v.z); this.s.push(size); this.a.push(alpha); this.c.push(col.r, col.g, col.b); return this; }
+  geo() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(this.s, 1));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    return g;
+  }
+  build(gain = 1, order = 1) { const o = new THREE.Points(this.geo(), gMat(gain)); o.frustumCulled = false; o.renderOrder = order; o.userData.col = Float32Array.from(this.c); scene.add(o); return o; }
+}
+class LB {   // line-segment builder
+  constructor() { this.p = []; this.a = []; this.c = []; }
+  add(v1, v2, a1, col, a2 = a1) { this.p.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z); this.a.push(a1, a2); this.c.push(col.r, col.g, col.b, col.r, col.g, col.b); return this; }
+  build(gain = 1, order = 3) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('alpha', new THREE.Float32BufferAttribute(this.a, 1));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    const o = new THREE.LineSegments(g, lMat(gain)); o.frustumCulled = false; o.renderOrder = order; scene.add(o); return o;
+  }
+}
+const setGain = (o, g) => { o.material.uniforms.uGain.value = g; o.visible = g > .002; };
+
+// ═════════════════════════════════════════════════════════════
+//  WORLD
+// ═════════════════════════════════════════════════════════════
+const NP = 200, K = 6, NCH = 4, NHIT = 16;
+const BOSS = V(0, .45, 0);
+const ARENA = 5;                          // crowd disc radius (even areal density) = inside the boss's aggro radius
+const PL = (() => {
+  const R = rng(7), out = [];
+  for (let i = 0; i < NP; i++) {
+    const ra = ARENA * Math.sqrt(R()), aa = R() * Math.PI * 2;
+    const swarm = V(Math.cos(aa) * ra, .04, Math.sin(aa) * ra);
+    const rs = 8 + 15 * Math.sqrt(R()), as = R() * Math.PI * 2;
+    out.push({ swarm, ra, aa, rs, as, delay: R() * 1.7, ph: R() * 6.28, ph2: R() * 6.28, ch: i % NCH, thr: .45 + .55 * R(), cls: Math.floor(R() * CLASS.length) });
+  }
+  // the player whose view ring we draw sits near (1.3, 0, .9); make it index 0 so it is also the first of every subset
+  const ci = out.map((a, i) => [a.swarm.distanceToSquared(V(1.3, 0, .9)), i]).sort((x, y) => x[0] - y[0])[0][1];
+  [out[0], out[ci]] = [out[ci], out[0]];
+  return out;
+})();
+const CI = 0;
+PL.forEach((a, i) => { a.knn = new Set(PL.map((b, j) => [a.swarm.distanceToSquared(b.swarm), j]).filter(x => x[1] !== i).sort((x, y) => x[0] - y[0]).slice(0, K).map(x => x[1])); });
+// AoE: the 16 players nearest the boss are hit
+const HITS = PL.map((a, i) => [Math.hypot(a.swarm.x, a.swarm.z), i]).sort((x, y) => x[0] - y[0]);
+const HIT = new Set(HITS.slice(0, NHIT).map(x => x[1])), R_HIT = HITS[NHIT - 1][0] + .12;
+const VR1 = 1.25, VR2 = 2.5, GRID = VR1 / 2;
+const insideCount = r => PL.filter((a, i) => i !== CI && Math.hypot(a.swarm.x - PL[CI].swarm.x, a.swarm.z - PL[CI].swarm.z) < r).length;
+const CNT1 = insideCount(VR1), CNT2 = insideCount(VR2);
+// channels: 2 × 2 grid, laid out along screen-right / depth of the camera at the split
+const thAt = t => .55 + .05 * t - .04 * clamp(t - 53, 0, 13);   // camera azimuth; the orbit slows in 05
+const CHS = .42, CH_TH = thAt(74), CH_GAP = 2.75, CH_R = ARENA * CHS + .35;
+const CHO = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([r, d]) => V(Math.cos(CH_TH) * r * CH_GAP * 1.25 + Math.sin(CH_TH) * d * CH_GAP, 0, -Math.sin(CH_TH) * r * CH_GAP * 1.25 + Math.cos(CH_TH) * d * CH_GAP));
+
+// player position as a pure function of t (on the ground)
+const convK = (i, t) => eio(p(t, T_CONV + PL[i].delay * 1.6, 2.8));
+function playerPos(i, t, out) {
+  const a = PL[i];
+  const k = convK(i, t);
+  const r = lerp(a.rs, a.ra, k), ang = lerp(a.as, a.aa, k) + (1 - k) * (.05 * t) + Math.sin(k * Math.PI) * .35;
+  const drift = 1 - k;
+  out.set(Math.cos(ang) * r + drift * .6 * Math.sin(t * .35 + a.ph), .04, Math.sin(ang) * r + drift * .6 * Math.cos(t * .3 + a.ph));
+  if (k >= 1) out.set(a.swarm.x, .04, a.swarm.z);
+  out.x += .06 * Math.sin(t * 1.3 + a.ph) * k; out.z += .06 * Math.cos(t * 1.1 + a.ph2) * k;
+  const c = eio(p(t, T_CH, 1.3));
+  if (c > 0) { const o = CHO[a.ch]; out.x = lerp(out.x, o.x + a.swarm.x * CHS, c); out.z = lerp(out.z, o.z + a.swarm.z * CHS, c); }
+  return out;
+}
+
+// ── terrain: one ground plane; a baked heightfield gives contours, water and hill shade.
+//    Ground marks (aggro radius, view radius, AOI grid cells, telegraphs, LOD rings, channel borders) are drawn here too.
+const HF = 256, SPAN = 110;
+const HTEX = (() => {
+  const R = rng(1234), G = 64, lat = Array.from({ length: (G + 1) * (G + 1) * 2 }, () => R());
+  const vn = (x, y, o) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi; const s = q => q * q * (3 - 2 * q);
+    const g = (a, b) => lat[((((a % G) + G) % G) * (G + 1) + (((b % G) + G) % G)) * 2 + o];
+    return lerp(lerp(g(xi, yi), g(xi + 1, yi), s(xf)), lerp(g(xi, yi + 1), g(xi + 1, yi + 1), s(xf)), s(yf)); };
+  const data = new Uint8Array(HF * HF * 4);
+  for (let y = 0; y < HF; y++) for (let x = 0; x < HF; x++) {
+    const wx = (x / (HF - 1) - .5) * SPAN, wz = (y / (HF - 1) - .5) * SPAN;
+    let h = 0, amp = .5, f = .045;
+    for (let o = 0; o < 5; o++) { h += amp * vn(wx * f + 11, wz * f + 7, 0); amp *= .5; f *= 2.1; }
+    // a river winding across the map, and a flat clearing (the boss arena) at the centre
+    const river = Math.abs(vn(wx * .03 + 3, wz * .03 + 5, 1) - .5);
+    h = lerp(h, .18, clamp(1 - river / .045) * .9);
+    const rc = Math.hypot(wx, wz); h = lerp(h, .52, Math.exp(-rc * rc / 70));
+    const veg = vn(wx * .12, wz * .12, 1);
+    const i4 = (y * HF + x) * 4; data[i4] = clamp(h) * 255; data[i4 + 1] = veg * 255; data[i4 + 2] = 0; data[i4 + 3] = 255;
+  }
+  const tx = new THREE.DataTexture(data, HF, HF, THREE.RGBAFormat); tx.magFilter = tx.minFilter = THREE.LinearFilter; tx.needsUpdate = true;
+  return tx;
+})();
+const TU = {
+  uH: { value: HTEX }, uSpan: { value: SPAN }, uG: { value: GRID }, uGrid: { value: .25 }, uDim: { value: 1 },
+  uAoi: { value: new THREE.Vector4(0, 0, 0, 0) },      // cx, cz, radius, alpha — grid cells the AOI search touches
+  uV: { value: new THREE.Vector4(0, 0, 0, 0) },        // cx, cz, r ring radius, alpha
+  uV2: { value: new THREE.Vector4(0, 0, 0, 0) },       // 2r ring radius, alpha, fill radius, fill alpha
+  uAgg: { value: new THREE.Vector2(ARENA + .35, 0) },  // aggro radius, alpha
+  uTel: { value: new THREE.Vector4(R_HIT, 0, 0, 0) },  // telegraph radius, cast fill 0..1, alpha, impact flash
+  uLod: { value: new THREE.Vector4(0, 0, 0, 0) },      // ring 20Hz / 5Hz / 2Hz radius, alpha
+  uChA: { value: 0 }, uChR: { value: CH_R }, uChC: { value: CHO.map(o => new THREE.Vector2(o.x, o.z)) },
+  uTime: U.uTime,
+};
+const TERRAIN = (() => {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: TU, depthWrite: false, depthTest: false,
+    vertexShader: `varying vec2 vP; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `
+uniform sampler2D uH; uniform float uSpan, uG, uGrid, uDim, uTime, uChA, uChR;
+uniform vec4 uAoi, uV, uV2, uTel, uLod; uniform vec2 uAgg; uniform vec2 uChC[4];
+varying vec2 vP;
+float ring(float d, float R, float px) { float fw = fwidth(d); return 1.0 - smoothstep(px * .5 * fw, (px * .5 + 1.2) * fw, abs(d - R)); }
+float dash(vec2 q, float n, float duty) { return step(fract(atan(q.y, q.x) / 6.2832 * n), duty); }
+void main() {
+  vec2 uv = vP / uSpan + .5;
+  vec4 tx = texture2D(uH, uv); float h = tx.r, veg = tx.g;
+  float e = 1.5 / 256.0;
+  float hx = texture2D(uH, uv + vec2(e, 0.0)).r - texture2D(uH, uv - vec2(e, 0.0)).r;
+  float hz = texture2D(uH, uv + vec2(0.0, e)).r - texture2D(uH, uv - vec2(0.0, e)).r;
+  float shade = clamp(.55 + (hx * .8 - hz) * 7.0, 0.0, 1.0);
+  vec3 low = vec3(.030, .052, .052), high = vec3(.068, .088, .074);
+  vec3 col = mix(low, high, smoothstep(.3, .78, h));
+  col *= mix(vec3(1.0), vec3(.86, 1.1, .92), veg * .7);
+  col *= .72 + .56 * shade;
+  float water = 1.0 - smoothstep(.255, .27, h);
+  col = mix(col, vec3(.016, .034, .052) + vec3(.0, .006, .012) * sin(vP.x * 2.0 + vP.y * 1.3), water);
+  // contour lines (every 1/18 of height, a heavier one every 4th) and the shoreline
+  float hc = h * 18.0; float fc = abs(fract(hc - .5) - .5) / (fwidth(hc) + 1e-4);
+  float hc4 = h * 4.5; float fc4 = abs(fract(hc4 - .5) - .5) / (fwidth(hc4) + 1e-4);
+  col += vec3(.06, .11, .095) * (1.0 - min(fc, 1.0)) * (1.0 - water) * .8;
+  col += vec3(.08, .14, .12) * (1.0 - min(fc4 / 1.6, 1.0)) * (1.0 - water) * .7;
+  col += vec3(.10, .22, .26) * ring(h, .265, 1.6) * .8;
+  // AOI grid (the server's spatial grid)
+  vec2 g = vP / uG; vec2 gf = abs(fract(g - .5) - .5) / fwidth(g);
+  float gl = 1.0 - min(min(gf.x, gf.y), 1.0);
+  col += vec3(.06, .14, .16) * gl * uGrid;
+  // grid cells the AOI search must check: any cell the view circle touches
+  if (uAoi.w > 0.0) {
+    vec2 cmin = floor(vP / uG) * uG; vec2 q = clamp(uAoi.xy, cmin, cmin + uG);
+    float inC = step(distance(q, uAoi.xy), uAoi.z) * uAoi.w;
+    col += vec3(.012, .05, .062) * inC + vec3(.08, .24, .27) * gl * inC;
+  }
+  float r = length(vP);
+  // boss aggro radius: dashed red ring with a warm band inside the edge
+  if (uAgg.y > 0.0) {
+    float band = smoothstep(uAgg.x - 1.4, uAgg.x, r) * step(r, uAgg.x);
+    col += vec3(.16, .025, .015) * band * .35 * uAgg.y;
+    col += vec3(1.0, .30, .22) * ring(r, uAgg.x, 3.0) * dash(vP, 64.0, .62) * .9 * uAgg.y;
+  }
+  // AoE telegraph: orange disc, the cast fill grows from the centre, flash on impact
+  if (uTel.z > 0.0) {
+    float inside = step(r, uTel.x);
+    col += vec3(.30, .07, .01) * inside * .3 * uTel.z;
+    col += vec3(.55, .16, .02) * step(r, uTel.x * uTel.y) * .3 * uTel.z;
+    col += vec3(1.0, .55, .15) * ring(r, uTel.x, 4.0) * 1.3 * uTel.z;
+    col += vec3(.9, .3, .05) * inside * uTel.w * .35;
+  }
+  // view radius r / 2r around one player, with a light fill
+  vec2 dv = vP - uV.xy; float dvl = length(dv);
+  if (uV.w > 0.0 && uV.z > .01) col += vec3(.55, .95, 1.0) * ring(dvl, uV.z, 3.5) * uV.w;
+  if (uV2.y > 0.0 && uV2.x > .01) col += vec3(1.0, .82, .38) * ring(dvl, uV2.x, 3.5) * uV2.y;
+  if (uV2.w > 0.0) col += vec3(.02, .07, .085) * step(dvl, uV2.z) * uV2.w;
+  // update-rate LOD rings: 20Hz / 5Hz / 2Hz zones
+  if (uLod.w > 0.0) {
+    col += vec3(.07, .26, .3) * step(dvl, uLod.x) * uLod.w + vec3(.03, .12, .15) * step(uLod.x, dvl) * step(dvl, uLod.y) * uLod.w + vec3(.015, .05, .07) * step(uLod.y, dvl) * step(dvl, uLod.z) * uLod.w;
+    col += vec3(.5, .95, 1.0) * ring(dvl, uLod.x, 3.0) * uLod.w + vec3(.3, .7, .8) * ring(dvl, uLod.y, 2.5) * uLod.w + vec3(.2, .45, .55) * ring(dvl, uLod.z, 2.0) * dash(dv, 48.0, .55) * uLod.w;
+  }
+  // channels: four copies of the arena
+  if (uChA > 0.0) for (int k = 0; k < 4; k++) {
+    float dc = length(vP - uChC[k]);
+    col += vec3(.03, .12, .14) * step(dc, uChR) * uChA + vec3(.45, .9, 1.0) * ring(dc, uChR, 3.0) * uChA;
+  }
+  col *= 1.0 - smoothstep(22.0, 44.0, r);
+  gl_FragColor = vec4(col * uDim, 1.0);
+}`,
+  });
+  const o = new THREE.Mesh(new THREE.PlaneGeometry(SPAN, SPAN).rotateX(-Math.PI / 2), mat);
+  o.frustumCulled = false; o.renderOrder = -10; scene.add(o); return o;
+})();
+
+// players: halos + movement trails (additive), then class-coloured pips on top (normal blending)
+const GH = 6;
+const HALO = (() => { const pb = new PB(); for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), .5, .16, CLASS[PL[i].cls]); for (let g = 1; g <= GH; g++) for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), .09 * (1 - g / (GH + 2)), 0, CLASS[PL[i].cls]); return pb.build(1, 1); })();
+const PIPS = (() => {
+  const pb = new PB(); for (let i = 0; i < NP; i++) pb.add(V(0, 0, 0), i === CI ? .3 : .19, 1, i === CI ? new THREE.Color('#ffffff') : CLASS[PL[i].cls]);
+  const o = new THREE.Points(pb.geo(), new THREE.ShaderMaterial({ uniforms: { ...U }, vertexShader: MVS, fragmentShader: MFS, transparent: true, depthWrite: false, depthTest: false }));
+  o.frustumCulled = false; o.renderOrder = 8; o.userData.col = Float32Array.from(pb.c); scene.add(o); return o;
+})();
+// boss glow (the 2D marker sits on top)
+const BOSSG = (() => { const pb = new PB(); pb.add(BOSS, 1.7, .55, COL.boss); pb.add(BOSS, .6, 1.0, new THREE.Color('#ffb0a0')); return pb.build(0, 6); })();
+
+// ── 04 extras ────────────────────────────────────────────────
+// effects, buffs, projectiles: 1,600 particles, each tied to a player (pure function of t)
+const FX_N = 1600;
+const FXD = (() => { const R = rng(91); return Array.from({ length: FX_N }, (_, k) => ({ j: (k * 7) % NP, type: k % 4, per: 1.0 + R() * .9, off: R(), r3: R(), dir: V(gauss(R), Math.abs(gauss(R)) + .4, gauss(R)).normalize() })); })();
+const FX = (() => { const R = rng(92), pb = new PB(); FXD.forEach(d => pb.add(V(0, 0, 0), .06 + R() * .05, 0, [new THREE.Color('#bff6ff'), COL.buff, COL.gold, COL.boss][d.type])); return pb.build(0, 5); })();
+// boss → player arcs (aggro lines, HP broadcast): 200 arcs × 8 segments, written per frame
+const BSEG = 8;
+const BL = (() => { const lb = new LB(); for (let i = 0; i < NP; i++) for (let s = 0; s < BSEG; s++) lb.add(V(0, 0, 0), V(0, 0, 0), 0, COL.boss); return lb.build(0, 4); })();
+
+// ── links: every ordered pair (i → j) = one arc of SEG segments, evaluated in the vertex shader.
+//    A dim line carries one bright packet travelling from sender i to receiver j.
+const SEG = 8;
+const LINKVS = `
+uniform vec3 uP[${NP}];
+uniform float uPx, uFocus, uAperture, uGain, uTime, uN, uFar, uK, uCh, uLift, uView, uViewR, uVM, uThin, uOne, uHit;
+attribute vec4 aM;   // s, rand, kNear, sameChannel
+attribute float aH;  // source player was hit by the AoE
+varying vec3 vC;
+void main() {
+  int i = int(position.x + .5), j = int(position.y + .5);
+  vec3 a = uP[i], b = uP[j]; float s = aM.x;
+  vec3 d = b - a; float L = length(d);
+  vec3 side = normalize(cross(d + vec3(1e-4, 0.0, 1e-4), vec3(0.0, 1.0, 0.0)));
+  float bow = 4.0 * s * (1.0 - s);
+  float lift = uLift * (.35 + 1.3 * fract(aM.y * 7.31));
+  vec3 pos = mix(a, b, s) + vec3(0.0, 1.0, 0.0) * lift * L * bow + side * (fract(aM.y * 3.7) - .5) * .4 * L * bow;
+  vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+  float dz = max(-mv.z, 0.05);
+  float coc = uAperture * uPx * abs(1.0 / uFocus - 1.0 / dz);
+  float vis = clamp(uN - max(position.x, position.y), 0.0, 1.0);
+  float far = smoothstep(1.5, 2.2, position.z);
+  float blink = smoothstep(.0, .05, fract(uTime * .55 + aM.y * 13.0)) * (1.0 - smoothstep(.05, .22, fract(uTime * .55 + aM.y * 13.0)));
+  float farF = mix(1.0, mix(1.6, .015 + 2.0 * blink, far), uFar);
+  float kF = mix(1.0, mix(.015, 2.2, aM.z), uK);
+  float chF = mix(1.0, aM.w * 1.8, uCh);
+  float oneF = mix(1.0, i == int(uView) ? 9.0 : 0.0, uOne);
+  float hitF = mix(1.0, aH > .5 ? 1.0 : .015, uHit);
+  float ph = fract(uTime * .8 + aM.y * 17.0);
+  float pl = exp(-pow((s - ph) * mix(9.0, 14.0, uThin), 2.0));
+  float viewF = mix(1.0, (i == int(uView) && length((b - a).xz) < uViewR) ? 6.0 : .3, uVM);
+  vec3 col = aM.y < .62 ? vec3(.30, .86, 1.0) : aM.y < .86 ? vec3(.42, 1.0, .82) : vec3(.78, .95, 1.0);
+  col = mix(col, vec3(1.0, .38, .06), uHit * aH);
+  vC = col * uGain * vis * farF * kF * chF * viewF * oneF * hitF * (mix(.2, .055, uThin) + 4.5 * pl) / (1.0 + coc * .1);
+  gl_Position = projectionMatrix * mv;
+  if (vis * oneF * hitF <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const LINKS = (() => {
+  const R = rng(37), nArc = NP * (NP - 1), nV = nArc * SEG * 2;
+  const pos = new Float32Array(nV * 3), m = new Float32Array(nV * 4), h = new Float32Array(nV);
+  let v = 0;
+  for (let i = 0; i < NP; i++) for (let j = 0; j < NP; j++) {
+    if (i === j) continue;
+    const r = R(), kn = PL[i].knn.has(j) ? 1 : 0, sc = PL[i].ch === PL[j].ch ? 1 : 0, d0 = PL[i].swarm.distanceTo(PL[j].swarm), hi = HIT.has(i) ? 1 : 0;
+    for (let s = 0; s < SEG; s++) for (const ss of [s / SEG, (s + 1) / SEG]) {
+      pos[v * 3] = i; pos[v * 3 + 1] = j; pos[v * 3 + 2] = d0;
+      m[v * 4] = ss; m[v * 4 + 1] = r; m[v * 4 + 2] = kn; m[v * 4 + 3] = sc; h[v] = hi; v++;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aM', new THREE.BufferAttribute(m, 4));
+  g.setAttribute('aH', new THREE.BufferAttribute(h, 1));
+  const uP = { value: Array.from({ length: NP }, () => new THREE.Vector3()) };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { ...U, uGain: { value: 0 }, uP, uN: { value: 0 }, uFar: { value: 0 }, uK: { value: 0 }, uCh: { value: 0 }, uLift: { value: .22 }, uView: { value: CI }, uViewR: { value: 0 }, uVM: { value: 0 }, uThin: { value: 0 }, uOne: { value: 0 }, uHit: { value: 0 } },
+    vertexShader: LINKVS, fragmentShader: LFS, ...blendAdd,
+  });
+  const o = new THREE.LineSegments(g, mat); o.frustumCulled = false; o.renderOrder = 2; scene.add(o);
+  return o;
+})();
+
+// ── camera (pure function of t): keyframes [t, ground distance, height, target, screen shift px] ──
+// a map view from above; shift > 0 moves the world left so the side panel on the right stays clear
+const CI_POS = PL[CI].swarm, CIT = V(CI_POS.x * .75, 0, CI_POS.z * .75), SH = 400;
+const CK = [
+  [0, 17, 33, V(0, 0, 0), -330],
+  [4.4, 16.5, 31, V(0, 0, 0), -330],
+  [6.4, 15, 25, V(0, 0, 0), SH],
+  [11.5, 12.2, 16.5, V(0, 0, 0), SH],
+  [15.0, 11.8, 16, V(0, 0, 0), SH],
+  [27.4, 11.8, 15.6, V(0, 0, 0), SH],
+  [29.0, 6.2, 11.6, CIT, SH],
+  [40.4, 6.0, 11.2, CIT, SH],
+  [41.6, 11.5, 11.8, V(0, .3, 0), SH],
+  [52.6, 11.3, 11.4, V(0, .3, 0), SH],
+  [54.0, 12.6, 16, V(0, 0, 0), SH],
+  [65.4, 12.6, 16, V(0, 0, 0), SH],
+  [66.6, 11.2, 14.4, V(0, 0, 0), SH],
+  [72.0, 11.2, 14.4, V(0, 0, 0), SH],
+  [73.6, 11.5, 25.5, V(0, 0, 0), SH, -95],
+  [OUTRO_AT + .2, 11.5, 25.5, V(0, 0, 0), SH, -95],
+  [OUTRO_AT + 2.5, 9, 27, V(0, 0, 0), 0],
+  [DURATION, 9, 27, V(0, 0, 0), 0],
+];
+function cameraAt(t) {
+  let i = 0; while (i < CK.length - 2 && t > CK[i + 1][0]) i++;
+  const [t0, r0, h0, g0, s0, y0 = 0] = CK[i], [t1, r1, h1, g1, s1, y1 = 0] = CK[i + 1], k = eio(p(t, t0, t1 - t0));
+  const r = lerp(r0, r1, k), h = lerp(h0, h1, k), tgt = g0.clone().lerp(g1, k);
+  const th = thAt(t);
+  camera.position.set(tgt.x + Math.sin(th) * r, tgt.y + h, tgt.z + Math.cos(th) * r);
+  camera.lookAt(tgt);
+  camera.setViewOffset(W, H, lerp(s0, s1, k), lerp(y0, y1, k), W, H);
+  camera.updateMatrixWorld();
+  U.uFocus.value = camera.position.distanceTo(tgt);
+}
+
+// ── helpers derived from t ───────────────────────────────────
+const arrivedNear = (t, v) => { let n = 0; for (let i = 0; i < NP; i++) { playerPos(i, t, v); if (Math.hypot(v.x, v.z) < ARENA + .4) n++; } return n; };
+const nAll = t => lerp(10, NP, eio(p(t, T_ALL + .2, T_ALLEND - T_ALL - .2)));   // 02: N grows 10 → 200
+const n5 = t => lerp(20, NP, eio(p(t, T_N5, T_N5END - T_N5)));                  // 05: N grows 20 → 200
+const viewR = t => t < T_R1 ? 0 : lerp(0, VR1, eo(p(t, T_R1, .7))) + (VR2 - VR1) * eio(p(t, T_R2, .9));
+const viewOn = t => win(t, T_R1 - .1, 40.8, .4);
+const hpAt = t => 1 - .07 * Math.max(0, t - B4[3]);
+// 05 meters (formulas of ../boss-lag/index.html sBreak)
+function meters(N) {
+  const s = N * (N - 1), tickMs = 8 + s / 380;
+  return [
+    ['존 로직 스레드 CPU', 'CPU', Math.min(100, tickMs / 50 * 100), '%', 85, 100, '한 코어만 100% — 코어를 늘려도 안 풀린다'],
+    ['틱 처리시간', '틱', tickMs, 'ms', 50, 150, '예산 50ms 초과 → 존 전체 서버렉'],
+    ['아웃바운드 (20Hz 유지 시)', '아웃바운드', s * 20 * 50 * 8 / 1e6, 'Mbps', 200, 400, 'pps · 대역폭 급등, 송신 큐 적체'],
+    ['클라 다운링크', '클라 수신', (N - 1) * 20 * 50 / 1000, 'KB/s', 120, 300, '느린 회선부터 밀림 · 끊김'],
+    ['클라 FPS', 'FPS', Math.max(14, 60 - N * .22), 'fps', -40, 60, '수백 캐릭터 · 이펙트 렌더 → 클라렉'],
+  ];
+}
+const isBad = (v, warn) => warn > 0 ? v > warn : v < -warn;
+const FX_GAIN = t => win(t, B4[1] - .2, 53.0, .5) * (t < B4[2] ? 1 : lerp(1, .3, eo(p(t, B4[2], .6))));
+const hitFlash = (i, t) => { if (!HIT.has(i)) return 0; let f = 0; for (const c of I_AOE) if (t > c) f = Math.max(f, Math.exp(-(t - c) * 1.6)); return f; };
+
+// ═════════════════════════════════════════════════════════════
+//  SCENE UPDATE
+// ═════════════════════════════════════════════════════════════
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Color();
+function update3D(t) {
+  U.uTime.value = t;
+  cameraAt(t);
+  const v = _v, w = _w;
+  const vOn = viewOn(t), vr = viewR(t);
+  const pos = LINKS.material.uniforms.uP.value;
+
+  // boss glow
+  const ig = eo(p(t, T_BOSS, .5)), flash = t > T_BOSS ? Math.exp(-(t - T_BOSS) * 2.2) : 0;
+  const imp = I_AOE.reduce((s, c) => s + (t > c ? Math.exp(-(t - c) * 3) : 0), 0);
+  const cutDim = 1 - .5 * eio(p(t, T_CH, 1));
+  setGain(BOSSG, ig * (1 + .15 * Math.sin(t * 5.5) + 1.5 * flash + .8 * imp) * cutDim);
+
+  // players
+  const P = PIPS.geometry.attributes, Hh = HALO.geometry.attributes;
+  const one = win(t, T_ONE, T_ALL + .3, .5), all = win(t, T_ALL, T_ALLEND + 1.2, .5), nA = nAll(t);
+  const ch5 = win(t, 53.3, 65.8, .5), N5 = n5(t);
+  for (let i = 0; i < NP; i++) {
+    playerPos(i, t, v); pos[i].copy(v);
+    const mov = Math.sin(Math.PI * convK(i, t));
+    let al = 1;
+    if (one > 0) al = lerp(al, i === CI ? 2 : .75, one);
+    if (all > 0) al = lerp(al, i < nA ? 1.25 : .3, all);
+    if (vOn > 0) {
+      const inside = i !== CI && Math.hypot(v.x - pos[CI].x, v.z - pos[CI].z) < vr;
+      al = lerp(al, i === CI ? 2 : inside ? 1.6 : .3, vOn);
+    }
+    if (ch5 > 0) al = lerp(al, i < N5 ? 1.2 : .25, ch5);
+    const hf = hitFlash(i, t);
+    _c.setRGB(PIPS.userData.col[i * 3], PIPS.userData.col[i * 3 + 1], PIPS.userData.col[i * 3 + 2]).lerp(COL.boss, Math.min(1, hf * 1.4));
+    P.color.setXYZ(i, _c.r, _c.g, _c.b);
+    P.position.setXYZ(i, v.x, v.y, v.z); P.alpha.setX(i, al * (1 + hf));
+    Hh.position.setXYZ(i, v.x, v.y, v.z); Hh.alpha.setX(i, (.16 + .5 * hf) * Math.min(al, 1.6));
+    Hh.color.setXYZ(i, _c.r, _c.g, _c.b);
+    for (let g = 1; g <= GH; g++) { playerPos(i, t - g * .09, w); Hh.position.setXYZ(NP * g + i, w.x, w.y, w.z); Hh.alpha.setX(NP * g + i, mov * .9 * (1 - g / (GH + 1))); }
+  }
+  P.position.needsUpdate = P.alpha.needsUpdate = P.color.needsUpdate = true;
+  Hh.position.needsUpdate = Hh.alpha.needsUpdate = Hh.color.needsUpdate = true;
+  setGain(HALO, 1);
+
+  // links
+  const Lu = LINKS.material.uniforms;
+  const nL = t < T_ALL + .2 ? NP : t < 53.3 ? lerp(NP, nA, all) : lerp(NP, N5, ch5);
+  Lu.uN.value = nL;
+  Lu.uOne.value = one * (1 - p(t, T_ALL, .3));
+  Lu.uHit.value = win(t, I_AOE[0] - .05, B4[1] + .1, .3);
+  Lu.uFar.value = eio(p(t, T_FAR, .7)) * (1 - eio(p(t, T_K, .6)));
+  Lu.uK.value = eio(p(t, T_K, .7)) * (1 - eio(p(t, T_CH + .5, .9)));
+  Lu.uCh.value = eio(p(t, T_CH, .8));
+  Lu.uViewR.value = vr; Lu.uVM.value = vOn;
+  Lu.uThin.value = clamp((nL - 20) / 180);
+  const nn = Math.max(20, nL), dens = Math.min(1, Math.pow(380 / (nn * (nn - 1)), .56));
+  const l4 = (1 - .55 * win(t, 41.2, 53.2, .6) * (1 - Lu.uHit.value)) * (1 - .3 * win(t, 53.4, 66, .6));   // ch04: the mesh steps back behind the effects
+  const lg = eo(p(t, T_ONE, .8)) * (Lu.uOne.value > .01 ? lerp(dens, .9, Lu.uOne.value) : dens) * lerp(1, 1.5, Lu.uK.value) * lerp(1, 1.9, Lu.uCh.value) * lerp(1, Math.pow(380 / 3184, .66) / dens * 1.6, Lu.uHit.value) * l4 * .12 * (1 - p(t, OUTRO_AT, .6));
+  setGain(LINKS, lg);
+
+  // ground marks
+  const c = pos[CI];
+  TU.uAgg.value.y = eo(p(t, T_BOSS + .3, 1.0)) * (1 - eio(p(t, T_CH, .8))) * (1 - .5 * win(t, 28.2, 40.8, .6));
+  TU.uGrid.value = .22 + .5 * vOn;
+  TU.uAoi.value.set(c.x, c.z, vr, vOn * .9);
+  TU.uV.value.set(c.x, c.z, Math.min(vr, VR1), vOn * (t > T_R2 ? .5 : 1));
+  TU.uV2.value.set(vr, vOn * (t > T_R2 ? 1 : 0), vr, vOn * .8);
+  const sh = win(t, T_SH, T_CH + .2, .4);
+  if (sh > 0) { const rr = lerp(VR2, VR1, eio(p(t, T_SH + .5, 1.0))); TU.uV.value.set(c.x, c.z, 0, 0); TU.uV2.value.set(rr, sh, rr, sh * .8); }
+  const lod = win(t, T_FAR - .1, T_K + .2, .4);
+  TU.uLod.value.set(1.0 * eo(p(t, T_FAR, .6)), 2.0 * eo(p(t, T_FAR + .2, .6)), 3.2 * eo(p(t, T_FAR + .4, .6)), lod);
+  if (lod > 0 && sh <= 0 && vOn <= 0) TU.uV.value.set(c.x, c.z, 0, 0);
+  TU.uChA.value = eo(p(t, T_CH + .7, .8));
+  // AoE telegraphs: cast fill .9 s, impact flash
+  {
+    let a = 0, fill = 0, fl = 0;
+    for (const ci of I_AOE) { const s = ci - .9; if (t > s - .1 && t < ci + .7) { a = Math.max(a, win(t, s - .1, ci + .7, .2)); fill = clamp((t - s) / .9); fl = Math.max(fl, t > ci ? Math.exp(-(t - ci) * 5) : 0); } }
+    TU.uTel.value.set(R_HIT, eo(fill), a, fl);
+  }
+  TU.uDim.value = 1 - .25 * p(t, OUTRO_AT, 1);
+
+  // 04 · effects / buffs / projectiles
+  {
+    const g = FX_GAIN(t); setGain(FX, g);
+    if (g > 0) {
+      const A = FX.geometry.attributes;
+      FXD.forEach((d, k) => {
+        const P0 = pos[d.j], ph = fract(t / d.per + d.off);
+        let x, y, z, al;
+        if (d.type === 0) {        // projectile: player → boss
+          x = lerp(P0.x, BOSS.x, ph); z = lerp(P0.z, BOSS.z, ph); y = lerp(P0.y + .1, BOSS.y, ph) + Math.sin(ph * Math.PI) * (.5 + .6 * d.r3); al = Math.sin(ph * Math.PI) * 1.1;
+        } else if (d.type === 1) { // buff: rising spiral around the player
+          const an = ph * 9 + d.r3 * 6.28; x = P0.x + Math.cos(an) * .2; z = P0.z + Math.sin(an) * .2; y = P0.y + .05 + ph * .6; al = Math.sin(ph * Math.PI);
+        } else if (d.type === 2) { // effect burst out of the player
+          x = P0.x + d.dir.x * ph * .7; y = P0.y + d.dir.y * ph * .5; z = P0.z + d.dir.z * ph * .7; al = (1 - ph) * 1.1;
+        } else {                   // boss projectile: boss → player
+          x = lerp(BOSS.x, P0.x, ph); z = lerp(BOSS.z, P0.z, ph); y = lerp(BOSS.y, P0.y + .1, ph) + Math.sin(ph * Math.PI) * .8; al = Math.sin(ph * Math.PI);
+        }
+        A.position.setXYZ(k, x, y, z); A.alpha.setX(k, al);
+      });
+      A.position.needsUpdate = A.alpha.needsUpdate = true;
+    }
+  }
+  // 04 · aggro lines (boss → each player, brightness = threat) and HP broadcast pulses (boss → all 200)
+  {
+    const ag = win(t, B4[2], B4[3] + .2, .4), hp = win(t, B4[3], 53.2, .4), g = Math.max(ag, hp);
+    setGain(BL, g * .9);
+    if (g > 0) {
+      const A = BL.geometry.attributes; const top = aggroTop(t);
+      const thr = i => PL[i].thr * (.5 + .5 * Math.sin(t * 1.7 + i * 1.7));
+      for (let i = 0; i < NP; i++) {
+        const P1 = pos[i];
+        const aA = ag * (i === top ? 3.2 : Math.pow(thr(i), 3) * .7);
+        for (let s = 0; s < BSEG; s++) for (const e of [0, 1]) {
+          const u = (s + e) / BSEG, idx = (i * BSEG + s) * 2 + e;
+          const bow = Math.sin(u * Math.PI) * .35;
+          A.position.setXYZ(idx, lerp(BOSS.x, P1.x, u), lerp(BOSS.y, P1.y + .05, u) + bow, lerp(BOSS.z, P1.z, u));
+          const wave = fract((t - B4[3]) / .9), pulse = Math.exp(-Math.pow((u - wave) * 7, 2));
+          A.alpha.setX(idx, aA + hp * (.1 + 1.6 * pulse));
+          A.color.setXYZ(idx, 1, lerp(.35, .62, hp), lerp(.28, .25, hp));
+        }
+      }
+      A.position.needsUpdate = A.alpha.needsUpdate = A.color.needsUpdate = true;
+    }
+  }
+  bloom.strength = .55 + .5 * flash + .3 * imp;
+}
+function aggroTop(t) { let top = 0, topV = -1; for (let i = 0; i < NP; i++) { const q = PL[i].thr * (.5 + .5 * Math.sin(t * 1.7 + i * 1.7)); if (q > topV) { topV = q; top = i; } } return top; }
+
+// ═════════════════════════════════════════════════════════════
+//  2D OVERLAY — HUD, boss marker, nameplates, ops side panel
+// ═════════════════════════════════════════════════════════════
+const X0 = 80, X1 = 1840, CX = 960;
+const CL = 1100, CW = X1 - CL;              // side panel text column
+const INK = '#eef6f4', DIM = 'rgba(196,222,216,.74)', ACC = '#5fe3ff', HOT = '#ff5a48', GOLD = '#ffd36b', AMB = '#ffa040', LAB = '#9fe9f5';
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#fff', align = 'left', alpha = 1, mono = false, ls = 0, blur = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (blur > .3) ctx.filter = `blur(${blur.toFixed(1)}px)`;
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false, ls = 0) { ctx.save(); ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; if (ls) ctx.letterSpacing = ls + 'px'; const w = ctx.measureText(s).width; ctx.restore(); return w; }
+function wrap(s, size, weight, maxW) {   // break at spaces to fit maxW
+  const ws = s.split(' '), out = []; let cur = '';
+  for (const w of ws) { const n = cur ? cur + ' ' + w : w; if (cur && tw(n, size, weight) > maxW) { out.push(cur); cur = w; } else cur = n; }
+  if (cur) out.push(cur); return out;
+}
+function proj(v) { const q = v.clone().project(camera); return { x: (q.x + 1) / 2 * W, y: (1 - q.y) / 2 * H, behind: q.z > 1 }; }
+const shadow = (b = 18) => { ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = b; };
+const diamond = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill(); };
+
+// one list item in the panel: diamond marker + bold title + wrapped detail; returns the height used
+function item(title, detail, x, y, a, o = {}) {
+  const { col = ACC, active = 1, maxW = CW - 40, ts = 32, ds = 28 } = o;
+  const tl = wrap(title, ts, 800, maxW), dl = detail ? wrap(detail, ds, 500, maxW) : [];
+  const hgt = tl.length * ts * 1.3 + dl.length * ds * 1.38 + 36;
+  if (a <= 0) return hgt;
+  const k = eo(a), dy = (1 - k) * 18, al = k * lerp(.4, 1, active);
+  ctx.save(); ctx.globalAlpha *= al; diamond(x + 9, y - ts * .36 + dy, 8, col); ctx.restore();
+  tl.forEach((l, i) => txt(l, x + 34, y + dy + i * ts * 1.3, { size: ts, weight: 800, color: INK, alpha: al }));
+  dl.forEach((l, i) => txt(l, x + 34, y + dy + (tl.length - 1) * ts * 1.3 + ds * 1.42 + i * ds * 1.38, { size: ds, weight: 500, color: DIM, alpha: al }));
+  return hgt;
+}
+// readout: small label + big mono number + unit
+function readout(label, num, unit, x, y, a, o = {}) {
+  if (a <= 0) return;
+  const { numCol = INK, size = 112, labCol = LAB, labSize = 32, sh = false } = o;
+  ctx.save(); if (sh) shadow(20);
+  txt(label, x, y, { size: labSize, weight: 700, color: labCol, alpha: a });
+  txt(num, x, y + size * .98, { size, weight: 700, mono: true, color: numCol, alpha: a, ls: -2 });
+  if (unit) txt(unit, x + tw(num, size, 700, true, -2) + 16, y + size * .98, { size: 42, weight: 700, color: ACC, alpha: a });
+  ctx.restore();
+}
+function chipC(label, x, y, color, a, size = 28) {
+  if (a <= 0) return 0;
+  const w = tw(label, size, 700) + size * 1.1, h = size * 1.7;
+  ctx.save(); ctx.globalAlpha *= a; ctx.beginPath(); ctx.roundRect(x, y - h / 2, w, h, 6);
+  ctx.fillStyle = 'rgba(8,16,18,.7)'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+  txt(label, x + w / 2, y + size * .36, { size, weight: 700, color, align: 'center', alpha: a });
+  return w;
+}
+function label3D(s, v, a, o = {}) {
+  if (a <= 0) return; const P = proj(v); if (P.behind) return;
+  const { size = 30, color = INK, mono = false, align = 'center', dx = 0, dy = 0, weight = 800 } = o;
+  ctx.save(); shadow(12); txt(s, P.x + dx, P.y + dy, { size, weight, mono, color, align, alpha: a }); ctx.restore();
+}
+// side panel (game side window / ops panel) behind the text column
+function panel(t) {
+  const a = win(t, 5.2, OUTRO_AT + .2, .6); if (a <= 0) return;
+  const x = CL - 44, y = 262, w = X1 + 44 - x, h = 1030 - y;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fillStyle = 'rgba(6,13,15,.88)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(120,210,220,.2)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = 'rgba(95,227,255,.55)'; ctx.fillRect(x + 22, y, 72, 3);
+  ctx.restore();
+}
+
+// the world boss on the map: raid-style skull marker, nameplate, HP bar, spawn pings
+function bossMarker(t) {
+  const a = eo(p(t, T_BOSS, .4)) * (1 - .4 * eio(p(t, T_CH, 1))); if (a <= 0) return;
+  const P = proj(BOSS); if (P.behind) return;
+  const s = eback(p(t, T_BOSS, .5)) * (1 + .05 * Math.sin(t * 5.5));
+  ctx.save(); ctx.globalAlpha = a * (1 - p(t, OUTRO_AT, .5));
+  // minimap pings at spawn
+  for (let k = 0; k < 3; k++) { const v = (t - T_BOSS - k * .45); if (v > 0 && v < 1.6) { ctx.strokeStyle = `rgba(255,90,72,${(1 - v / 1.6) * .9})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(P.x, P.y, 30 + v * 150, 0, 7); ctx.stroke(); } }
+  ctx.translate(P.x, P.y - 6); ctx.scale(s, s);
+  shadow(14);
+  ctx.fillStyle = '#2a0907'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineWidth = 4; ctx.strokeStyle = HOT; ctx.stroke();
+  // skull
+  ctx.fillStyle = '#ffe8e2';
+  ctx.beginPath(); ctx.arc(0, -4, 14, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-8.5, 4, 17, 11, 3); ctx.fill();
+  ctx.fillStyle = '#2a0907';
+  ctx.beginPath(); ctx.arc(-5.6, -4, 4.2, 0, 7); ctx.arc(5.6, -4, 4.2, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(-2.5, 5.5); ctx.lineTo(2.5, 5.5); ctx.fill();
+  ctx.fillRect(-3.4, 9, 1.8, 6); ctx.fillRect(1.6, 9, 1.8, 6);
+  ctx.restore();
+  // nameplate + HP bar
+  const hpv = t < B4[3] ? 1 : hpAt(t), na = a * (1 - p(t, OUTRO_AT, .5)) * (1 - .85 * eio(p(t, T_FAR, .4)));
+  const name = t < 15 ? '보스 등장' : '보스';
+  const bw = 150, by = P.y - 72;
+  ctx.save(); ctx.globalAlpha = na; shadow(10);
+  txt(name, P.x, by - 14, { size: 30, weight: 800, color: '#ffb3a8', align: 'center' });
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(10,4,4,.85)'; ctx.fillRect(P.x - bw / 2 - 2, by - 2, bw + 4, 14);
+  ctx.fillStyle = HOT; ctx.fillRect(P.x - bw / 2, by, bw * hpv, 10);
+  ctx.restore();
+}
+// small HP bars over a handful of players (title, 01) and the "나" nameplate
+const PLATES = [3, 17, 29, 44, 58, 71, 86, 103, 121, 137, 152, 176];
+function nameplates(t) {
+  const a = win(t, .4, 14.6, .6); const pos = LINKS.material.uniforms.uP.value;
+  if (a > 0) {
+    ctx.save(); ctx.globalAlpha = a * .85;
+    PLATES.forEach(i => { const P = proj(pos[i]); if (P.behind || P.x > CL - 60 && t > 5.2) return; const c = CLASS[PL[i].cls];
+      ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(P.x - 17, P.y - 26, 34, 7);
+      ctx.fillStyle = `rgb(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0})`; ctx.fillRect(P.x - 16, P.y - 25, 32 * (.55 + .45 * fract(i * .37)), 5); });
+    ctx.restore();
+  }
+}
+function mePlate(t, a, extra = '') {
+  if (a <= 0) return; const c = LINKS.material.uniforms.uP.value[CI]; const P = proj(c); if (P.behind) return;
+  ctx.save(); ctx.globalAlpha = a; shadow(10);
+  const s = '나' + extra, w = tw(s, 30, 800) + 26;
+  ctx.fillStyle = 'rgba(6,13,15,.82)'; ctx.beginPath(); ctx.roundRect(P.x - w / 2, P.y - 70, w, 42, 6); ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = ACC; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = ACC; ctx.beginPath(); ctx.moveTo(P.x - 7, P.y - 28); ctx.lineTo(P.x + 7, P.y - 28); ctx.lineTo(P.x, P.y - 20); ctx.fill();
+  txt(s, P.x, P.y - 39, { size: 30, weight: 800, color: INK, align: 'center' });
+  ctx.restore();
+}
+
+// HUD: topic name on the left, a boss-phase style chapter bar on the right
+function header(t) {
+  const a = eo(p(t, .1, .6)) * (1 - .0 * p(t, OUTRO_AT, .5));
+  ctx.save(); ctx.globalAlpha = a; shadow(10);
+  ctx.fillStyle = HOT; ctx.beginPath(); ctx.arc(X0 + 9, 62, 8, 0, 7); ctx.fill();
+  txt('보스가 뜨면 왜 렉이 걸릴까?', X0 + 30, 72, { size: 28, weight: 700, color: 'rgba(230,244,240,.9)' });
+  let ci = -1; HEAD.forEach((h, i) => { if (t >= h[0]) ci = i; });
+  const lab = t >= OUTRO_AT ? '정리' : ci >= 0 ? `${HEAD[ci][2]}  ${TAG[ci]}` : '';
+  if (lab) txt(lab, X1, 56, { size: 28, weight: 700, color: 'rgba(230,244,240,.9)', align: 'right' });
+  ctx.shadowBlur = 0;
+  const segs = [...HEAD.map(h => [h[0], h[1]]), [OUTRO_AT, DURATION]], bx0 = X1 - 600, gap = 6, tot = 600 - gap * (segs.length - 1);
+  let x = bx0;
+  segs.forEach(([s, e], i) => {
+    const wd = tot * (e - s) / (DURATION - 5), f = clamp((t - s) / (e - s));
+    ctx.fillStyle = 'rgba(160,220,225,.16)'; ctx.fillRect(x, 74, wd, 8);
+    ctx.fillStyle = i === segs.length - 1 ? GOLD : ACC; ctx.fillRect(x, 74, wd * f, 8);
+    x += wd + gap;
+  });
+  ctx.restore();
+}
+// chapter title block (quest-tracker style, top-left)
+function chapterTitle(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a; shadow(16);
+    ctx.save(); ctx.globalAlpha *= k; ctx.fillStyle = ACC; ctx.fillRect(X0, 136, 4, 104); ctx.restore();
+    txt(n, X0 + 22, 176, { size: 30, weight: 700, mono: true, color: ACC, alpha: k });
+    txt(title, X0 + 80 - (1 - k) * 24, 178, { size: 54, weight: 800, color: INK, alpha: k, blur: (1 - k) * 10 });
+    txt(sub, X0 + 80, 228, { size: 30, weight: 500, color: DIM, alpha: k2 });
+    ctx.restore();
+  }
+}
+function vignette(t) {
+  const g = ctx.createRadialGradient(CX, H * .5, W * .25, CX, H * .5, W * .66);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.62)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const tp = ctx.createLinearGradient(0, 0, 0, 290); tp.addColorStop(0, 'rgba(2,6,7,.85)'); tp.addColorStop(.6, 'rgba(2,6,7,.55)'); tp.addColorStop(1, 'rgba(2,6,7,0)');
+  ctx.fillStyle = tp; ctx.fillRect(0, 0, W, 290);
+  const b = ctx.createLinearGradient(0, H * .82, 0, H); b.addColorStop(0, 'rgba(2,6,7,0)'); b.addColorStop(1, 'rgba(2,6,7,.6)');
+  ctx.fillStyle = b; ctx.fillRect(0, H * .82, W, H * .18);
+}
+
+// ── title (0 – 5): world-boss announcement over the zone map ──
+const TITLE = {
+  eyebrow: 'CROWD · AOI · BROADCAST N² · VIEW RADIUS',
+  sub: '인원이 몰리면 서버가 보내야 할 갱신이 인원의 제곱으로 늘어나는 이유',
+  story: ['인원 집중', 'N²', '시야 r²', '서버 · 망', '클라'],
+};
+function sTitle(t) {
+  const a = 1 - eio(p(t, 4.6, .6)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const kb = eo(p(t, T_BOSS + .1, .5));
+  // backing so the title stays readable over the map
+  const bg = ctx.createLinearGradient(0, 0, 1100, 0); bg.addColorStop(0, 'rgba(3,8,9,.82)'); bg.addColorStop(1, 'rgba(3,8,9,0)');
+  ctx.fillStyle = bg; ctx.fillRect(0, 200, 1100, 780);
+  // world-event alert
+  ctx.save(); ctx.globalAlpha *= kb; ctx.beginPath(); ctx.roundRect(X0 + 40, 262, tw('필드 보스 출현', 30, 800) + 66, 50, 6); ctx.fillStyle = 'rgba(255,90,72,.16)'; ctx.fill(); ctx.strokeStyle = HOT; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = HOT; ctx.beginPath(); ctx.arc(X0 + 66, 287, 8, 0, 7); ctx.fill(); ctx.restore();
+  txt('필드 보스 출현', X0 + 86, 298, { size: 30, weight: 800, color: '#ffb3a8', alpha: kb });
+  txt(TITLE.eyebrow, X0 + 40, 362, { size: 26, weight: 600, color: DIM, mono: true, ls: 2, alpha: eo(p(t, .2, .8)) });
+  const k1 = eo(p(t, .45, .8)), k2 = eo(p(t, .85, .8));
+  shadow(24);
+  txt('보스가 뜨면', X0 + 36, 490 + (1 - k1) * 30, { size: 112, weight: 800, color: '#ff7a66', alpha: k1, blur: (1 - k1) * 14, ls: -2 });
+  txt('왜 렉이 걸릴까?', X0 + 36, 620 + (1 - k2) * 30, { size: 112, weight: 800, color: INK, alpha: k2, blur: (1 - k2) * 14, ls: -2 });
+  const sl = wrap(TITLE.sub, 34, 500, 820);
+  sl.forEach((l, i) => txt(l, X0 + 40, 710 + i * 48, { size: 34, weight: 500, color: DIM, alpha: eo(p(t, 1.6, .8)) }));
+  ctx.shadowBlur = 0;
+  // story strip: a dashed route through five waypoints
+  const n = TITLE.story.length, x0 = X0 + 70, x1 = X0 + 800, y = 880, kl = eio(p(t, 2.1, 1.6));
+  ctx.strokeStyle = 'rgba(160,230,240,.45)'; ctx.lineWidth = 3; ctx.setLineDash([10, 9]); ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(lerp(x0, x1, kl), y); ctx.stroke(); ctx.setLineDash([]);
+  TITLE.story.forEach((lab, i) => {
+    const x = lerp(x0, x1, i / (n - 1)), kk = eback(p(t, 2.1 + i * .3, .6)); if (kk <= 0) return;
+    ctx.save(); ctx.translate(x, y); ctx.scale(kk, kk); diamond(0, 0, 13, i === 0 ? HOT : ACC); ctx.fillStyle = '#061012'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, 7); ctx.fill(); ctx.restore();
+    txt(lab, x, y + 52, { size: 28, weight: 700, color: LAB, align: 'center', alpha: clamp(kk) });
+  });
+  ctx.restore();
+}
+
+// ── 01 · crowd ───────────────────────────────────────────────
+function s01(t) {
+  const a = win(t, 5.2, 15.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const n = arrivedNear(t, new THREE.Vector3());
+  readout('보스 주변 인원', String(n), '명', CL, 330, eo(p(t, 5.4, .6)), { numCol: n > 100 ? HOT : INK, size: 128 });
+  let y = 580;
+  y += item('평소엔 맵 전체에 흩어져 있다', '서로 안 보이니까 주고받을 것도 적다', CL, y, p(t, 6.0, .6), { active: t < 10.5 ? 1 : .55 });
+  item('보스가 뜨면 한곳에 몰린다', '같은 존 · 같은 시야 안에 수십~수백 명', CL, y + 14, p(t, 9.6, .6), { col: HOT });
+  ctx.restore();
+}
+
+// ── 02 · N × (N − 1) ─────────────────────────────────────────
+function s02(t) {
+  const a = win(t, 15.0, 28.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  // A: one player moves
+  const aA = win(t, T_ONE - .1, T_ALL + .2, .4);
+  if (aA > 0) {
+    ctx.save(); ctx.globalAlpha *= aA;
+    txt('한 명이 움직이면', CL, 330, { size: 44, weight: 800, color: INK, alpha: eo(p(t, T_ONE, .5)) });
+    txt('보는 사람 N − 1명에게 전송', CL, 392, { size: 34, weight: 700, color: ACC, alpha: eo(p(t, T_ONE + .4, .5)) });
+    ctx.restore();
+    readout('N = 200일 때 받는 사람', '199', '명', CL, 500, aA * eo(p(t, T_ONE + 1.0, .6)), { size: 120 });
+    ctx.save(); ctx.globalAlpha *= aA;
+    wrap('상태 하나 바뀔 때마다 보는 사람 수만큼 복제한다', 30, 500, CW - 20).forEach((l, i) => txt(l, CL, 720 + i * 42, { size: 30, color: DIM, alpha: eo(p(t, T_ONE + 1.6, .6)) }));
+    ctx.restore();
+    mePlate(t, aA * eo(p(t, T_ONE + .3, .4)));
+  }
+  // B: all N move → counter + table
+  const aB = win(t, T_ALL, 28.0, .45);
+  if (aB > 0) {
+    const n = Math.round(nAll(t));
+    ctx.save(); ctx.globalAlpha *= aB;
+    readout(`N = ${n}명 · 틱당 갱신`, fmt(n * (n - 1)), '', CL, 300, eo(p(t, T_ALL, .5)), { numCol: n >= 100 ? HOT : INK, size: 116 });
+    txt('N명 모두 움직이면 · N × (N − 1)', CL, 486, { size: 32, weight: 700, color: ACC, alpha: eo(p(t, T_ALL + .2, .5)) });
+    // table (until 24.0) → bandwidth math + notes
+    const tb = 1 - eio(p(t, 23.9, .4));
+    if (tb > 0) {
+      ctx.save(); ctx.globalAlpha *= tb;
+      txt('틱당 브로드캐스트 (이동만 계산)', CL, 566, { size: 30, weight: 700, color: LAB, alpha: eo(p(t, T_ALL + .3, .5)) });
+      [[10, 90], [50, 2450], [100, 9900], [200, 39800]].forEach(([N, s], i) => {
+        const y = 634 + i * 64, kr = eo(p(t, T_ALL + .4 + i * .25, .4)), on = nAll(t) >= N - .5;
+        const bw = 330 * Math.sqrt(s / 39800);
+        txt('N = ' + N, CL, y, { size: 32, weight: 700, mono: true, color: on ? INK : DIM, alpha: kr });
+        ctx.save(); ctx.globalAlpha *= kr * (on ? 1 : .35); ctx.fillStyle = N >= 100 ? 'rgba(255,90,72,.8)' : 'rgba(95,227,255,.7)'; ctx.beginPath(); ctx.roundRect(CL + 190, y - 24, Math.max(4, bw), 28, 3); ctx.fill(); ctx.restore();
+        txt(fmt(s), X1, y, { size: 36, weight: 800, mono: true, color: on ? (N >= 100 ? HOT : INK) : DIM, align: 'right', alpha: kr });
+      });
+      txt('인원 10배 → 갱신 약 100배', CL, 920, { size: 36, weight: 800, color: HOT, alpha: eo(p(t, T_ALLEND - .3, .5)) });
+      ctx.restore();
+    }
+    const km = p(t, 24.1, .5);
+    if (km > 0) {
+      [['200명: 39,800 갱신/틱', INK], ['× 20Hz = 796,000 갱신/초', INK], ['× 갱신당 50바이트 ≈ 40MB/s (≈320Mbps)', HOT], ['존 서버 하나에서', GOLD]].forEach(([s, c], i) => {
+        txt(s, CL, 566 + i * 48, { size: 31, weight: 700, mono: i < 3, color: c, alpha: eo(p(t, 24.1 + i * .3, .4)) });
+      });
+      let y = 790;
+      y += item('상태 하나 바뀔 때마다 보는 사람 수만큼 복제', '이동 · 공격 · 이펙트 · 버프 전부 해당', CL, y, p(t, 25.4, .5), { ts: 30 });
+      item('그래서 인원의 제곱으로 늘어난다', '200명은 20명의 10배가 아니라 약 100배', CL, y - 6, p(t, 26.2, .5), { ts: 30, col: HOT });
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ── 03 · view radius ─────────────────────────────────────────
+function s03(t) {
+  const a = win(t, 28.0, 41.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const k1 = eo(p(t, T_R1 + .5, .5)), k2 = eo(p(t, T_R2 + .7, .5));
+  const vr = viewR(t), n2 = t < T_R2 ? CNT1 : insideCount(vr);
+  readout('시야 반경 r', String(CNT1), '명', CL, 300, k1, { size: 104 });
+  readout('시야 반경 2r', String(t < T_R2 + .9 ? n2 : CNT2), '명', CL + 380, 300, k2, { size: 104, numCol: GOLD });
+  txt('보이는 인원', CL, 450, { size: 28, weight: 600, color: DIM, alpha: k1 });
+  const notes = [['반경 2배 → 면적 4배 → 보이는 인원 약 4배', '밀도가 고를 때 · 브로드캐스트 = N × 보이는 인원'], ['주변 검색(AOI) 비용도 r²에 비례', '확인할 그리드 칸이 4배'],
+    ['클라도 4배 받고 4배 그린다', '다운링크 · CPU · GPU 모두 증가 → 클라 FPS 하락'], ['다 같이 한 시야에 몰리면 결국 N × (N − 1)', '보스 앞에서는 반경이 넓을수록 최악에 빨리 도달']];
+  let y = 510;
+  notes.forEach(([ti, de], i) => { y += item(ti, de, CL, y, p(t, 32.6 + i * 1.5, .5), { ts: 30, col: i === 3 ? HOT : i === 1 ? '#5fd6e6' : ACC }); });
+  ctx.restore();
+  // ring tags + "나"
+  const vo = viewOn(t); if (vo > 0) {
+    const c = LINKS.material.uniforms.uP.value[CI];
+    const tag = (r, s, al, col) => { if (al <= 0 || r < .1) return; label3D(s, V(c.x + r * .72, 0, c.z - r * .72), al, { size: 44, mono: true, align: 'left', dx: 10, dy: -10, color: col }); };
+    tag(Math.min(vr, VR1), 'r', vo * (t > T_R2 ? .6 : 1) * eo(p(t, T_R1 + .5, .4)), '#bff6ff');
+    tag(vr, '2r', vo * eo(p(t, T_R2 + .7, .4)), GOLD);
+    mePlate(t, vo * eo(p(t, T_R1, .4)));
+    // AOI grid caption on the map
+    ctx.save(); shadow(12); txt('밝은 칸 = AOI 검색이 확인하는 그리드 칸', X0, 1000, { size: 30, weight: 700, color: '#bff6ff', alpha: vo * eo(p(t, 34.1, .5)) }); ctx.restore();
+  }
+}
+
+// ── 04 · what the boss fight adds ────────────────────────────
+function s04(t) {
+  const a = win(t, 41.0, 53.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const beat = B4.findIndex((b, i) => t >= b && t < B4[i + 1]);
+  const ra = i => win(t, B4[i] + .1, B4[i + 1] + (i === 3 ? .2 : .05), .35);
+  readout('16명 피격 × 보는 사람 200명', '3,200', 'DamageNoti', CL, 300, ra(0), { numCol: HOT, size: 112 });
+  if (ra(1) > 0) {
+    ctx.save(); ctx.globalAlpha *= ra(1);
+    txt('상태 변화 하나하나가 전부 브로드캐스트 대상', CL, 300, { size: 30, weight: 700, color: LAB });
+    ctx.restore();
+    chipC('버프 시작 · 종료 · 중첩', CL, 360, '#86ff9a', ra(1) * eo(p(t, B4[1] + .3, .4)), 30);
+    chipC('투사체 생성 · 이동 · 소멸', CL, 424, '#bff6ff', ra(1) * eo(p(t, B4[1] + .6, .4)), 30);
+  }
+  readout('보스가 위협 목록을 다시 계산하는 인원', '200', '명', CL, 300, ra(2), { numCol: GOLD, size: 112 });
+  if (ra(3) > 0) {
+    const hp = Math.round(hpAt(t) * 100);
+    readout('보스 HP', hp + '%', '', CL, 300, ra(3), { size: 112 });
+    ctx.save(); ctx.globalAlpha *= ra(3);
+    txt('HP 변화마다 × 참가자 200명', CL + 330, 400, { size: 32, weight: 700, color: AMB });
+    ctx.restore();
+  }
+  const L = [['광역기 판정', '한 번에 N명 히트 체크 · 데미지 계산 → 결과를 또 N명에게 알림', HOT],
+    ['이펙트 · 버프 · 투사체', '상태 변화 하나하나가 전부 브로드캐스트 대상', '#86ff9a'],
+    ['어그로 · AI 계산', '위협 목록 N명 재계산, 타깃 선정, 경로 탐색', GOLD],
+    ['보스 HP · 페이즈 갱신', '모든 참가자에게 계속 갱신 · 페이즈 전환은 대량 이벤트', AMB]];
+  let y = 500;
+  L.forEach(([ti, de, c], i) => { y += item(ti, de, CL, y, p(t, B4[i] - .1, .5), { col: c, active: beat === i ? 1 : 0, ts: 32 }) - 4; });
+  ctx.restore();
+  // map tags: telegraph cast bar, aggro target
+  const pos = LINKS.material.uniforms.uP.value;
+  const ta = win(t, B4[0] - .1, B4[1] - .2, .3);
+  if (ta > 0) {
+    const P = proj(V(0, 0, 0)), w = 240, f = clamp((t - (I_AOE[t > I_AOE[0] + .5 ? 1 : 0] - .9)) / .9);
+    ctx.save(); ctx.globalAlpha = ta * a; shadow(10);
+    txt('광역기 시전', P.x, P.y + 144, { size: 30, weight: 800, color: '#ffc08a', align: 'center' });
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(10,4,2,.85)'; ctx.fillRect(P.x - w / 2 - 2, P.y + 162, w + 4, 16);
+    ctx.fillStyle = AMB; ctx.fillRect(P.x - w / 2, P.y + 164, w * f, 12);
+    ctx.restore();
+  }
+  const aa = win(t, B4[2] + .2, B4[3] - .1, .3);
+  if (aa > 0) { const top = aggroTop(t); label3D('어그로 1위', pos[top], aa * a, { size: 28, color: GOLD, dy: -30 }); }
+}
+
+// ── 05 · where it breaks: ops panel with five strip charts ──
+function s05(t) {
+  const a = win(t, 53.0, 66.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const N = Math.round(n5(t)), M = meters(N), k = eo(p(t, 53.2, .6));
+  // crowd readout over the map
+  readout('보스 주변 인원', String(N), '명', X0, 300, k, { numCol: N > 120 ? HOT : INK, size: 104, sh: true });
+  ctx.save(); ctx.globalAlpha *= k; ctx.fillStyle = 'rgba(160,220,225,.18)'; ctx.fillRect(X0, 428, 300, 10);
+  ctx.fillStyle = N > 120 ? HOT : ACC; ctx.fillRect(X0, 428, 300 * (N - 20) / 180 + 1, 10); ctx.restore();
+  // strip charts: x = crowd 20 → 200, dashed line = budget / warning level
+  M.forEach(([lab, , v, unit, warn, max, note], i) => {
+    const kk = eo(p(t, 53.6 + i * .25, .5)); if (kk <= 0) return;
+    const y = 300 + i * 146, bad = isBad(v, warn), col = bad ? HOT : INK;
+    txt(lab, CL, y, { size: 30, weight: 800, color: bad ? HOT : LAB, alpha: kk });
+    txt((unit === 'Mbps' || unit === 'KB/s' ? fmt(v) : Math.round(v)) + ' ' + unit, X1, y + 2, { size: 40, weight: 800, mono: true, color: col, align: 'right', alpha: kk });
+    const gx = CL, gy = y + 18, gw = CW, gh = 44;
+    if (i) { ctx.save(); ctx.globalAlpha *= kk; ctx.fillStyle = 'rgba(120,200,210,.14)'; ctx.fillRect(CL, y - 44, CW, 1.5); ctx.restore(); }
+    ctx.save(); ctx.globalAlpha *= kk;
+    ctx.fillStyle = 'rgba(120,200,210,.07)'; ctx.fillRect(gx, gy, gw, gh);
+    const yv = val => gy + gh - clamp(val / max) * gh;
+    const wy = yv(Math.abs(warn)); ctx.strokeStyle = 'rgba(255,90,72,.75)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(gx, wy); ctx.lineTo(gx + gw, wy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); const steps = 48;
+    for (let s = 0; s <= steps; s++) { const nn = lerp(20, N, s / steps), xx = gx + gw * (nn - 20) / 180, vv = meters(nn)[i][2]; s ? ctx.lineTo(xx, yv(vv)) : ctx.moveTo(xx, yv(vv)); }
+    ctx.strokeStyle = bad ? HOT : ACC; ctx.lineWidth = 3; ctx.stroke();
+    ctx.lineTo(gx + gw * (N - 20) / 180, gy + gh); ctx.lineTo(gx, gy + gh); ctx.closePath(); ctx.fillStyle = bad ? 'rgba(255,90,72,.16)' : 'rgba(95,227,255,.14)'; ctx.fill();
+    ctx.restore();
+    txt(note, CL, y + 96, { size: 28, weight: bad ? 700 : 500, color: bad ? '#ff9c8e' : DIM, alpha: kk });
+  });
+  // infra line under the map
+  ctx.save(); shadow(14);
+  const il = wrap('인프라에서 보이는 것: 보스 시간대에 특정 존 서버만 아웃바운드 pps · 대역폭 급등, 한 코어 100%, 연결 끊김 증가', 30, 700, 940);
+  il.forEach((l, i) => txt(l, X0, 990 + i * 44 - (il.length - 1) * 44, { size: 30, weight: 700, color: '#d6f4f6', alpha: eo(p(t, 60.4, .6)) }));
+  ctx.restore();
+  ctx.restore();
+}
+
+// ── 06 · how games reduce it ─────────────────────────────────
+function s06(t) {
+  const a = win(t, 66.0, 77.0, .45); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const act = t < T_K ? 0 : t < T_SH ? 1 : t < T_CH ? 2 : 4;
+  const L = [['거리별 갱신 빈도 (LOD)', '가까우면 20Hz, 멀면 2~5Hz'], ['시야 인원 상한', '가까운 K명만 상세 동기화, 나머지는 요약'], ['혼잡하면 시야 반경 자동 축소', '인원이 몰린 곳만 반경을 줄인다'],
+    ['묶어 보내기 · 델타 압축', '클라마다 틱당 패킷 1개, 바뀐 값만'], ['채널 · 인스턴스 분리', '사본으로 인원을 나눈다 (전용 서버는 격리)'], ['클라 그래픽 LOD · 이펙트 컬링', '멀리 있는 캐릭터 · 남의 이펙트는 간략히']];
+  let y = 300;
+  L.forEach(([ti, de], i) => {
+    const on = i === act || (i === 3 && t > T_SH + .9 && t < T_CH) || (i === 5 && t > 74.6);
+    y += item(ti, de, CL, y, p(t, 66.3 + i * .45, .5), { ts: 30, active: on ? 1 : .15, col: on ? GOLD : ACC }) - 8;
+  });
+  readout(`가까운 ${K}명만 · 200 × ${K}`, fmt(NP * K), '/ 틱', X0, 300, win(t, T_K + .3, T_SH, .35), { size: 96, sh: true });
+  readout(`채널 ${NCH}개 · 채널당 50명`, fmt(50 * 49), '/ 틱', X0, 300, win(t, T_CH + .8, 77.0, .35), { size: 96, sh: true });
+  const lod = win(t, T_FAR - .1, T_K + .2, .4), c = LINKS.material.uniforms.uP.value[CI];
+  [[1.0, '20Hz'], [2.0, '5Hz'], [3.2, '2Hz']].forEach(([r, s], k) => label3D(s, V(c.x + r * .74, 0, c.z - r * .74), lod * eo(p(t, T_FAR + .4 + k * .2, .4)), { size: 34, mono: true, align: 'left', dx: 8, color: '#bff6ff' }));
+  mePlate(t, Math.max(lod, win(t, T_SH, T_CH + .2, .4)));
+  ctx.save(); shadow(14); txt('거리별 갱신 빈도: 가까울수록 자주, 멀수록 드물게', X0, 960, { size: 30, weight: 700, color: '#d6f4f6', alpha: lod * eo(p(t, T_FAR + .5, .5)) }); ctx.restore();
+  const shA = win(t, T_SH + .2, T_CH, .3);
+  label3D('혼잡 → 반경 2r → r', V(c.x, 0, c.z), shA, { size: 32, dy: 130, color: GOLD });
+  const chA = win(t, T_CH + .9, 77.0, .4);
+  CHO.forEach((o, i) => { const P = proj(V(o.x, 0, o.z)); if (chA <= 0 || P.behind) return; const s = `채널 ${i + 1}`, w = tw(s, 28, 800) + 28;
+    ctx.save(); ctx.globalAlpha *= chA; ctx.fillStyle = 'rgba(4,10,11,.82)'; ctx.beginPath(); ctx.roundRect(P.x - w / 2, P.y - 22, w, 44, 6); ctx.fill(); ctx.strokeStyle = 'rgba(95,227,255,.6)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+    txt(s, P.x, P.y + 10, { size: 28, weight: 800, color: '#bff6ff', align: 'center', alpha: chA }); });
+  // summary line
+  const ks = eo(p(t, 74.0, .6));
+  if (ks > 0) {
+    const s = '보스전 렉 대응 = 보내는 양(N², r²)을 줄이거나, 한곳에 모이는 N을 나눈다', w = tw(s, 36, 800) + 60;
+    ctx.save(); ctx.globalAlpha *= ks; ctx.fillStyle = 'rgba(4,10,11,.86)'; ctx.beginPath(); ctx.roundRect(CX - w / 2, 952, w, 70, 10); ctx.fill(); ctx.strokeStyle = 'rgba(255,211,107,.5)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+    txt(s, CX, 1000, { size: 36, weight: 800, color: INK, align: 'center', alpha: ks });
+  }
+  ctx.restore();
+}
+
+// ── outro: the five steps as a quest route over the dimmed map (77 – 82.5) ──
+const OUTRO = {
+  nodes: [['보스 등장', '인원 집중'], ['N × (N − 1)', '브로드캐스트'], ['시야 r²', '보이는 인원'], ['틱 · 아웃바운드', '서버 · 망'], ['수신 · 렌더', '클라']],
+  footer: 'Crowd → N² broadcast → View radius r² → Tick · Outbound · Client',
+};
+function endCard(t) {
+  const v = t - OUTRO_AT, a = eio(p(v, 0, .6));
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(3,8,9,.78)'; ctx.fillRect(0, 0, W, H);
+  const k0 = eo(p(v, .3, .6));
+  txt('보스가 뜨면 렉이 생기는 이유', CX, 250, { size: 56, weight: 800, color: INK, align: 'center', alpha: k0, blur: (1 - k0) * 10 });
+  const n = OUTRO.nodes.length, xs = OUTRO.nodes.map((_, i) => lerp(330, 1590, i / (n - 1))), y = 470, kl = eio(p(v, .4, 1.6));
+  const cols = [HOT, ACC, GOLD, AMB, '#c79bff'];
+  ctx.strokeStyle = 'rgba(160,230,240,.5)'; ctx.lineWidth = 4; ctx.setLineDash([14, 12]); ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(lerp(xs[0], xs[n - 1], kl), y); ctx.stroke(); ctx.setLineDash([]);
+  OUTRO.nodes.forEach(([lab, sub], i) => {
+    const k = eback(p(v, .4 + i * .3, .6)); if (k <= 0) return;
+    ctx.save(); ctx.translate(xs[i], y); ctx.scale(k, k);
+    // map pin
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.ellipse(0, 4, 26, 8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-18, -34, -50, -52, -50, -92); ctx.arc(0, -92, 50, Math.PI, 0); ctx.bezierCurveTo(50, -52, 18, -34, 0, 0); ctx.fill();
+    ctx.fillStyle = '#071113'; ctx.beginPath(); ctx.arc(0, -92, 36, 0, 7); ctx.fill();
+    ctx.restore();
+    txt(String(i + 1), xs[i], y - 92 * k + 15, { size: 42, weight: 800, mono: true, color: cols[i], align: 'center', alpha: clamp(k) });
+    const kt = eo(p(v, .6 + i * .3, .5));
+    txt(lab, xs[i], y + 70, { size: 34, weight: 800, color: INK, align: 'center', alpha: kt });
+    txt(sub, xs[i], y + 114, { size: 28, weight: 500, color: DIM, align: 'center', alpha: kt });
+  });
+  const kt = eo(p(v, 2.0, .7));
+  const L1 = '모이는 인원은 ', L2 = 'N', L3 = ', 비용은 ', L4 = 'N².', fs = 96;
+  const ws = [L1, L2, L3, L4].map(s => tw(s, fs, 800, false, -1)), tot = ws.reduce((x, y) => x + y, 0);
+  let x = CX - tot / 2;
+  [[L1, INK], [L2, ACC], [L3, INK], [L4, HOT]].forEach(([s, c], i) => { txt(s, x, 790 + (1 - kt) * 20, { size: fs, weight: 800, color: c, alpha: kt, blur: (1 - kt) * 10, ls: -1 }); x += ws[i]; });
+  txt(OUTRO.footer, CX, 862, { size: 28, weight: 500, mono: true, color: DIM, align: 'center', alpha: eo(p(v, 2.6, .7)) });
+  txt('jungrok5.github.io/motion-graphics/boss-lag', CX, 980, { size: 30, weight: 600, mono: true, color: ACC, align: 'center', alpha: eo(p(v, 3.0, .7)) });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.shadowBlur = 0;
+  update3D(t);
+  composer.render();
+  ctx.drawImage(gl.domElement, 0, 0, W, H);
+  vignette(t);
+  bossMarker(t); nameplates(t);
+  panel(t);
+  sTitle(t); s01(t); s02(t); s03(t); s04(t); s05(t); s06(t);
+  chapterTitle(t);
+  ctx.save(); shadow(12);
+  txt('* 화면의 수치는 이해를 돕기 위한 예시', X1, 160, { size: 26, weight: 600, color: 'rgba(214,238,236,.62)', align: 'right', alpha: win(t, 5.4, OUTRO_AT, .5) });
+  ctx.restore();
+  if (t > OUTRO_AT) endCard(t);
+  header(t);
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+window.VIEWCOUNT = [CNT1, CNT2];
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [OUTRO_AT, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 25.0;   // full 200-player mesh, 39,800 counter + bandwidth math
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
