@@ -67,7 +67,7 @@
 
 ## 설명 방식 실험
 
-같은 주제를 다른 **설명 방식**으로 다시 만든 실험입니다. 방식마다 가장 잘 맞는 주제를 골랐고, 그림체는 레퍼런스가 아니라
+12개 주제를 각자 가장 잘 맞는 **설명 방식**으로 다시 만든 실험입니다. 그림체는 레퍼런스가 아니라
 그 주제의 실제 세계에서 가져왔습니다. 가로(PC)는 본편 전체 내용(같은 장 · 수치 · 설명 · 용어집), 세로(모바일)는 20초 요약이며,
 3D(three.js)나 2D 캔버스로 브라우저에서 실시간 재생됩니다. 방식별 원칙과 고르는 법은 스킬의 [`styles/`](.claude/skills/tech-motion-explainer/styles/)에 있습니다.
 
@@ -80,6 +80,11 @@
 | 직접 조작해 보기 | 50ms와 RTT, 렉은 어디서 생길까? | 타이밍 분석기 + 슬라이더 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/tick-and-rtt-explore-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/tick-and-rtt-explore/) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
 | 바닥부터 쌓기 | 이동 패킷, 바이트를 줄이면 무슨 일이? | 헥스 덤프 · 비트 격자 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/one-byte-stack-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/one-byte-stack/) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
 | 그려 가며 설명 | Nagle과 TCP_NODELAY | 회의실 화이트보드 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board/) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
+| 흐름을 빛으로 | 내 스킬 하나가 상대 화면에 뜨기까지 | 경로 지도 · 시간 벽 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-flow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-flow/) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
+| 흐름을 빛으로 | 클라가 느리면 서버도 느려진다 | 소켓 버퍼 계측 (Recv-Q · Send-Q) | [가로 (PC)](https://jungrok5.github.io/motion-graphics/slow-client-flow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/slow-client-flow/) · [본편](https://jungrok5.github.io/motion-graphics/slow-client/) |
+| 그려 가며 설명 | 사라진 패킷 하나가 전부를 멈춘다 | 장애 대응실 유리 보드 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/tcp-retransmission-board-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/tcp-retransmission-board/) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
+| 실물을 공간에 | 렉 걸렸다. 서버 탓일까, 내 탓일까? | 온콜 벽 · 대시보드 · 티켓 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/lag-diagnosis-artifacts-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/lag-diagnosis-artifacts/) · [본편](https://jungrok5.github.io/motion-graphics/lag-diagnosis/) |
+| 분해해 들어가기 | 언리얼 클라의 스레드와 렉 | 게임 화면 → Insights 트랙 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/ue-client-threads-inside-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/ue-client-threads-inside/) · [본편](https://jungrok5.github.io/motion-graphics/ue-client-threads/) |
 
 ## 한 주제의 세 페이지
 
