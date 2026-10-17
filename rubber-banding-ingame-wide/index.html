@@ -1,0 +1,1462 @@
+<meta charset="utf-8">
+<title>Rubber Banding In-Game</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="러버밴딩을 게임 화면과 넷코드 디버그 화면으로 재현한 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="68" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:07</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../rubber-banding/article.html">설명 읽기</a><a href="../rubber-banding/terms.html">용어집</a><a href="../rubber-banding/">2D 원본</a><a href="../rubber-banding-ingame/">세로 요약</a></nav>
+</div>
+<!-- Source text: same notes as ../rubber-banding/index.html (its article.html / terms.html are the 설명 · 용어집 for this page). Not shown on this page. -->
+<section class="notes" id="notes" hidden>
+<p class="lede">이 영상은 MMO에서 캐릭터가 앞으로 달리다 뒤로 끌려가는 러버밴딩이 왜 생기는지 보여 준다. 클라이언트는 입력 즉시 캐릭터를 움직이고 서버가 나중에 그 이동을 판정하는데, 둘의 결과가 어긋나면 서버 쪽 위치로 되돌려진다. 원인은 네트워크 지연과 서버·클라 상태 불일치 두 갈래이고, 완전히 없앨 수는 없지만 덜 생기고 덜 보이게 만들 수 있다.</p>
+
+<article data-ch="01">
+<p>0m부터 50m까지 눈금이 있는 길 위에 두 개의 점이 있다. 꽉 찬 점은 "클라 화면"의 내 캐릭터이고, 점선 원은 "서버 판정" 위치다. 처음에는 서버 위치가 클라를 살짝 뒤에서 따라오는데, 어느 순간 서버 점이 멈추고 "서버: 여기서 이동 인정 멈춤" 칩이 뜬다.</p>
+<p>클라 점은 그 뒤로도 계속 달리다가 "↩ 보정 · 뒤로 끌려감" 표시와 함께 서버 점 위치로 튕기듯 되돌아간다. 그 다음 두 점이 다시 같이 움직인다.</p>
+<p>화면 문구는 "앞으로 달렸는데 뒤로 끌려가는 현상 = 러버밴딩", "내 화면(클라)의 위치와 서버가 인정한 위치가 벌어졌다가, 서버 쪽으로 되돌려질 때 생깁니다"다. 게임 서버가 위치의 최종 권한을 갖고 있기 때문에 생기는 현상이다.</p>
+</article>
+
+<article data-ch="02">
+<p>위 레인은 Client("입력 즉시 이동 (예측)"), 아래 레인은 Server("받은 입력 검증 → 확정")이고 가로축은 시간이다. 클라가 <code>Move #1</code>부터 <code>Move #6</code>까지 이동 입력을 차례로 보내고, 서버는 각각을 검증한 뒤 <code>Ack #1</code>~<code>Ack #5</code>로 응답한다. 첫 왕복 구간에는 <code>RTT</code> 표시가 붙는다. 입력을 보낸 뒤 판정이 돌아오기까지 최소 한 번의 왕복 시간이 걸린다.</p>
+<p>클라는 Ack를 기다리지 않고 먼저 움직인다. 기다리면 모든 조작이 RTT만큼 늦게 반응하기 때문이다. 이렇게 서버 결과를 예상해 먼저 반영하는 것을 클라이언트 예측이라 한다.</p>
+<p>마지막 <code>Move #6</code>에는 Ack 대신 빨간 <code>Correction #6</code>이 돌아오고, 클라 쪽에 "↩ 위치 되돌림"이 뜬다. 아래 문구가 두 경우를 정리한다.</p>
+<ul>
+<li>판정 = 예측 → 아무 일도 없음 (대부분의 경우)</li>
+<li>판정 ≠ 예측 → 보정 패킷이 클라 위치를 덮어씀 = 러버밴딩</li>
+</ul>
+</article>
+
+<article data-ch="03">
+<p>Client와 Server 사이로 이동 패킷이 일정 간격으로 흘러가다가, 중간에 패킷들이 길 위에서 멈추고 일부는 빨갛게 떨어진다. "정체 · 손실 · 재전송 대기" 칩과 함께 원인 세 가지가 붙는다. 지연 스파이크, 패킷 손실, TCP 재전송 대기(Head-of-Line)다.</p>
+<p>오른쪽 <code>RTT (ms)</code> 그래프는 평소 60ms 안팎에서 순간적으로 800ms대까지 치솟았다가 내려온다. TCP는 순서를 보장하기 때문에 앞 패킷 하나가 손실되면 재전송될 때까지 뒤에 도착한 패킷도 애플리케이션에 전달되지 않는다. 손실 하나가 그 뒤 입력 전체의 지연으로 번지는 이유다.</p>
+<p>아래 레인에서 클라 캐릭터는 계속 달리지만 서버 캐릭터는 제자리에 서 있다가, 결국 클라가 서버 위치로 되돌려진다. 화면 문구는 "입력이 안 오는 동안 서버의 캐릭터는 제자리", "서버 정책에 따라 늦게 몰려온 입력은 거부되거나 잘린다 → 서버 위치로 되돌림"이다.</p>
+</article>
+
+<article data-ch="04">
+<p>네트워크가 정상이어도 서버와 클라가 알고 있는 상태가 다르면 판정이 어긋난다. 화면은 네 칸으로 나뉘어 각 사례를 반복 재생한다.</p>
+<ul>
+<li><strong>속도 검증 (안티 스피드핵)</strong>: 클라는 "이속 +30%" 버프로 달리는데 서버에서는 "버프 만료" 상태다. 서버 기준으로는 허용 속도를 넘으니 보정한다.</li>
+<li><strong>충돌 · 지형 불일치</strong>: 서버에서는 문이 닫혀 있다("서버: 문 닫힘"). 클라만 문을 통과하고, 서버 위치는 문 앞에서 멈춘다.</li>
+<li><strong>상태이상 선적용</strong>: 서버가 먼저 <code>STUN</code>을 걸었는데 클라는 아직 모르고 계속 이동한다. 스턴 시점 위치로 되돌아간다.</li>
+<li><strong>서버 틱 지연 (과부하)</strong>: 칩이 <code>Tick 20Hz</code>에서 <code>Tick 20Hz → 4Hz</code>로 바뀐다. 과부하 서버가 밀려 쌓인 입력을 버리거나 잘라내서, 서버 위치는 틱마다 조금씩만 계단식으로 따라오고 결국 클라가 되돌려진다. 늦기만 하고 쌓인 입력을 모두 처리하면 되돌림은 없다.</li>
+</ul>
+<p>네 경우 모두 클라 점이 먼저 나가고 서버 점이 뒤에 남았다가 클라가 끌려온다는 모양은 같다. 03과 달리 패킷은 제때 도착했고, 어긋난 것은 판정에 쓰인 상태다.</p>
+</article>
+
+<article data-ch="05">
+<p>위쪽 패널은 같은 보정을 두 방식으로 처리한 결과를 나란히 보여 준다. "즉시 스냅"(보정 위치로 순간이동) 레인에서는 <code>Correction</code>을 받을 때마다 캐릭터가 뒤로 튄다. "재조정 + 스무딩"(미확인 입력 재적용 후 보간) 레인에서는 같은 보정을 받아도 실제 오차만큼만 부드럽게 밀린다.</p>
+<p>차이는 서버가 보내 준 위치가 이미 과거 시점이라는 데서 나온다. 즉시 스냅은 그 과거 위치로 바로 옮기니 그 사이에 입력한 이동까지 사라진다. 재조정은 보정 위치에서 아직 Ack를 받지 못한 입력을 다시 적용해 현재 위치를 다시 계산한다.</p>
+<p>아래에는 줄이는 방법 여섯 가지가 체크된다.</p>
+<ul>
+<li>입력 시퀀스 번호 + Ack: 서버가 어디까지 처리했는지 클라가 안다.</li>
+<li>재조정 (Reconciliation): 보정 위치에서 미확인 입력을 다시 적용한다.</li>
+<li>오차 허용치: 작은 차이는 보정하지 않는다.</li>
+<li>보정 보간 (Smoothing): 순간이동 대신 100~200ms에 걸쳐 이동한다.</li>
+<li>이동은 UDP · 비신뢰 채널: HOL을 피하고, 최근 입력을 중복 전송한다.</li>
+<li>서버 틱 여유 · 상태 동기화: 버프 · 상태이상 · 충돌을 같은 기준으로 판정한다.</li>
+</ul>
+<p>시퀀스 번호 · 재조정 · 보간은 클라 쪽, 오차 허용치는 서버 쪽에서 보정 자체를 줄인다. 뒤의 둘은 03과 04의 원인을 줄이는 방법이다.</p>
+</article>
+
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>러버밴딩</dt><dd>클라 화면의 캐릭터가 서버가 인정한 위치로 끌려 되돌아가는 현상이다. 고무줄에 당겨지듯 보여서 붙은 이름이다.</dd>
+<dt>서버 권한 (Server Authority)</dt><dd>위치, 체력 같은 게임 상태의 최종 결정권을 서버가 갖는 구조다. 클라 조작을 그대로 믿지 않아 치트를 막을 수 있다.</dd>
+<dt>클라이언트 예측 (Prediction)</dt><dd>서버 응답을 기다리지 않고 입력 즉시 결과를 화면에 반영하는 방식이다. 조작감은 좋아지지만 서버 판정과 어긋날 수 있다.</dd>
+<dt>Ack</dt><dd>서버가 특정 입력을 받아 처리했다고 알려 주는 응답이다. 영상에서는 <code>Ack #n</code>이 <code>Move #n</code>에 대한 확인이다.</dd>
+<dt>Correction (보정 패킷)</dt><dd>서버 판정이 클라 예측과 다를 때 서버가 보내는, 그 입력 시점의 올바른 위치다. 클라는 여기서 미확인 입력을 다시 적용한다.</dd>
+<dt>RTT</dt><dd>패킷이 클라에서 서버로 갔다가 응답이 돌아오기까지의 왕복 시간이다. 흔히 핑이라고 부른다.</dd>
+<dt>지연 스파이크</dt><dd>평소 낮던 RTT가 짧은 시간 동안 크게 튀는 현상이다. 영상의 RTT 그래프에서 60ms 안팎이던 값이 800ms대로 오른다.</dd>
+<dt>패킷 손실</dt><dd>전송 중에 패킷이 사라져 상대에게 도착하지 않는 것이다. TCP에서는 재전송으로 복구되지만 그만큼 늦어진다.</dd>
+<dt>Head-of-Line (HOL) 블로킹</dt><dd>순서를 보장하는 TCP에서 앞 패킷 하나가 재전송을 기다리는 동안 뒤 패킷들도 전달되지 못하고 막히는 현상이다.</dd>
+<dt>UDP · 비신뢰 채널</dt><dd>재전송과 순서 보장이 없는 전송 방식이다. 이동 입력은 UDP로 보내되 패킷마다 최근 입력 몇 개를 중복해 실어 손실을 견딘다. 서버가 보내는 상태는 최신 값만 쓴다.</dd>
+<dt>틱 / 틱레이트</dt><dd>서버가 게임 상태를 한 번 갱신하는 주기가 틱이고, 초당 틱 수가 틱레이트다. <code>20Hz</code>는 50ms마다 한 번 판정한다는 뜻이다.</dd>
+<dt>재조정 (Reconciliation)</dt><dd>보정을 받으면 그 위치에서 아직 Ack를 못 받은 입력을 다시 적용해 현재 위치를 다시 계산하는 기법이다.</dd>
+<dt>보정 보간 (Smoothing)</dt><dd>보정된 위치로 순간이동하지 않고 짧은 시간(영상에서는 100~200ms)에 걸쳐 옮겨 가는 처리다.</dd>
+<dt>오차 허용치</dt><dd>서버와 클라 위치 차이가 이 값보다 작으면 보정하지 않는 기준이다. 사소한 떨림을 줄인다.</dd>
+</dl>
+</section>
+<script type="importmap">{"imports": {"three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/"}}</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Rubber Banding In-Game — 앞으로 달렸는데, 왜 뒤로 끌려갈까? (67.5s, 1920×1080, PC landscape)
+//  Approach "게임 화면 재현": the full explainer of ../rubber-banding/index.html (same 5 chapters, timing,
+//  numbers, captions, footnote and notes) shown inside a low-poly game arena, first as the player sees it,
+//  then again with an in-house netcode debug view: client-predicted character (solid), server-authoritative
+//  ghost (amber wireframe), input seq footprints, Ack / Correction lanes, RTT · LOSS · TICK readouts,
+//  the correction vector. Slow motion, freeze-frame and replay are the tools.
+//  three.js renders offscreen → drawn onto #c → the 2D HUD / captions are drawn on top.
+//  Every frame is a pure function of time: renderAt(t).
+//    title   arena beauty shot                    01  live run → snap → rewind → replay with net debug (freeze)
+//    02      Move #1–#6 → Ack, #6 → Correction    03  RTT spike · loss · HOL → server ghost stalls
+//    04      speed buff · door · stun · 4Hz tick  05  즉시 스냅 vs 재조정 + 스무딩, six fixes
+//    outro   session summary card
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 67.5;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math ─────────────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+const ramp = (s, a, b, r = .15) => Math.min(clamp((s - a) / r), clamp((b - s) / r));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const mix = (a, b, k) => { const o = {}; for (const key in a) o[key] = lerp(a[key], b[key] ?? a[key], k); return o; };
+
+// ── timeline ─────────────────────────────────────────────────
+// [start, end, number, title, subtitle] — same chapters as ../rubber-banding/index.html
+const HEAD = [
+  [5.0, 14.0, '01', '러버밴딩이란', '내 캐릭터가 서버가 인정한 위치로 끌려 돌아가는 현상'],
+  [14.0, 25.5, '02', '예측과 판정', '클라는 먼저 움직이고, 서버가 나중에 맞는지 판정합니다'],
+  [25.5, 37.0, '03', '원인 ① 네트워크', '입력이 늦거나 사라지면 서버의 캐릭터는 멈춰 있습니다'],
+  [37.0, 50.5, '04', '원인 ② 판정 불일치', '네트워크가 멀쩡해도, 서버와 클라가 아는 상태가 다르면 생깁니다'],
+  [50.5, 62.0, '05', '줄이는 방법', '완전히 없앨 순 없지만, 덜 생기고 덜 보이게'],
+];
+const OUTRO_AT = DURATION - 5.5;   // 62.0
+
+// ── HUD palette (roles: client = 예측, server = 판정, red = 보정, pkt = 패킷, pub = 상태 이벤트, ok = 해결) ──
+const C = {
+  text: '#f4f6fa', dim: '#b4bdcb', faint: '#7c8696', client: '#47dcff', server: '#ffb43a', red: '#ff5470',
+  ok: '#5ee6a0', pkt: '#b9a3ff', pub: '#ff86d6', panel: 'rgba(8,12,20,.84)', line: 'rgba(160,185,215,.30)',
+};
+
+// ── three setup ──────────────────────────────────────────────
+const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.setPixelRatio(1); gl.setSize(W, H, false);
+gl.shadowMap.enabled = true; gl.shadowMap.type = THREE.PCFSoftShadowMap;
+gl.toneMapping = THREE.NeutralToneMapping; gl.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog('#e4d9c4', 50, 190);
+const camera = new THREE.PerspectiveCamera(34, W / H, .1, 700);
+const composer = new EffectComposer(gl);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .55, .35, 1.0);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const hemi = new THREE.HemisphereLight('#dfeaff', '#8e7c66', 1.05);
+const sun = new THREE.DirectionalLight('#fff0da', 2.1);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 90 });
+sun.shadow.bias = -.0005; sun.shadow.normalBias = .03;
+scene.add(hemi, sun, sun.target);
+
+// sky dome (follows the camera)
+const sky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { top: { value: new THREE.Color('#86b2dc') }, bot: { value: new THREE.Color('#efe3cc') }, dim: { value: 0 } },
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 top, bot; uniform float dim; varying vec3 vP; void main(){ float h = clamp(vP.y * 2.2 + .04, 0., 1.); vec3 c = mix(bot, top, pow(h, .7)); gl_FragColor = vec4(c * (1. - .4 * dim), 1.); }',
+}));
+scene.add(sky);
+
+// ── materials / textures ─────────────────────────────────────
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .92, metalness: 0, flatShading: true, ...o });
+function canvasTex(w, h, draw, rep) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  if (rep) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(rep[0], rep[1]); }
+  tex.redraw = () => { draw(c.getContext('2d'), w, h); tex.needsUpdate = true; };
+  tex.redraw();
+  return tex;
+}
+const tileTex = canvasTex(512, 512, (g, w, h) => {
+  const R = rng(3);
+  g.fillStyle = '#857d71'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const l = 62 + R() * 8, off = (j % 2) * 64;
+    g.fillStyle = `hsl(${36 + R() * 8}, ${10 + R() * 6}%, ${l}%)`;
+    g.fillRect(((i * 128 + off) % w) + 3, j * 128 + 3, 122, 122);
+    if (off) g.fillRect(((i * 128 + off) % w) - 128 + 3, j * 128 + 3, 122, 122);
+  }
+  for (let n = 0; n < 900; n++) { g.fillStyle = `rgba(${R() < .5 ? '60,50,40' : '255,250,240'},${.04 + R() * .06})`; g.fillRect(R() * w, R() * h, 2 + R() * 4, 2 + R() * 4); }
+}, [100, 100]);
+
+// running track 0 m … 100 m along +x, 6 m wide, distance markers every 5 m (drawn again once fonts load)
+const TRK = { x0: -6, x1: 106, w: 6.4 };
+const trackTex = canvasTex(4096, 234, (g, w, h) => {
+  const R = rng(11), ppm = w / (TRK.x1 - TRK.x0);
+  g.fillStyle = '#9a8468'; g.fillRect(0, 0, w, h);
+  for (let n = 0; n < 9000; n++) { g.fillStyle = `rgba(${R() < .5 ? '70,55,40' : '235,220,195'},${.05 + R() * .08})`; g.fillRect(R() * w, R() * h, 2 + R() * 3, 2 + R() * 3); }
+  g.fillStyle = '#6e5c48'; g.fillRect(0, 0, w, 9); g.fillRect(0, h - 9, w, 9);
+  for (let m = 0; m <= 100; m += 5) {
+    const X = (m - TRK.x0) * ppm;
+    g.fillStyle = m % 10 ? 'rgba(244,236,218,.55)' : 'rgba(248,242,228,.85)'; g.fillRect(X - 2.5, 12, 5, h - 24);
+    g.fillStyle = 'rgba(250,245,232,.92)'; g.font = `800 ${m % 10 ? 30 : 40}px Pretendard, sans-serif`; g.textBaseline = 'alphabetic';
+    g.fillText(m + 'm', X + 9, h - 22);
+  }
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (i + j) % 2 ? '#f5efe2' : '#2a2520'; g.fillRect((0 - TRK.x0) * ppm - 22 + j * 11, 12 + i * ((h - 24) / 12), 11, (h - 24) / 12); }
+});
+const chevTex = canvasTex(128, 128, (g, w, h) => {
+  g.clearRect(0, 0, w, h); g.fillStyle = '#fff';
+  g.beginPath(); g.moveTo(20, 18); g.lineTo(72, 18); g.lineTo(112, 64); g.lineTo(72, 110); g.lineTo(20, 110); g.lineTo(60, 64); g.closePath(); g.fill();
+});
+
+// ── world ────────────────────────────────────────────────────
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ map: tileTex, roughness: .96 }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(50, 0, 0); ground.receiveShadow = true; scene.add(ground);
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(400, 200), M('#7f9b5f', { flatShading: false }));
+grass.rotation.x = -Math.PI / 2; grass.position.set(50, .004, -112.5); grass.receiveShadow = true; scene.add(grass);
+const track = new THREE.Mesh(new THREE.PlaneGeometry(TRK.x1 - TRK.x0, TRK.w), new THREE.MeshStandardMaterial({ map: trackTex, roughness: .97 }));
+track.rotation.x = -Math.PI / 2; track.position.set((TRK.x0 + TRK.x1) / 2, .01, 0); track.receiveShadow = true; scene.add(track);
+
+function instanced(geo, mat, list, { cast = true, recv = true } = {}) {
+  const m = new THREE.InstancedMesh(geo, mat, list.length), o = new THREE.Object3D();
+  list.forEach((q, i) => { o.position.set(q[0], q[1], q[2]); o.rotation.set(0, q[4] || 0, 0); o.scale.setScalar(q[3] || 1); o.updateMatrix(); m.setMatrixAt(i, o.matrix); });
+  m.castShadow = cast; m.receiveShadow = recv; scene.add(m); return m;
+}
+{
+  const R = rng(21), stone = M('#d3c9b7'), stone2 = M('#b6ab98');
+  const px = []; for (let x = -16; x <= 120; x += 8) px.push(x);
+  instanced(new THREE.CylinderGeometry(.55, .62, 5, 6), stone, px.map(x => [x, 2.5, -8.2]));
+  instanced(new THREE.BoxGeometry(1.5, .45, 1.5), stone2, px.map(x => [x, 5.2, -8.2]));
+  instanced(new THREE.BoxGeometry(1.5, .4, 1.5), stone2, px.map(x => [x, .2, -8.2]));
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(170, 2.6, 1.2), M('#a69a87')); wall.position.set(50, 1.3, -11.8); wall.castShadow = wall.receiveShadow = true; scene.add(wall);
+  const cr = []; for (let x = -34; x <= 134; x += 2.2) cr.push([x, 2.95, -11.8]);
+  instanced(new THREE.BoxGeometry(1.1, .8, 1.3), M('#9d917e'), cr);
+  const bn = []; for (let x = -12; x <= 120; x += 16) bn.push([x + 4, 1.45, -11.16]);
+  instanced(new THREE.BoxGeometry(1.5, 2.3, .08), M('#2f6c71'), bn.filter((_, i) => i % 2 === 0), { cast: false });
+  instanced(new THREE.BoxGeometry(1.5, 2.3, .08), M('#6c4274'), bn.filter((_, i) => i % 2 === 1), { cast: false });
+  const tr = []; for (let i = 0; i < 70; i++) tr.push([-30 + R() * 160, 0, -15 - R() * 14, .8 + R() * .6]);
+  instanced(new THREE.ConeGeometry(1.8, 5, 6), M('#5d8a4c'), tr.map(q => [q[0], 4.6 * q[3], q[2], q[3]]));
+  instanced(new THREE.ConeGeometry(1.4, 3.6, 6), M('#6e9a57'), tr.map(q => [q[0] + .2, 6.6 * q[3], q[2], q[3]]));
+  instanced(new THREE.CylinderGeometry(.22, .3, 2.4, 5), M('#6b4a32'), tr.map(q => [q[0], 1.2 * q[3], q[2], q[3]]));
+  const rk = []; for (let i = 0; i < 46; i++) { const near = i % 2; rk.push([-12 + R() * 125, .1, near ? 5.2 + R() * 3.5 : -4.6 - R() * 1.8, .25 + R() * .45, R() * 6]); }
+  instanced(new THREE.IcosahedronGeometry(1, 0), M('#8f8a82'), rk);
+  const tf = []; for (let i = 0; i < 90; i++) tf.push([-12 + R() * 125, .12, (R() < .5 ? 4 + R() * 5 : -4.2 - R() * 2.6), .35 + R() * .35, R() * 6]);
+  instanced(new THREE.ConeGeometry(.18, .5, 4), M('#7a9a52'), tf, { cast: false });
+  const bo = []; for (let x = -5; x <= 105; x += 10) { bo.push([x + 5, .35, 3.75]); bo.push([x + 5, .35, -3.75]); }
+  instanced(new THREE.BoxGeometry(.32, .7, .32), stone2, bo);
+}
+
+// ── characters ───────────────────────────────────────────────
+const STRIDE = 1.9;
+const GEO = {
+  pelvis: new THREE.BoxGeometry(.36, .2, .3), belt: new THREE.BoxGeometry(.39, .08, .33), torso: new THREE.CylinderGeometry(.25, .19, .5, 6),
+  scarf: new THREE.CylinderGeometry(.2, .24, .11, 6), head: new THREE.BoxGeometry(.27, .29, .27), hair: new THREE.BoxGeometry(.29, .11, .29),
+  hairB: new THREE.BoxGeometry(.09, .2, .29), eye: new THREE.BoxGeometry(.02, .05, .04), uarm: new THREE.BoxGeometry(.12, .3, .12),
+  farm: new THREE.BoxGeometry(.1, .27, .1), thigh: new THREE.BoxGeometry(.15, .42, .15), shin: new THREE.BoxGeometry(.13, .38, .13), boot: new THREE.BoxGeometry(.23, .1, .15),
+};
+const EDGE = {}; for (const k in GEO) EDGE[k] = new THREE.EdgesGeometry(GEO[k], 25);
+function buildChar(mats, ghostLine = null) {
+  const root = new THREE.Group(), parts = [];
+  const mk = (key, m, x, y, z, parent) => {
+    const me = new THREE.Mesh(GEO[key], m); me.position.set(x, y, z); parent.add(me);
+    if (ghostLine) me.add(new THREE.LineSegments(EDGE[key], ghostLine)); else me.castShadow = true;
+    parts.push(me); return me;
+  };
+  const hips = new THREE.Group(); root.add(hips);
+  mk('pelvis', mats.pants, 0, 0, 0, hips); mk('belt', mats.belt, 0, .11, 0, hips);
+  const chest = new THREE.Group(); chest.position.y = .14; hips.add(chest);
+  mk('torso', mats.tunic, 0, .25, 0, chest); mk('scarf', mats.scarf, 0, .53, 0, chest);
+  const head = new THREE.Group(); head.position.y = .58; chest.add(head);
+  mk('head', mats.skin, 0, .16, 0, head); mk('hair', mats.hair, -.01, .33, 0, head); mk('hairB', mats.hair, -.11, .22, 0, head);
+  if (!ghostLine) { mk('eye', mats.hair, .136, .17, .06, head); mk('eye', mats.hair, .136, .17, -.06, head); }
+  const sh = [], el = [], hp = [], kn = [];
+  [1, -1].forEach(side => {
+    const s = new THREE.Group(); s.position.set(0, .46, side * .3); chest.add(s); mk('uarm', mats.tunic, 0, -.14, 0, s);
+    const e = new THREE.Group(); e.position.y = -.28; s.add(e); mk('farm', mats.skin, 0, -.12, 0, e);
+    const h = new THREE.Group(); h.position.set(0, -.06, side * .1); hips.add(h); mk('thigh', mats.pants, 0, -.21, 0, h);
+    const k = new THREE.Group(); k.position.y = -.42; h.add(k); mk('shin', mats.pants, 0, -.19, 0, k); mk('boot', mats.boot, .04, -.4, 0, k);
+    sh.push(s); el.push(e); hp.push(h); kn.push(k);
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .6, 40), new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, depthWrite: false, fog: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = .035; ring.visible = false; root.add(ring);
+  scene.add(root);
+  return { root, hips, chest, head, sh, el, hp, kn, parts, ring };
+}
+function pose(c, st) {
+  const x = st.x, k = clamp(st.k || 0), stun = st.stun || 0, tt = st.t || 0;
+  const ph = x / STRIDE * Math.PI * 2;
+  c.root.visible = true; c.root.position.set(x, 0, st.z || 0); c.root.rotation.y = st.yaw || 0;
+  c.hips.position.y = .93 - .05 * k + .07 * k * Math.abs(Math.cos(ph)) + (1 - k) * .008 * Math.sin(tt * 2.4) - .05 * stun;
+  c.hips.rotation.z = -.2 * k + .06 * stun;
+  c.chest.rotation.set(0, .18 * k * Math.sin(ph), -.05 * k + .12 * stun);
+  c.head.rotation.set(stun * .25 * Math.sin(tt * 5), 0, .12 * k - .3 * stun);
+  for (let i = 0; i < 2; i++) {
+    const q = ph + i * Math.PI, sq = Math.sin(q), cq = Math.cos(q), side = i ? -1 : 1;
+    c.hp[i].rotation.z = .2 * k + .75 * k * sq;
+    c.kn[i].rotation.z = -k * (.18 + 1.05 * Math.max(0, cq)) - .1 * stun;
+    c.sh[i].rotation.set(-side * (.07 + .08 * (1 - k) + .15 * stun), 0, -.65 * k * sq);
+    c.el[i].rotation.z = .2 + .95 * k - .15 * stun;
+  }
+}
+const CMAT = { skin: M('#ebbe96'), tunic: M('#2f62b3'), pants: M('#2c3242'), hair: M('#3a2618'), boot: M('#4d3426'), belt: M('#8e6435'), scarf: M('#f1ece1') };
+function ghostMats(hex, k = 2.4) {
+  const fill = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: .16, depthWrite: false, fog: false });
+  const line = new THREE.LineBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), transparent: true, opacity: .95, depthWrite: false, fog: false });
+  return { fill, line, mats: { skin: fill, tunic: fill, pants: fill, hair: fill, boot: fill, belt: fill, scarf: fill } };
+}
+function buildGhost(hex) { const g = ghostMats(hex); const c = buildChar(g.mats, g.line); c.fill = g.fill; c.line = g.line; return c; }
+const client = buildChar(CMAT), clientB = buildChar(CMAT);
+const ghost = buildGhost('#ffb43a'), ghostB = buildGhost('#ffb43a');
+const after = buildGhost('#47dcff'), afterB = buildGhost('#47dcff');
+const ALLCH = [client, clientB, ghost, ghostB, after, afterB];
+client.ring.material.color.set('#47dcff'); clientB.ring.material.color.set('#47dcff');
+ghost.ring.material.color.set('#ffb43a'); ghostB.ring.material.color.set('#ffb43a');
+function setGhost(g, st, a, near = 9) { if (a <= .01) return; pose(g, st); g.fill.opacity = .17 * a * clamp(near / 1.2); g.line.opacity = .95 * a; g.ring.visible = true; g.ring.material.opacity = .8 * a; }
+function setRing(c, a) { c.ring.visible = a > .01; c.ring.material.opacity = .85 * a; }
+
+// stun stars, speed aura
+function makeStars(parent) {
+  const g = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe36a').multiplyScalar(2), transparent: true, fog: false });
+  for (let i = 0; i < 5; i++) g.add(new THREE.Mesh(new THREE.OctahedronGeometry(.085, 0), mat));
+  g.position.y = 2.08; g.visible = false; g.mat = mat; parent.add(g); return g;
+}
+client.stars = makeStars(client.root); ghost.stars = makeStars(ghost.root);
+function setStars(g, tt, a) { g.visible = a > .01; g.mat.opacity = a; g.children.forEach((m, i) => { const an = tt * 4 + i * Math.PI * 2 / 5; m.position.set(Math.cos(an) * .34, Math.sin(tt * 6 + i) * .04, Math.sin(an) * .34); m.rotation.y = tt * 5; }); }
+const aura = new THREE.Group(); client.root.add(aura); aura.visible = false;
+{
+  const am = new THREE.MeshBasicMaterial({ color: new THREE.Color('#7dff9a').multiplyScalar(1.6), transparent: true, opacity: .7, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const r = new THREE.Mesh(new THREE.RingGeometry(.42, .78, 6), am); r.rotation.x = -Math.PI / 2; r.position.y = .05; aura.add(r);
+  for (let i = 0; i < 7; i++) aura.add(new THREE.Mesh(new THREE.TetrahedronGeometry(.07), am));
+  for (let i = 0; i < 3; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(1.2, .025, .025), am); aura.add(s); }
+  aura.mat = am;
+}
+function setAura(tt, a) {
+  aura.visible = a > .01; aura.mat.opacity = .75 * a;
+  aura.children.forEach((m, i) => {
+    if (i === 0) { m.rotation.z = tt * 2; return; }
+    if (i <= 7) { const q = (tt * .9 + i / 7) % 1, an = i * 2.4 + tt * 3; m.position.set(Math.cos(an) * .5, q * 1.8, Math.sin(an) * .5); m.scale.setScalar(1 - q); return; }
+    const j = i - 8; m.position.set(-.9 - ((tt * 3 + j * .37) % 1) * .6, .55 + j * .35, (j - 1) * .22);
+  });
+}
+
+// gate (case B): the client sees the portcullis raised, the server has it down
+const DOOR_X = 25 + 9.5;
+const door = new THREE.Group(); scene.add(door); door.position.x = DOOR_X;
+const doorS = new THREE.Group(); scene.add(doorS); doorS.position.x = DOOR_X;
+const grate = new THREE.Group(); door.add(grate);
+{
+  const st = M('#b9ad99'), iron = M('#3f3b38', { roughness: .6 });
+  for (const z of [-3.35, 3.35]) { const m = new THREE.Mesh(new THREE.BoxGeometry(.7, 4.2, .7), st); m.position.set(0, 2.1, z); m.castShadow = true; door.add(m); }
+  const lin = new THREE.Mesh(new THREE.BoxGeometry(.9, 3.6, 7.4), st); lin.position.y = 6.0; lin.castShadow = true; door.add(lin);
+  const g = ghostMats('#ffb43a', 2.4), bars = [];
+  for (let z = -2.7; z <= 2.71; z += .6) bars.push(['v', z]);
+  for (const y of [.6, 1.6, 2.6, 3.5]) bars.push(['h', y]);
+  for (const [k, q] of bars) {
+    const geo = k === 'v' ? new THREE.BoxGeometry(.12, 3.9, .12) : new THREE.BoxGeometry(.1, .12, 6.0);
+    const m = new THREE.Mesh(geo, iron); m.castShadow = true; if (k === 'v') m.position.set(0, 1.95, q); else m.position.set(0, q, 0); grate.add(m);
+    const gm = new THREE.Mesh(geo, g.fill); gm.position.copy(m.position); gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), g.line)); doorS.add(gm);
+  }
+  doorS.fill = g.fill; doorS.line = g.line;
+}
+// caster (case C)
+const CAST_X = 50 + 7.0;
+const caster = new THREE.Group(); scene.add(caster); caster.position.set(CAST_X, 0, -4.4);
+const orbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff86d6').multiplyScalar(2.2), transparent: true, fog: false });
+const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(.22, 1), orbMat); scene.add(orb);
+{
+  const robe = M('#4a3a66'), dark = M('#2a2238');
+  const b = new THREE.Mesh(new THREE.ConeGeometry(.75, 1.9, 6), robe); b.position.y = .95; b.castShadow = true; caster.add(b);
+  const h = new THREE.Mesh(new THREE.IcosahedronGeometry(.34, 0), dark); h.position.y = 2.05; h.castShadow = true; caster.add(h);
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(.42, .6, 6), robe); hood.position.y = 2.35; caster.add(hood);
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(.06, .06, .3), orbMat); eye.position.set(.28, 2.07, 0); caster.add(eye);
+  const staff = new THREE.Mesh(new THREE.CylinderGeometry(.04, .05, 2.6, 5), M('#5b4029')); staff.position.set(.45, 1.3, .55); staff.castShadow = true; caster.add(staff);
+  const tip = new THREE.Mesh(new THREE.OctahedronGeometry(.16, 0), orbMat); tip.position.set(.45, 2.7, .55); caster.add(tip);
+}
+// footprints (input seq), correction arrow, pulses
+const FOOT = [];
+for (let i = 0; i < 64; i++) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.42, .42), new THREE.MeshBasicMaterial({ map: chevTex, transparent: true, depthWrite: false, fog: false }));
+  m.rotation.x = -Math.PI / 2; m.visible = false; scene.add(m); FOOT.push(m);
+}
+let footN = 0;
+function foot(x, z, col, a, sc = 1, bright = 1.5) {
+  if (footN >= FOOT.length || a <= .01) return; const m = FOOT[footN++];
+  m.visible = true; m.position.set(x, .03, z); m.scale.setScalar(sc); m.material.color.set(col).multiplyScalar(bright); m.material.opacity = a;
+}
+const arrowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff5470').multiplyScalar(2.2), transparent: true, depthWrite: false, fog: false });
+const arrow = new THREE.Group(); scene.add(arrow);
+const shaft = new THREE.Mesh(new THREE.BoxGeometry(1, .03, .16), arrowMat); arrow.add(shaft);
+const headShape = new THREE.Shape(); headShape.moveTo(0, 0); headShape.lineTo(-.6, .34); headShape.lineTo(-.6, -.34); headShape.closePath();
+const ahead = new THREE.Mesh(new THREE.ShapeGeometry(headShape), arrowMat); ahead.rotation.x = -Math.PI / 2; arrow.add(ahead);
+function setArrow(x0, x1, z, a) {   // from x0 (client) to x1 (server)
+  const L = Math.abs(x1 - x0); if (L < .3 || a <= .01) return;
+  const dir = Math.sign(x1 - x0);
+  arrow.visible = true; arrowMat.opacity = a; arrow.position.set(0, .06, z);
+  shaft.scale.x = Math.max(.01, L - .55); shaft.position.x = x0 + dir * (L - .55) / 2;
+  ahead.position.set(x1, 0, 0); ahead.rotation.z = dir > 0 ? 0 : Math.PI; ahead.rotation.x = -Math.PI / 2;
+  if (dir < 0) { ahead.rotation.set(-Math.PI / 2, 0, Math.PI); }
+}
+const PULSE = [];
+for (let i = 0; i < 3; i++) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 48), new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2; m.visible = false; scene.add(m); PULSE.push(m);
+}
+let pulseN = 0;
+function pulse(x, z, k, hex, r0 = .4, r1 = 1.8, bright = 2) {
+  if (k <= 0 || k >= 1 || pulseN >= PULSE.length) return; const m = PULSE[pulseN++];
+  m.visible = true; m.position.set(x, .05, z); m.scale.setScalar(lerp(r0, r1, eo(k))); m.material.color.set(hex).multiplyScalar(bright); m.material.opacity = 1 - k;
+}
+
+// ── camera ───────────────────────────────────────────────────
+const tgt = new THREE.Vector3();
+function camSet(c, { shake = 0, tt = 0 } = {}) {
+  const d = V(c.yaw, c.h, 1).normalize();
+  tgt.set(c.fx, c.ty, c.fz || 0);
+  camera.position.copy(tgt).addScaledVector(d, c.dist);
+  if (shake > 0) { camera.position.x += shake * Math.sin(tt * 97.1) * .22; camera.position.y += shake * Math.sin(tt * 71.3 + 1) * .16; }
+  camera.lookAt(tgt);
+  camera.fov = c.fov || 34;
+  camera.setViewOffset(W, H, -(c.sx || 0), c.sy || 0, W, H);
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  sun.target.position.copy(tgt); sun.position.copy(tgt).add(V(-10, 22, 12)); sun.target.updateMatrixWorld();
+  sky.position.copy(camera.position);
+}
+const _v = new THREE.Vector3();
+function proj(x, y, z) { _v.set(x, y, z).project(camera); return [(_v.x + 1) / 2 * W, (1 - _v.y) / 2 * H]; }
+
+// ── per-frame state ──────────────────────────────────────────
+let F = {};
+function reset() {
+  for (const c of ALLCH) { c.root.visible = false; c.ring.visible = false; }
+  client.stars.visible = ghost.stars.visible = false; aura.visible = false;
+  for (const f of FOOT) f.visible = false; footN = 0;
+  for (const m of PULSE) m.visible = false; pulseN = 0;
+  arrow.visible = false; door.visible = doorS.visible = caster.visible = orb.visible = false;
+  F = { dk: 0, tags: [], chips: [] };
+}
+function lights(dk) {
+  hemi.intensity = 1.05 - .38 * dk; sun.intensity = 2.1 - .75 * dk; sky.material.uniforms.dim.value = dk;
+}
+const tag = (x, z, text, col, a = 1, y = .05, size = 22) => F.tags.push([x, y, z, text, col, a, size]);
+const hchip = (X, Y, text, col, a = 1, size = 22) => { if (a > .01) (F.hc || (F.hc = [])).push([X, Y, text, col, a, size]); };
+const wchip = (x, y, z, text, col, a = 1, size = 22) => F.chips.push([x, y, z, text, col, a, size]);
+
+// ═════════════════════════════════════════════════════════════
+//  sims — each a pure function of sim time s
+// ═════════════════════════════════════════════════════════════
+// 01: server stops accepting movement, client keeps running, snap back
+const C1 = { v: 5.5, go0: .6, gStop: 2.2, snap: 3.4, go: 3.85, lag: .25, seq0: 101 };
+function c1(s) {
+  const { v, go0, gStop, snap, go, lag } = C1, run = q => v * Math.max(0, q - go0), gx = run(gStop - lag);
+  const cx = s < snap ? run(s) : s < go ? gx : gx + v * (s - go);
+  const ck = s < snap ? clamp((s - go0) / .2) : s < go ? 0 : clamp((s - go) / .15);
+  const sx = s < gStop ? run(s - lag) : s < go + lag ? gx : gx + v * (s - go - lag);
+  const sk = s < gStop ? clamp((s - lag - go0) / .2) : s < go + lag ? 0 : clamp((s - go - lag) / .15);
+  return { cx, ck, sx, sk, gx };
+}
+// u (chapter time) → s (sim time): live, rewind, replay ×1, slow ×0.35, freeze, slow ×0.5
+function s1(u) {
+  if (u < 4.4) return u;
+  if (u < 5.0) return lerp(4.4, 1.4, eio(p(u, 4.4, .6)));
+  if (u < 6.8) return 1.4 + (u - 5.0);
+  if (u < 7.37) return 3.2 + (u - 6.8) * .35;
+  if (u < 8.1) return 3.3995;
+  return 3.3995 + (u - 8.1) * .5;
+}
+const rate1 = u => u < 4.4 ? null : u < 5.0 ? '◀◀ 되감기' : u < 6.8 ? 'REPLAY ×1' : u < 7.37 ? 'SLOW ×0.35' : u < 8.1 ? '❚❚ 정지 화면' : 'SLOW ×0.5';
+function inputs1(s) {
+  const out = [], { go0, gStop, lag, snap, go } = C1;
+  for (let n = 0; n < 60; n++) {
+    const sn = go0 + .2 * n; if (sn > s) break;
+    if (sn >= snap && sn < go) continue;
+    const acc = sn <= gStop - lag + 1e-6 || sn >= go;
+    const state = acc ? (s >= sn + lag ? 'ack' : 'pend') : (s < snap ? 'pend' : 'rej');
+    out.push({ seq: C1.seq0 + n, sn, x: c1(sn).cx, state });
+  }
+  return out;
+}
+
+// 02: Move #1–#6, Ack #1–#5, Correction #6 (same beats as the 2D lanes)
+const C2 = { v: 1.6, go0: .6, stop: 6.4, mv: [1.0, 1.9, 2.8, 3.7, 4.6, 5.5], tc: 6.8 };
+const FP2 = C2.mv.map(m => C2.v * (m - C2.go0)), CORR2 = FP2[4] + .5;
+function c2(s) {
+  const { v, go0, stop, tc, mv } = C2;
+  const cx = s < tc ? v * (clamp(s, go0, stop) - go0) : CORR2;
+  const ck = s < tc ? ramp(s, go0, stop, .2) : 0;
+  let sx = 0, sk = 0;
+  for (let j = 0; j < 5; j++) { const ar = mv[j] + 1.3; if (s >= ar) { sx = lerp(j ? FP2[j - 1] : 0, FP2[j], eio(p(s, ar, .3))); if (s < ar + .3) sk = .8; } }
+  if (s >= tc) sx = lerp(FP2[4], CORR2, eio(p(s, tc, .25)));
+  return { cx, ck, sx, sk };
+}
+
+// 03: latency spike / loss / TCP HOL (same packet logic as the 2D pipe)
+const C3 = { v: 4, go0: .6, s0: 2.6, s1: 4.6, snap: 4.9, go: 6.0, pipe: .35, seq0: 201 };
+const s3 = u => u < 4.5 ? u : u < 6.1 ? 4.5 + (u - 4.5) * .5 : 5.3 + (u - 6.1);
+const rttAt = s => 60 + 820 * Math.exp(-(((s - 3.7) / .55) ** 2)) + 8 * Math.sin(s * 7);
+function pkt3(n, s) {
+  const { s0, s1, pipe } = C3, sn = .6 + n * .2;
+  const spike = sn >= s0 && sn < s1, j = (sn - s0) / .2, dropped = spike && n % 3 === 1, stall = .55 - j * .045;
+  let f = (s - sn) / pipe, arr = sn + pipe, fall = 0;
+  if (spike) {
+    if (dropped) { f = Math.min(f, stall); arr = Infinity; const g = s - sn - pipe * f - .25; if (g > 0 && f >= stall) fall = g; }
+    else { arr = s1 + (1 - stall) * .3; f = s < s1 ? Math.min(f, stall) : stall + (s - s1) / .3; }
+  }
+  return { n, sn, f: clamp(f), spike, dropped, arr, fall, late: spike && !dropped };
+}
+const run3 = q => C3.v * Math.max(0, q - C3.go0);
+function c3(s) {
+  const { v, snap, go, pipe } = C3;
+  // server position = position of the newest input that arrived in time (late burst after the spike is rejected)
+  const lastOk = q => { let best = -1; for (let n = 0; n < 60; n++) { const k = pkt3(n, q); if (k.sn > q) break; if (k.spike || (k.sn >= snap && k.sn < go)) continue; if (k.arr <= q) best = k.sn; } return best; };
+  const gAt = C3.s0 - .2;                 // last input before the spike
+  const gx = run3(gAt);
+  const cx = s < snap ? run3(s) : s < go ? gx : gx + v * (s - go);
+  const ck = s < snap ? clamp((s - C3.go0) / .2) : s < go ? 0 : clamp((s - go) / .15);
+  let sx;
+  if (s < go + pipe) { const b = lastOk(Math.min(s, snap)); sx = b < 0 ? 0 : run3(b); if (s >= snap) sx = gx; }
+  else sx = gx + v * (s - go - pipe);
+  const sk = s < gAt + pipe ? clamp((s - C3.go0 - pipe) / .2) : s < go + pipe ? 0 : 1;
+  return { cx, ck, sx, sk, gx };
+}
+
+// 04: four state mismatches (case-local time v, each case 3.3 s)
+const CASE_T = 3.3, CASE_0 = .3, CASE_X = [0, 25, 50, 75];
+const CASES = [
+  { title: '속도 검증 (안티 스피드핵)', desc: '이속 버프가 서버에선 이미 만료 → 허용 속도 초과', col: C.pub },
+  { title: '충돌 · 지형 불일치', desc: '서버에선 문이 닫힘 → 클라만 통과', col: C.server },
+  { title: '상태이상 선적용', desc: '서버가 먼저 스턴 → 클라는 모르고 계속 이동', col: C.pub },
+  { title: '서버 틱 지연 (과부하)', desc: '틱이 밀려 쌓인 입력을 버리거나 잘라냄 → 되돌림', col: C.red },
+];
+const proc4 = v => v < .9 ? v - .15 : .75 + (Math.floor((v - .9) / .25) + 1) * (.25 / 3);
+function c4(i, v) {
+  const X = CASE_X[i], b = 5, go0 = .2, lag = .15;
+  const run = (q, sp = b) => sp * Math.max(0, q - go0);
+  let cx, ck = clamp((v - go0) / .2), sx, sk = clamp((v - go0 - lag) / .2), snap, stun = 0, sstun = 0;
+  if (i === 0) {
+    snap = 2.0; const g0 = run(snap - lag);
+    cx = v < snap ? run(v, b * 1.3) : g0 + b * (v - snap);
+    sx = v < snap ? run(v - lag) : g0 + b * Math.max(0, v - snap - lag);
+    if (v >= snap && v < snap + lag) sk = 0;
+  } else if (i === 1) {
+    snap = 2.55; const stop = 9.5 - .55;
+    cx = v < snap ? run(v) : stop; if (v >= snap) ck = 0;
+    sx = Math.min(run(v - lag), stop); if (run(v - lag) >= stop) sk = 0;
+  } else if (i === 2) {
+    snap = 1.95; const ts = 1.1, stop = run(ts - lag);
+    cx = v < snap ? run(v) : stop; if (v >= snap) { ck = 0; stun = 1; }
+    sx = v < ts ? run(v - lag) : stop; if (v >= ts) { sk = 0; sstun = 1; }
+  } else {
+    snap = 2.6; const sxs = q => run(proc4(q) - lag + .15);
+    cx = v < snap ? run(v) : sxs(snap); if (v >= snap) ck = 0;
+    sx = v < snap ? sxs(v) : sxs(snap); sk = v < .9 ? sk : .35 * (v < snap ? 1 : 0);
+  }
+  return { cx: X + cx, ck, sx: X + sx, sk, snap, stun, sstun, X };
+}
+
+// 05: 즉시 스냅 vs 재조정 + 스무딩 (same corrections as the 2D lanes)
+const C5 = { v: 4, go0: .4, fixes: [2.6, 5.8], stale: .5, err: .6, zA: -1.9, zB: 1.9 };
+function c5(u) {
+  const { v, go0, fixes, stale, err } = C5, run = q => v * Math.max(0, q - go0), J = v * stale + err;
+  const nC = fixes.filter(f => u >= f).length;
+  const xa = run(u) - nC * J, ga = run(u - stale) - err - nC * J;
+  let off = 0; for (const f of fixes) off += err * eo(p(u, f + .25, .35));
+  const xb = run(u) - off, gb = run(u - stale) - err - off;
+  return { xa, ga, xb, gb, k: clamp((u - go0) / .2) };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  scenes (3D state for time t)
+// ═════════════════════════════════════════════════════════════
+const avgS = (fn, s, n, dt) => { let a = 0; for (let j = 0; j < n; j++) a += fn(s - j * dt); return a / n; };
+
+function sceneTitle(t) {
+  pose(client, { x: 0, k: 0, t });
+  const k = eio(p(t, 0, 5.4));
+  camSet({ fx: .2, ty: 1.15, dist: lerp(13.5, 11, k), yaw: lerp(1.05, .7, k), h: lerp(.22, .3, k), sx: 430, sy: -10 });
+}
+
+function scene01(t) {
+  const u = t - 5, s = s1(u), st = c1(s);
+  const dk = eo(p(u, 4.95, .45)), pk = 1 - eo(p(u, 4.35, .3));
+  Object.assign(F, { u, s, st, dk, pk });
+  pose(client, { x: st.cx, k: st.ck, t });
+  if (dk > 0) {
+    setGhost(ghost, { x: st.sx, k: st.sk, t }, dk, Math.abs(st.cx - st.sx)); setRing(client, dk);
+    const as = s - C1.snap; if (as >= 0 && as < .8) setGhost(after, { x: c1(C1.snap - 1e-4).cx, k: 1, t }, dk * (1 - as / .8));
+    const list = inputs1(s); const lastAck = list.filter(q => q.state === 'ack').pop();
+    list.slice(-34).forEach((q, i) => {
+      const a = q.state === 'rej' ? 1 - clamp((s - C1.snap) / .9) : 1;
+      const col = q.state === 'ack' ? '#ffb43a' : q.state === 'rej' ? '#ff5470' : '#47dcff';
+      foot(q.x, .75, col, dk * a * (q.state === 'ack' ? .55 : .95));
+      if (q.state === 'pend' && (q.seq % 2 === 0)) tag(q.x, .75, '#' + q.seq, C.client, dk * (u >= 6.9 && s < C1.snap ? .55 : 1));
+      if (q.state === 'rej' && q.seq % 2 === 0) tag(q.x, .75, '✕' + q.seq, C.red, dk * a);
+      if (q === lastAck) tag(q.x, .75, '✓' + q.seq, C.server, dk);
+    });
+    F.last = list[list.length - 1]; F.lastAck = lastAck; F.pend = list.filter(q => q.state === 'pend').length;
+    if (u >= 6.9 && s < C1.snap) setArrow(st.cx - .2, st.sx + .35, 0, dk * eo(p(u, 6.9, .4)));
+    pulse(st.sx, 0, (s - C1.snap) / .7, '#ff5470');
+  }
+  const fc = avgS(q => c1(q).cx, s, 3, .03);
+  const fm = avgS(q => { const z = c1(q); return (z.cx + z.sx) / 2; }, s, 8, .06);
+  const fg = avgS(q => { const z = c1(q); return Math.abs(z.cx - z.sx); }, s, 8, .06);
+  const live = { fx: fc + 2.1, fz: 0, ty: 1.0, dist: 11.5, yaw: -.38, h: .33, sx: 0, sy: 40 };
+  const dbg = { fx: fm + .2, fz: 0, ty: .8, dist: 13.5 + .55 * fg, yaw: -.26, h: .42, sx: -170, sy: -10 };
+  const shk = u >= C1.snap && u < C1.snap + .35 ? 1 - (u - C1.snap) / .35 : 0;
+  camSet(mix(live, dbg, dk), { shake: shk * pk, tt: t });
+}
+
+function scene02(t) {
+  const u = t - 14, s = u, st = c2(s);
+  Object.assign(F, { u, s, st, dk: 1 });
+  pose(client, { x: st.cx, k: st.ck, t }); setRing(client, 1);
+  setGhost(ghost, { x: st.sx, k: st.sk, t }, 1, Math.abs(st.cx - st.sx));
+  const as = s - C2.tc; if (as >= 0 && as < .8) setGhost(after, { x: C2.v * (C2.stop - C2.go0), k: 0, t }, 1 - as / .8);
+  C2.mv.forEach((m, i) => {
+    if (s < m) return;
+    const acked = i < 5 && s >= m + 1.3, bad = i === 5 && s >= C2.tc;
+    foot(FP2[i], -.9, bad ? '#ff5470' : acked ? '#ffb43a' : '#47dcff', bad ? 1 - .5 * clamp((s - C2.tc) / 1) : acked ? .7 : .95, 1.25);
+  });
+  pulse(CORR2, 0, (s - C2.tc) / .7, '#ff5470');
+  camSet({ fx: 4.4 + .12 * s, fz: 0, ty: .8, dist: 15.5, yaw: -.24, h: .46, sx: -40, sy: 120 });
+}
+
+function scene03(t) {
+  const u = t - 25.5, s = s3(u), st = c3(s);
+  Object.assign(F, { u, s, st, dk: 1 });
+  pose(client, { x: st.cx, k: st.ck, t }); setRing(client, 1);
+  setGhost(ghost, { x: st.sx, k: st.sk, t }, 1, Math.abs(st.cx - st.sx));
+  const as = s - C3.snap; if (as >= 0 && as < .8) setGhost(after, { x: run3(C3.snap), k: 1, t }, 1 - as / .8);
+  let firstLost = true, firstLate = true, firstStall = true;
+  for (let n = 0; n < 60; n++) {
+    const k = pkt3(n, s); if (k.sn > s) break;
+    if (k.sn >= C3.snap && k.sn < C3.go) continue;
+    const x = run3(k.sn), cleared = k.spike && s >= C3.snap ? clamp((s - C3.snap) / .6) : 0;
+    if (cleared >= 1) continue;
+    let col = '#ffb43a', a = .6;
+    if (k.dropped && k.fall > 0) { col = '#ff5470'; a = 1; if (firstLost) { tag(x, .75, '✕ 손실', C.red, 1 - cleared); firstLost = false; } }
+    else if (k.late && s >= k.arr) { col = '#ff7a45'; a = 1; if (firstLate) { tag(x, .75, '거부', '#ff8a5c', 1 - cleared); firstLate = false; } }
+    else if (k.f < 1) { col = '#b9a3ff'; a = .95; if (k.spike && firstStall && s > C3.s0 + .5) { tag(x, .75, '⧗ 대기', C.pkt, 1 - cleared); firstStall = false; } }
+    foot(x, .75, col, a * (1 - cleared));
+  }
+  pulse(st.gx, 0, (s - C3.snap) / .7, '#ff5470');
+  const fm = avgS(q => { const z = c3(q); return (z.cx + z.sx) / 2; }, s, 8, .07);
+  const fg = avgS(q => { const z = c3(q); return Math.abs(z.cx - z.sx); }, s, 8, .07);
+  camSet({ fx: fm + .3, fz: 0, ty: .8, dist: 14.5 + .4 * fg, yaw: -.26, h: .44, sx: -250, sy: 70 });
+}
+
+function scene04(t) {
+  const u = t - 37, i = clamp(Math.floor((u - CASE_0) / CASE_T), 0, 3), v = u - CASE_0 - i * CASE_T;
+  const st = c4(i, v);
+  Object.assign(F, { u, v, i, st, dk: 1 });
+  pose(client, { x: st.cx, k: st.ck, stun: st.stun, t }); setRing(client, 1);
+  setGhost(ghost, { x: st.sx, k: st.sk, stun: st.sstun, t }, 1, Math.abs(st.cx - st.sx));
+  const as = v - st.snap; if (as >= 0 && as < .8) setGhost(after, { x: c4(i, st.snap - 1e-4).cx, k: 1, t }, 1 - as / .8);
+  pulse(st.sx, 0, (v - st.snap) / .7, '#ff5470');
+  if (i === 0) setAura(t, 1 - clamp((v - st.snap) / .2));
+  if (i === 1) {
+    door.visible = true; doorS.visible = true;
+    const close = eio(p(v, st.snap + .15, .45));
+    grate.position.y = lerp(4.2, 0, close);   // client learns the gate is down
+    doorS.fill.opacity = .22 * (1 - close); doorS.line.opacity = .95 * (1 - close * .85);
+  }
+  if (i === 2) {
+    caster.visible = true;
+    const k = p(v, .75, .35);
+    if (k > 0 && k < 1) { orb.visible = true; orb.position.set(lerp(CAST_X + .45, st.sx, k), lerp(2.7, 1.3, k) + Math.sin(k * Math.PI) * .8, lerp(-3.85, 0, k)); }
+    setStars(ghost.stars, t, st.sstun); setStars(client.stars, t, st.stun);
+    pulse(st.sx, 0, (v - 1.1) / .6, '#ff86d6');
+  }
+  if (i === 3 && v >= .9) { const T0 = .9 + Math.floor((v - .9) / .25) * .25; if (v < st.snap + .3) pulse(st.sx, 0, (v - T0) / .25, '#ffb43a', .4, 1.1); }
+  const fm = avgS(q => { const z = c4(i, Math.max(0, q)); return (z.cx + z.sx) / 2; }, v, 8, .06);
+  const fg = avgS(q => { const z = c4(i, Math.max(0, q)); return Math.abs(z.cx - z.sx); }, v, 8, .06);
+  camSet({ fx: fm + .4, fz: 0, ty: .9, dist: 14 + .45 * fg, yaw: i === 2 ? -.18 : -.26, h: .4, sx: -230, sy: 0 });
+}
+
+function scene05(t) {
+  const u = t - 50.5, st = c5(u), { zA, zB } = C5;
+  Object.assign(F, { u, st, dk: 1 });
+  pose(clientB, { x: st.xa, z: zA, k: st.k, t }); setRing(clientB, 1);
+  setGhost(ghostB, { x: st.ga, z: zA, k: st.k, t }, 1);
+  pose(client, { x: st.xb, z: zB, k: st.k, t }); setRing(client, 1);
+  setGhost(ghost, { x: st.gb, z: zB, k: st.k, t }, 1);
+  for (const f of C5.fixes) {
+    const as = u - f;
+    if (as >= 0 && as < .8) setGhost(afterB, { x: c5(f - 1e-4).xa, z: zA, k: 1, t }, 1 - as / .8);
+    pulse(c5(f + .01).xa, zA, as / .6, '#ff5470');
+    if (as >= 0 && as < 1.3) {   // replay the unacked inputs from the server position
+      const g = c5(f).gb, x1 = c5(f).xb - C5.err;
+      for (let r = 0; r < 4; r++) { const kr = p(as, r * .06, .12); if (kr > 0) foot(lerp(g, x1, (r + 1) / 4), zB + .85, '#47dcff', kr * (1 - clamp((as - .8) / .5)), 1); }
+    }
+  }
+  camSet({ fx: st.xb - 1.0, fz: 0, ty: .6, dist: lerp(17.5, 19, eio(p(u, 3.4, 1))), yaw: -.2, h: .72, sx: 120, sy: lerp(-20, 105, eio(p(u, 3.4, 1))) });
+}
+
+function sceneOutro(t) {
+  const v = t - OUTRO_AT;
+  pose(client, { x: 50, k: 0, t });
+  camSet({ fx: 50, ty: 1.1, dist: 13, yaw: lerp(.9, .6, eio(p(v, 0, 5.5))), h: .2, sx: 800, sy: -330 });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  2D overlay helpers
+// ═════════════════════════════════════════════════════════════
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = C.text, align = 'left', base = 'alphabetic', alpha = 1, mono = false, ls = 0, sh = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono);
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (sh) { ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = sh; ctx.shadowOffsetY = 2; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function panel(x, y, w, h, o = {}) {
+  const { r = 12, fill = C.panel, stroke = C.line, alpha = 1, lw = 1.5 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function chip(label, x, y, color, o = {}) {
+  const { alpha = 1, size = 22, align = 'left', solid = false } = o;
+  if (alpha <= 0) return 0;
+  font(size, 700, true);
+  const w = ctx.measureText(label).width + size * 1.1, h = size * 1.65;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  rr(X, y - h / 2, w, h, 7); ctx.fillStyle = solid ? color : 'rgba(8,12,20,.86)'; ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = solid ? '#0a0f18' : color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, X + w / 2, y + 1); ctx.restore();
+  return w;
+}
+function dot(x, y, r, color, a = 1, glow = 14) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = color; ctx.shadowBlur = glow;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function check(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .36, y); ctx.lineTo(x - s * .1, y + s * .26); ctx.lineTo(x + s * .38, y - s * .28); ctx.stroke(); ctx.restore();
+}
+function cross(x, y, s, color, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = s * .16; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - s * .3, y - s * .3); ctx.lineTo(x + s * .3, y + s * .3);
+  ctx.moveTo(x + s * .3, y - s * .3); ctx.lineTo(x - s * .3, y + s * .3); ctx.stroke(); ctx.restore();
+}
+function line(x0, y0, x1, y1, color, lw = 2, a = 1, dash = null) {
+  if (a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = color; ctx.lineWidth = lw; if (dash) ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.restore();
+}
+function burst(x, y, k, col = C.red) {
+  if (k <= 0 || k >= 1) return;
+  ctx.save(); ctx.globalAlpha *= 1 - k; ctx.strokeStyle = col; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(x, y, 14 + 40 * eo(k), 0, 7); ctx.stroke(); ctx.restore();
+}
+
+// screen scrims so text stays readable over the scene
+function scrims(top = 1, bot = 1, left = 0) {
+  if (top > 0) { const g = ctx.createLinearGradient(0, 0, 0, 290); g.addColorStop(0, `rgba(5,8,14,${.78 * top})`); g.addColorStop(1, 'rgba(5,8,14,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 290); }
+  if (bot > 0) { const g = ctx.createLinearGradient(0, H - 380, 0, H); g.addColorStop(0, 'rgba(5,8,14,0)'); g.addColorStop(.55, `rgba(5,8,14,${.62 * bot})`); g.addColorStop(1, `rgba(5,8,14,${.88 * bot})`); ctx.fillStyle = g; ctx.fillRect(0, H - 380, W, 380); }
+  if (left > 0) { const g = ctx.createLinearGradient(0, 0, 1250, 0); g.addColorStop(0, `rgba(5,8,14,${.82 * left})`); g.addColorStop(.6, `rgba(5,8,14,${.45 * left})`); g.addColorStop(1, 'rgba(5,8,14,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, 1250, H); }
+}
+function drawTags() {
+  for (const [x, y, z, text, col, a, size] of F.tags) {
+    const [X, Y] = proj(x, y, z); if (a <= 0) continue;
+    txt(text, X, Y + 40, { size, weight: 700, mono: true, color: col, align: 'center', alpha: a, sh: 6 });
+  }
+  for (const [x, y, z, text, col, a, size] of F.chips) { const [X, Y] = proj(x, y, z); chip(text, X, Y, col, { align: 'center', size, alpha: a }); }
+}
+const head = (c, h = 2.45) => [c.root.position.x, h, c.root.position.z];
+// chips over characters: placed in order, each pushed up until it clears the ones already placed
+function drawHChips() {
+  const placed = [];
+  for (let [X, Y0, text, col, a, size] of F.hc || []) {
+    const w = tw(text, size, 700, true) + size * 1.1, h = size * 1.65; let Y = Y0; X = clamp(X, w / 2 + 12, W - w / 2 - 12);
+    for (let guard = 0; guard < 8; guard++) {
+      const hit = placed.find(r => Math.abs(r[0] - X) < (r[2] + w) / 2 + 6 && Math.abs(r[1] - Y) < (r[3] + h) / 2 + 4);
+      if (!hit) break; Y = hit[1] - (hit[3] + h) / 2 - 6;
+    }
+    placed.push([X, Y, w, h]); chip(text, X, Y, col, { align: 'center', size, alpha: a });
+  }
+}
+
+// chapter header (top-left) — capture-style number tag + title + subtitle
+function headers(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a;
+    const x = 110 - (1 - k) * 30;
+    ctx.save(); ctx.globalAlpha *= k; rr(x, 82, 66, 46, 6); ctx.fillStyle = '#f4f6fa'; ctx.fill(); ctx.restore();
+    txt(n, x + 33, 115, { size: 26, weight: 800, mono: true, color: '#0b1220', align: 'center', alpha: k });
+    txt(title, x + 88, 124, { size: 54, weight: 800, alpha: k, sh: 14 });
+    txt(sub, 112, 180, { size: 30, weight: 500, color: C.dim, alpha: k2, sh: 10 });
+    ctx.restore();
+  }
+}
+function progress(t) {
+  const x0 = 120, x1 = 1800, y = 1058;
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(200,210,225,0.18)'; ctx.fillRect(x0, y, x1 - x0, 3);
+  ctx.fillStyle = 'rgba(244,246,250,.85)'; ctx.fillRect(x0, y, (x1 - x0) * clamp(t / DURATION), 3);
+  HEAD.forEach((h, i) => {
+    const x = x0 + (x1 - x0) * h[0] / DURATION;
+    const nx = i + 1 < HEAD.length ? x0 + (x1 - x0) * HEAD[i + 1][0] / DURATION : x1;
+    ctx.fillStyle = t >= h[0] ? C.text : C.faint; ctx.fillRect(x, y - 5, 2, 12);
+    let lab = h[2] + ' ' + h[3];
+    while (lab.length > 2 && tw(lab, 17, 600) > nx - x - 18) lab = lab.slice(0, -1);
+    if (lab !== h[2] + ' ' + h[3]) lab = lab.length > 4 ? lab.slice(0, -1).trimEnd() + '…' : h[2];
+    txt(lab, x + 8, y - 11, { size: 17, weight: 600, color: t >= h[0] ? C.dim : C.faint });
+  });
+  ctx.restore();
+}
+function caption(l1, l2, a1, a2, o = {}) {
+  const { y = 934, c1 = C.text, c2 = C.dim } = o;
+  txt(l1, W / 2, y, { size: 38, weight: 800, align: 'center', alpha: a1, color: c1, sh: 12 });
+  if (l2) txt(l2, W / 2, y + 54, { size: 30, align: 'center', alpha: a2, color: c2, sh: 10 });
+}
+
+// in-house net debug panel (top-right)
+function netPanel(a, { x = 1384, y = 44, w = 440, mode = 'REPLAY', modeCol = C.client, rows = [] } = {}) {
+  if (a <= 0) return y;
+  const h = 76 + rows.length * 48;
+  panel(x, y, w, h, { alpha: a, r: 10 });
+  ctx.save(); ctx.globalAlpha *= a;
+  dot(x + 26, y + 33, 6, C.ok, 1, 10);
+  txt('NET DEBUG', x + 42, y + 42, { size: 24, weight: 800, mono: true });
+  if (mode) chip(mode, x + w - 16, y + 34, modeCol, { align: 'right', size: 19 });
+  line(x + 16, y + 62, x + w - 16, y + 62, C.line, 1.5);
+  rows.forEach(([lab, val, col], i) => {
+    const yy = y + 102 + i * 48;
+    txt(lab, x + 24, yy, { size: 24, mono: true, color: C.dim });
+    txt(val, x + w - 24, yy, { size: 30, weight: 700, mono: true, color: col || C.text, align: 'right' });
+  });
+  ctx.restore();
+  return y + h;
+}
+// what the player sees: minimap, ping, unit frame, skill bar
+function gameHUD(a, { ping = 62 } = {}) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a;
+  const mx = 1708, my = 170, r = 112;
+  ctx.save(); ctx.beginPath(); ctx.arc(mx, my, r, 0, 7); ctx.fillStyle = 'rgba(16,22,30,.72)'; ctx.fill(); ctx.clip();
+  ctx.fillStyle = 'rgba(160,145,120,.55)'; ctx.fillRect(mx - r, my - 9, 2 * r, 18);
+  ctx.fillStyle = 'rgba(210,200,185,.35)'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(mx + i * 32, my - 46, 5, 0, 7); ctx.fill(); }
+  ctx.fillStyle = 'rgba(120,150,95,.45)'; ctx.fillRect(mx - r, my - r, 2 * r, 44);
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, 7); ctx.strokeStyle = 'rgba(235,238,242,.6)'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.save(); ctx.translate(mx, my); ctx.fillStyle = C.client; ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-9, -10); ctx.lineTo(-4, 0); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill(); ctx.restore();
+  txt('N', mx, my - r + 26, { size: 20, weight: 800, align: 'center', color: '#e8e2d4' });
+  for (let i = 0; i < 4; i++) { ctx.fillStyle = C.ok; ctx.fillRect(mx - 64 + i * 10, my + r + 44 - (i + 1) * 7, 6, (i + 1) * 7); }
+  txt(ping + ' ms', mx - 16, my + r + 44, { size: 26, weight: 700, mono: true, color: C.text, sh: 6 });
+  // unit frame
+  ctx.beginPath(); ctx.arc(160, 968, 40, 0, 7); ctx.fillStyle = '#2f62b3'; ctx.fill(); ctx.strokeStyle = 'rgba(240,236,225,.8)'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#ebbe96'; ctx.fillRect(147, 950, 26, 28); ctx.fillStyle = '#3a2618'; ctx.fillRect(145, 944, 30, 9);
+  txt('Player', 216, 950, { size: 26, weight: 800, sh: 6 });
+  rr(216, 962, 300, 16, 4); ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fill(); rr(216, 962, 276, 16, 4); ctx.fillStyle = '#5bd16b'; ctx.fill();
+  rr(216, 984, 300, 10, 3); ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fill(); rr(216, 984, 220, 10, 3); ctx.fillStyle = '#4c8cff'; ctx.fill();
+  // skill bar
+  const n = 6, s = 70, g = 10, x0 = W / 2 - (n * s + (n - 1) * g) / 2, y0 = 944;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * (s + g);
+    rr(x, y0, s, s, 8); ctx.fillStyle = 'rgba(14,18,26,.8)'; ctx.fill(); ctx.strokeStyle = 'rgba(240,236,225,.4)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); ctx.translate(x + s / 2, y0 + s / 2); ctx.strokeStyle = ['#ffd27a', '#7fd0ff', '#ff9a7a', '#9be38a', '#d8a6ff', '#f0ece1'][i]; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (i === 0) { ctx.moveTo(-14, 14); ctx.lineTo(14, -14); ctx.moveTo(-6, 4); ctx.lineTo(-14, -4); }
+    else if (i === 1) { ctx.arc(0, 0, 14, 0, 7); }
+    else if (i === 2) { ctx.moveTo(-12, 10); ctx.lineTo(0, -14); ctx.lineTo(12, 10); ctx.closePath(); }
+    else if (i === 3) { ctx.moveTo(-14, 0); ctx.lineTo(14, 0); ctx.moveTo(0, -14); ctx.lineTo(0, 14); }
+    else if (i === 4) { ctx.moveTo(-12, -12); ctx.lineTo(12, 12); ctx.moveTo(12, -12); ctx.lineTo(-12, 12); }
+    else { ctx.moveTo(-10, -12); ctx.lineTo(10, -12); ctx.lineTo(10, 12); ctx.lineTo(-10, 12); ctx.closePath(); }
+    ctx.stroke(); ctx.restore();
+    txt(String(i + 1), x + 8, y0 + 20, { size: 16, weight: 700, mono: true, color: C.dim });
+  }
+  chip('● LIVE · 플레이어 화면', 1820, 364, C.red, { align: 'right', size: 22 });
+  ctx.restore();
+}
+function freezeFX(a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a * .5;
+  const g = ctx.createRadialGradient(W / 2, H / 2, 300, W / 2, H / 2, 1150); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.9)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  overlays per chapter
+// ═════════════════════════════════════════════════════════════
+const TITLE = {
+  eyebrow: 'CLIENT PREDICTION · SERVER AUTHORITY · RECONCILIATION',
+  line1: ['앞으로', '달렸는데,'], line1Colors: [null, C.client],
+  line2: ['왜', '뒤로', '끌려갈까?'], line2Colors: [null, null, C.red],
+  sub: 'MMO 러버밴딩이 생기는 구조와 원인, 그리고 줄이는 방법',
+  story: [['입력', C.client], ['전송', C.pkt], ['서버 판정', C.server], ['보정', C.red], ['스무딩', C.ok]],
+};
+function wordsL(ws, x, y, t, t0, o = {}) {
+  const { size = 104, weight = 800, stagger = .12, colors = [] } = o;
+  font(size, weight); const sp = size * .28;
+  ws.forEach((w, i) => {
+    const k = eo(p(t, t0 + i * stagger, .8)), ww = ctx.measureText(w).width;
+    ctx.save(); ctx.globalAlpha *= k; font(size, weight); ctx.fillStyle = colors[i] || C.text;
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 24;
+    ctx.fillText(w, x, y + (1 - k) * 46); ctx.restore();
+    font(size, weight); x += ww + sp;
+  });
+}
+function overTitle(t) {
+  const a = win(t, 0, 5.2, .6); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  scrims(0, .6, 1);
+  txt(TITLE.eyebrow, 120, 300, { size: 22, weight: 600, color: C.dim, mono: true, ls: 4, alpha: eo(p(t, .2, .8)), sh: 8 });
+  wordsL(TITLE.line1, 116, 440, t, .45, { colors: TITLE.line1Colors });
+  wordsL(TITLE.line2, 116, 572, t, .85, { colors: TITLE.line2Colors });
+  txt(TITLE.sub, 120, 652, { size: 32, color: C.dim, alpha: eo(p(t, 1.7, .8)), sh: 10 });
+  const n = TITLE.story.length, x0 = 140, x1 = 960, y = 790, k = eio(p(t, 2.1, 1.6));
+  line(x0, y, lerp(x0, x1, k), y, 'rgba(220,228,240,.35)', 2);
+  TITLE.story.forEach(([lab, col], i) => {
+    const x = lerp(x0, x1, i / (n - 1)), kk = eback(p(t, 2.1 + i * .3, .6)); if (kk <= 0) return;
+    rr(x - 11 * kk, y - 11 * kk, 22 * kk, 22 * kk, 4); ctx.fillStyle = col; ctx.fill();
+    txt(lab, x, y + 50, { size: 26, weight: 700, color: col, align: 'center', alpha: clamp(kk), sh: 8 });
+  });
+  const tp = p(t, 2.4, 2.2); if (tp > 0 && tp < 1) dot(lerp(x0, x1, eio(tp)), y, 5, '#fff', 1, 24);
+  txt('▶ 같은 순간을, 플레이어 화면과 넷코드 디버그 화면으로', 120, 920, { size: 28, weight: 600, color: C.text, alpha: eo(p(t, 3.0, .7)), sh: 10 });
+  ctx.restore();
+}
+
+function over01(t) {
+  const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const { u, s, st, dk, pk } = F; ctx.save(); ctx.globalAlpha = a;
+  scrims(1, .9 * dk + .35 * pk);
+  if (dk > 0) {
+    drawTags();
+    const [cxs, cys] = proj(...head(client)), [gxs, gys] = proj(...head(ghost));
+    const stopped = u > 5 && s >= C1.gStop + .12 && s < C1.snap + .25;
+    hchip(cxs, cys, '클라 화면', C.client, dk);
+    hchip(gxs, gys, stopped ? '서버: 여기서 이동 인정 멈춤' : '서버 판정', C.server, dk, stopped ? 24 : 22);
+    const ka = u >= 6.9 && s < C1.snap ? eo(p(u, 6.9, .4)) : s >= C1.snap ? 1 - eo(p(s, C1.snap + .25, .4)) : 0;
+    if (ka > 0) {
+      const [x0, y0] = proj(st.cx, .1, 0), [x1] = proj(st.gx, .1, 0);
+      chip('↩ 보정 · 뒤로 끌려감', (x0 + x1) / 2, y0 - 46, C.red, { align: 'center', size: 26, alpha: ka });
+      if (s < C1.snap) txt('Δ ' + Math.abs(st.cx - st.gx).toFixed(1) + ' m', (x0 + x1) / 2, y0 - 84, { size: 30, weight: 800, mono: true, color: C.red, align: 'center', alpha: ka, sh: 8 });
+    }
+    drawHChips();
+    const gap = Math.abs(st.cx - st.sx), rl = rate1(u);
+    netPanel(dk, { mode: rl, modeCol: rl && rl.includes('정지') ? C.red : C.client, rows: [
+      ['RTT', '62 ms', C.ok],
+      ['SEQ (보냄)', F.last ? '#' + F.last.seq : '—'],
+      ['ACK (확인)', F.lastAck ? '#' + F.lastAck.seq : '—', C.server],
+      ['미확인 입력', String(F.pend ?? 0), (F.pend ?? 0) > 3 ? C.client : C.text],
+      ['위치 차이 Δ', gap.toFixed(1) + ' m', gap > 1.5 ? C.red : C.text],
+    ] });
+  }
+  if (pk > 0) gameHUD(pk);
+  // rewind
+  const rw = ramp(u, 4.4, 5.0, .12);
+  if (rw > 0) {
+    ctx.save(); ctx.globalAlpha *= rw; ctx.fillStyle = 'rgba(10,20,40,.35)'; ctx.fillRect(0, 0, W, H);
+    const R = rng(Math.floor(u * 30)); for (let i = 0; i < 9; i++) { ctx.fillStyle = `rgba(230,240,255,${.05 + R() * .1})`; ctx.fillRect(0, R() * H, W, 2 + R() * 10); }
+    txt('◀◀  되감기', W / 2, 560, { size: 64, weight: 800, align: 'center', mono: true, sh: 18 });
+    ctx.restore();
+  }
+  const kb = ramp(u, 5.0, 6.1, .25);
+  chip('⟲ 같은 순간을 리플레이 · net debug ON', W / 2, 940, C.client, { align: 'center', size: 30, alpha: kb });
+  freezeFX(ramp(u, 7.37, 8.1, .12));
+  caption('앞으로 달렸는데 뒤로 끌려가는 현상 = 러버밴딩', '내 화면(클라)의 위치와 서버가 인정한 위치가 벌어졌다가, 서버 쪽으로 되돌려질 때 생깁니다', eo(p(u, 6.2, .6)), eo(p(u, 6.8, .6)));
+  ctx.restore();
+}
+
+function over02(t) {
+  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const { u, s, st } = F; ctx.save(); ctx.globalAlpha = a;
+  scrims(1, 1);
+  const k = eo(p(u, .1, .6));
+  // world tags on the footprints
+  C2.mv.forEach((m, i) => {
+    if (s < m) return;
+    const acked = i < 5 && s >= m + 1.3, bad = i === 5 && s >= C2.tc;
+    const [x, y] = proj(FP2[i], .05, -.9);
+    const lab = bad ? '✕ #' + (i + 1) : acked ? '✓ #' + (i + 1) : '#' + (i + 1);
+    txt(lab, x, y - 22, { size: 26, weight: 800, mono: true, color: bad ? C.red : acked ? C.server : C.client, align: 'center', sh: 6, alpha: eo(p(s, m, .25)) });
+  });
+  const [cxs, cys] = proj(...head(client)), [gxs, gys] = proj(...head(ghost));
+  if (s >= C2.tc) hchip(cxs, cys, '↩ 위치 되돌림', C.red, eo(p(s, C2.tc, .3)), 26);
+  hchip(cxs, cys, '클라 (예측)', C.client, k);
+  hchip(gxs, gys, '서버 확정', C.server, k);
+  drawHChips();
+  // sequence lanes (the debug tool's packet timeline)
+  const X = q => 430 + (q - .6) * 140, yc = 712, ys = 822;
+  panel(100, 640, 1720, 236, { alpha: k * .96, r: 10 });
+  ctx.save(); ctx.globalAlpha *= k;
+  [[yc, 'CLIENT', C.client, '입력 즉시 이동 (예측)'], [ys, 'SERVER', C.server, '받은 입력 검증 → 확정']].forEach(([y, n, col, sub]) => {
+    txt(n, 124, y - 4, { size: 26, weight: 800, mono: true, color: col });
+    txt(sub, 124, y + 28, { size: 22, color: C.dim });
+    line(X(.6), y, 1790, y, rgba(col, .55), 2);
+  });
+  txt('시간 →', 1790, ys + 40, { size: 18, color: C.faint, align: 'right', mono: true });
+  const px = X(clamp(u, .6, 10.3)); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(px - 1, yc - 30, 2, ys - yc + 60);
+  for (let i = 0; i < 6; i++) {
+    const s0 = C2.mv[i], bad = i === 5, pd = eio(p(u, s0, .6)); if (pd <= 0) continue;
+    const ax = X(s0), bx = X(s0 + .6);
+    line(ax, yc, lerp(ax, bx, pd), lerp(yc, ys, pd), C.pkt, 2.5);
+    if (pd < 1) dot(lerp(ax, bx, pd), lerp(yc, ys, pd), 6, C.pkt, 1, 16);
+    txt('Move #' + (i + 1), ax - 10, yc + 30, { size: 21, weight: 700, color: C.pkt, mono: true, align: 'right', alpha: eo(p(u, s0, .3)) });
+    dot(ax, yc, 6, C.client, 1, 10);
+    const pa = eio(p(u, s0 + .7, .6)); if (pa <= 0) continue;
+    const cx0 = X(s0 + .7), cx1 = X(s0 + 1.3), col = bad ? C.red : C.server;
+    line(cx0, ys, lerp(cx0, cx1, pa), lerp(ys, yc, pa), col, bad ? 3.5 : 2, 1, bad ? null : [7, 6]);
+    if (pa < 1) dot(lerp(cx0, cx1, pa), lerp(ys, yc, pa), 6, col, 1, 16);
+    txt(bad ? 'Correction #6' : 'Ack #' + (i + 1), cx0 + 18, ys - 14, { size: 21, weight: 700, color: col, mono: true, alpha: eo(p(u, s0 + .7, .3)) });
+    dot(cx0, ys, 6, C.server, 1, 10);
+  }
+  const kr = eo(p(u, 2.4, .4));
+  if (kr > 0) {
+    ctx.save(); ctx.globalAlpha *= kr; ctx.strokeStyle = C.dim; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(X(1), yc - 34); ctx.lineTo(X(1), yc - 44); ctx.lineTo(X(2.3), yc - 44); ctx.lineTo(X(2.3), yc - 34); ctx.stroke(); ctx.restore();
+    txt('RTT', X(1.65), yc - 54, { size: 20, weight: 700, color: C.dim, align: 'center', mono: true, alpha: kr });
+  }
+  const tc = C2.tc; burst(X(tc), yc, p(u, tc, .7));
+  ctx.restore();
+  const sent = C2.mv.filter(m => s >= m).length, acks = C2.mv.filter((m, i) => i < 5 && s >= m + 1.3).length;
+  netPanel(k, { mode: 'SLOW-MO', rows: [
+    ['RTT', '62 ms', C.ok], ['SEQ (보냄)', sent ? 'Move #' + sent : '—'], ['ACK (확인)', acks ? 'Ack #' + acks : '—', C.server],
+    ['미확인 입력', String(s >= C2.tc ? 0 : sent - acks), sent - acks > 1 && s < C2.tc ? C.client : C.text],
+  ] });
+  const c1a = eo(p(u, 2.6, .6)), c2a = eo(p(u, 7.2, .6));
+  dot(150, 920, 18, rgba(C.ok, .2), c1a, 0); check(150, 920, 22, C.ok, c1a);
+  txt('판정 = 예측 → 아무 일도 없음 (대부분의 경우)', 184, 931, { size: 32, weight: 700, alpha: c1a, sh: 8 });
+  dot(150, 984, 18, rgba(C.red, .2), c2a, 0); cross(150, 984, 24, C.red, c2a);
+  txt('판정 ≠ 예측 → 보정 패킷이 클라 위치를 덮어씀 = 러버밴딩', 184, 995, { size: 32, weight: 700, color: C.red, alpha: c2a, sh: 8 });
+  ctx.restore();
+}
+
+function over03(t) {
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const { u, s, st } = F; ctx.save(); ctx.globalAlpha = a;
+  scrims(1, 1);
+  const k = eo(p(u, .1, .6));
+  drawTags();
+  const [cxs, cys] = proj(...head(client)), [gxs, gys] = proj(...head(ghost));
+  const idle = s >= C3.s0 + .3 && s < C3.snap + .2;
+  hchip(cxs, cys, '클라 화면', C.client, k);
+  hchip(gxs, gys, idle ? '서버: 입력 안 옴 · 제자리' : '서버 판정', C.server, k, idle ? 24 : 22);
+  drawHChips();
+  // packet lane (client → server), same flow as the 2D pipe
+  const X = q => 150 + q / 10.7 * 1640, yc = 724, ys = 820;
+  panel(100, 668, 1720, 196, { alpha: k * .96, r: 10 });
+  ctx.save(); ctx.globalAlpha *= k;
+  txt('CLIENT', 124, yc - 12, { size: 20, weight: 800, mono: true, color: C.client });
+  txt('SERVER', 124, ys + 32, { size: 20, weight: 800, mono: true, color: C.server });
+  line(X(0), yc, 1800, yc, rgba(C.client, .5), 2); line(X(0), ys, 1800, ys, rgba(C.server, .5), 2);
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(X(s) - 1, yc - 24, 2, ys - yc + 48);
+  for (let n = 0; n < 60; n++) {
+    const q = pkt3(n, s); if (q.sn > s) break;
+    if (q.sn >= C3.snap && q.sn < C3.go) continue;
+    const x0 = X(q.sn), tHead = q.dropped ? Math.min(s, q.sn + C3.pipe * q.f + .25) : Math.min(s, q.arr), hx = X(tHead), hy = lerp(yc, ys, q.f);
+    if (q.dropped && q.fall > 0) {
+      const g = q.fall, al = 1 - clamp(g / .9); line(x0, yc, hx, hy, C.red, 2, .5);
+      if (al > 0) { ctx.save(); ctx.globalAlpha *= al; ctx.fillStyle = C.red; rr(hx - 7, hy + g * g * 260 - 7, 14, 14, 3); ctx.fill(); ctx.restore(); }
+      cross(hx, hy, 16, C.red, 1);
+      continue;
+    }
+    const col = q.late && s >= q.arr ? '#ff7a45' : C.pkt;
+    line(x0, yc, X(q.f >= 1 ? q.arr : s), hy, col, 2, .9);
+    if (q.f < 1) { ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.fillStyle = col; rr(X(s) - 7, hy - 7, 14, 14, 3); ctx.fill(); ctx.restore(); }
+  }
+  const ks = Math.min(eo(p(s, C3.s0 + .3, .4)), 1 - eo(p(s, C3.s1 + .6, .4)));
+  chip('정체 · 손실 · 재전송 대기', X(3.6), 688, C.red, { align: 'center', size: 22, alpha: ks });
+  ctx.restore();
+  // net graph panel (top-right) with the event log under it
+  const GX = 1340, GY = 44, GW = 484, GH = 600;
+  panel(GX, GY, GW, GH, { alpha: k, r: 10 });
+  ctx.save(); ctx.globalAlpha *= k;
+  dot(GX + 26, GY + 33, 6, C.ok, 1, 10);
+  txt('NET DEBUG', GX + 42, GY + 42, { size: 24, weight: 800, mono: true });
+  const rl = u >= 4.5 && u < 6.1 ? 'SLOW ×0.5' : 'REPLAY';
+  chip(rl, GX + GW - 16, GY + 34, C.client, { align: 'right', size: 19 });
+  line(GX + 16, GY + 62, GX + GW - 16, GY + 62, C.line, 1.5);
+  const r = rttAt(Math.min(s, 10)), hot = r > 300;
+  txt('RTT (ms)', GX + 24, GY + 104, { size: 24, mono: true, color: C.dim });
+  txt(String(Math.round(r)), GX + GW - 104, GY + 182, { size: 104, weight: 800, mono: true, align: 'right', color: hot ? C.red : C.ok });
+  txt('ms', GX + GW - 24, GY + 182, { size: 34, weight: 700, mono: true, align: 'right', color: hot ? C.red : C.ok });
+  const gx0 = GX + 76, gx1 = GX + GW - 24, gy0 = GY + 380, gy1 = GY + 222;
+  const GXs = q => lerp(gx0, gx1, q / 10.7), GYv = v => lerp(gy0, gy1, v / 1000);
+  [0, 500, 1000].forEach(v => { line(gx0, GYv(v), gx1, GYv(v), 'rgba(170,190,215,.16)', 1); txt(String(v), gx0 - 10, GYv(v) + 7, { size: 18, color: C.faint, align: 'right', mono: true }); });
+  ctx.beginPath(); for (let q = 0; q <= Math.min(s, 10.7); q += .05) { const yy = GYv(rttAt(Math.min(q, 10))); q ? ctx.lineTo(GXs(q), yy) : ctx.moveTo(GXs(q), yy); }
+  ctx.strokeStyle = C.pkt; ctx.lineWidth = 3; ctx.stroke();
+  dot(GXs(Math.min(s, 10.7)), GYv(r), 6, hot ? C.red : C.pkt, 1, 16);
+  let sent = 0, lost = 0; for (let n = 0; n < 60; n++) { const q = pkt3(n, s); if (q.sn > s) break; if (q.sn < s - 1) continue; if (q.sn >= C3.snap && q.sn < C3.go) continue; sent++; if (q.dropped) lost++; }
+  const lp = sent ? Math.round(lost / sent * 100) : 0;
+  txt('LOSS (최근 1초)', GX + 24, GY + 432, { size: 24, mono: true, color: C.dim });
+  txt(lp + ' %', GX + GW - 24, GY + 432, { size: 30, weight: 700, mono: true, align: 'right', color: lp ? C.red : C.text });
+  line(GX + 16, GY + 456, GX + GW - 16, GY + 456, C.line, 1.5);
+  [['지연 스파이크', 2.9], ['패킷 손실', 3.3], ['TCP 재전송 대기 (Head-of-Line)', 3.7]].forEach(([lab, t0], i) => {
+    const kk = eo(p(s, t0, .4)); if (kk <= 0) return;
+    const y = GY + 490 + i * 44;
+    txt(t0.toFixed(1) + 's', GX + 24, y + 8, { size: 20, mono: true, color: C.faint, alpha: kk });
+    chip(lab, GX + 84, y, C.pkt, { size: 21, alpha: kk });
+  });
+  ctx.restore();
+  caption('입력이 안 오는 동안 서버의 캐릭터는 제자리', '서버 정책에 따라 늦게 몰려온 입력은 거부되거나 잘린다 → 서버 위치로 되돌림', eo(p(u, 5.3, .6)), eo(p(u, 6.1, .6)), { y: 938 });
+  ctx.restore();
+}
+
+function over04(t) {
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const { u, v, i, st } = F; ctx.save(); ctx.globalAlpha = a;
+  scrims(1, 1);
+  const c = CASES[i], kc = ramp(u, CASE_0 + i * CASE_T, CASE_0 + (i + 1) * CASE_T, .25);
+  const [cxs, cys] = proj(...head(client)), [gxs, gys] = proj(...head(ghost));
+  const before = 1 - eo(p(v, st.snap, .4));
+  if (v >= st.snap - .02) hchip(cxs, cys, '↩ 되돌림', C.red, kc * eo(p(v, st.snap, .2)) * (1 - eo(p(v, st.snap + 1.0, .3))), 24);
+  hchip(cxs, cys, '클라 화면', C.client, kc);
+  if (i === 0) hchip(cxs, cys, '클라: 이속 +30%', C.client, kc * before, 24);
+  hchip(gxs, gys, '서버 판정', C.server, kc);
+  if (i === 0) hchip(gxs, gys, '서버: 버프 만료', C.server, kc * eo(p(v, .6, .4)) * before, 24);
+  if (i === 1) { const [x, y] = proj(DOOR_X, .2, 3.9); chip('서버: 문 닫힘', x, y + 30, C.server, { align: 'center', size: 24, alpha: kc * eo(p(v, .3, .4)) }); }
+  if (i === 2) hchip(gxs, gys, 'STUN', C.pub, kc * eo(p(v, 1.1, .3)), 26);
+  if (i === 3) { const slow = v >= .9; hchip(gxs, gys, slow ? 'Tick 20Hz → 4Hz' : 'Tick 20Hz', slow ? C.red : C.ok, kc, 24); }
+  drawHChips();
+  // net panel: the network is fine
+  const k = eo(p(u, .1, .6));
+  const y1 = netPanel(k, { mode: 'REPLAY', rows: [['RTT', '61 ms ✓', C.ok], ['LOSS', '0 % ✓', C.ok], ['TICK', i === 3 && v >= .9 ? '4 Hz' : '20 Hz', i === 3 && v >= .9 ? C.red : C.ok]] });
+  txt('패킷은 제때 도착 — 판정에 쓴 상태가 다름', 1824, y1 + 40, { size: 24, color: C.dim, align: 'right', alpha: k, sh: 8 });
+  // state diff card
+  const DX = 1384, DY = y1 + 70, DW = 440, DH = 300;
+  panel(DX, DY, DW, DH, { alpha: k * kc, r: 10, stroke: rgba(c.col, .6) });
+  ctx.save(); ctx.globalAlpha *= k * kc;
+  txt('STATE DIFF', DX + 24, DY + 40, { size: 22, weight: 800, mono: true, color: C.dim });
+  txt('사례 ' + (i + 1) + ' / 4', DX + DW - 24, DY + 40, { size: 22, weight: 700, align: 'right', color: C.dim });
+  const rowsD = [
+    [['클라', '이속', '+30%', C.client], ['서버', '버프', '만료', C.server]],
+    [['클라', '문', '열림', C.client], ['서버', '문', '닫힘', C.server]],
+    [['클라', '상태', '이동 중', C.client], ['서버', '상태', 'STUN', C.pub]],
+    [['서버 틱', '', '20Hz', C.ok], ['과부하', '', '4Hz', C.red]],
+  ][i];
+  if (i === 3) {
+    txt('TICK', DX + 24, DY + 96, { size: 24, mono: true, color: C.dim });
+    const slow = v >= .9;
+    txt('20Hz →', DX + 24, DY + 160, { size: 48, weight: 800, color: slow ? C.dim : C.ok });
+    txt(slow ? '4Hz' : '20Hz', DX + DW - 24, DY + 236, { size: 108, weight: 800, align: 'right', color: slow ? C.red : C.ok });
+    txt('1틱 = 50ms → 250ms', DX + 24, DY + 278, { size: 24, mono: true, color: C.dim, alpha: slow ? 1 : .35 });
+  } else {
+    rowsD.forEach(([who, what, val, col], j) => {
+      const y = DY + 116 + j * 120;
+      txt(who, DX + 24, y, { size: 26, weight: 700, color: col });
+      txt(what, DX + 24, y + 38, { size: 24, color: C.dim });
+      txt(val, DX + DW - 24, y + 30, { size: j === 0 && i === 0 ? 96 : 60, weight: 800, align: 'right', color: col });
+    });
+  }
+  ctx.restore();
+  // caption: case title + description
+  chip('사례 ' + (i + 1) + ' / 4', W / 2, 892, c.col, { align: 'center', size: 22, alpha: kc });
+  txt(c.title, W / 2, 958, { size: 44, weight: 800, align: 'center', color: c.col, alpha: kc, sh: 12 });
+  txt(c.desc, W / 2, 1010, { size: 30, align: 'center', color: C.text, alpha: kc, sh: 10 });
+  if (i === 3) txt('* 늦기만 하고 쌓인 입력을 모두 처리하면 되돌림은 없음', 112, 1010, { size: 22, color: C.dim, alpha: kc * eo(p(v, 2.7, .4)), sh: 6 });
+  ctx.restore();
+}
+
+const FIXES = [
+  ['입력 시퀀스 번호 + Ack', '서버가 어디까지 처리했는지 클라가 안다', '클라'],
+  ['재조정 (Reconciliation)', '보정 위치에서 미확인 입력을 다시 적용', '클라'],
+  ['오차 허용치', '작은 차이는 보정하지 않는다', '서버'],
+  ['보정 보간 (Smoothing)', '순간이동 대신 100~200ms에 걸쳐 이동', '클라'],
+  ['이동은 UDP · 비신뢰 채널', 'HOL을 피하고, 최근 입력을 중복 전송', '원인 ①'],
+  ['서버 틱 여유 · 상태 동기화', '버프 · 상태이상 · 충돌을 같은 기준으로 판정', '원인 ②'],
+];
+function over05(t) {
+  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const { u, st } = F; ctx.save(); ctx.globalAlpha = a;
+  scrims(1, 0);
+  const k = eo(p(u, .1, .6)), { zA, zB } = C5;
+  // lane labels (left)
+  const [, ya] = proj(st.xa, 1.0, zA), [, yb] = proj(st.xb, 1.0, zB);
+  panel(96, ya - 60, 420, 96, { alpha: k * .9, r: 10, stroke: rgba(C.red, .5) });
+  txt('즉시 스냅', 120, ya - 16, { size: 34, weight: 800, color: C.red, alpha: k });
+  txt('보정 위치로 순간이동', 120, ya + 22, { size: 26, color: C.dim, alpha: k });
+  panel(96, yb - 60, 420, 96, { alpha: k * .9, r: 10, stroke: rgba(C.ok, .5) });
+  txt('재조정 + 스무딩', 120, yb - 16, { size: 34, weight: 800, color: C.ok, alpha: k });
+  txt('미확인 입력 재적용 후 보간', 120, yb + 22, { size: 26, color: C.dim, alpha: k });
+  for (const f of C5.fixes) {
+    const as = u - f;
+    if (as >= 0 && as < 1.1) { const [x, y] = proj(c5(f + .01).xa, 2.45, zA); hchip(x, y, '↩ 순간이동', C.red, 1 - eo(p(as, .8, .3)), 24); hchip(x, y, 'Correction 수신', C.red, 1 - eo(p(as, .8, .3)), 20); }
+    if (as >= 0 && as < 1.3) { const g = c5(f).gb, x1 = c5(f).xb - C5.err; const [x, y] = proj((g + x1) / 2, .05, zB + .85); txt('미확인 입력 재적용', x, y + 44, { size: 24, weight: 700, color: C.client, align: 'center', alpha: eo(p(as, 0, .2)) * (1 - eo(p(as, 1.0, .3))), sh: 6 }); }
+  }
+  drawHChips();
+  // net panel with the smoothing window as the key number
+  panel(1340, 44, 484, 250, { alpha: k, r: 10 });
+  ctx.save(); ctx.globalAlpha *= k;
+  dot(1366, 77, 6, C.ok, 1, 10); txt('NET DEBUG', 1382, 86, { size: 24, weight: 800, mono: true });
+  chip('SLOW-MO ×0.5', 1808, 78, C.client, { align: 'right', size: 19 });
+  line(1356, 106, 1808, 106, C.line, 1.5);
+  txt('보정 보간 (Smoothing)', 1364, 146, { size: 24, color: C.dim });
+  txt('100~200', 1730, 256, { size: 100, weight: 800, align: 'right', color: C.ok });
+  txt('ms', 1808, 256, { size: 36, weight: 700, mono: true, align: 'right', color: C.ok });
+  ctx.restore();
+  // the six fixes
+  const kl = eo(p(u, 3.8, .5));
+  panel(96, 642, 1728, 380, { alpha: kl * .94, r: 12 });
+  FIXES.forEach(([ti, de, tg], i) => {
+    const kk = eo(p(u, 4 + i * .55, .5)); if (kk <= 0) return;
+    const x = 130 + (i % 2) * 860, y = 712 + Math.floor(i / 2) * 112;
+    dot(x + 18, y - 10, 18, rgba(C.ok, .2), kk, 0); check(x + 18, y - 10, 22, C.ok, kk);
+    txt(ti, x + 54, y, { size: 32, weight: 800, alpha: kk });
+    const tx = x + 54 + tw(ti, 32, 800) + 16;
+    chip(tg, tx, y - 11, tg === '서버' ? C.server : tg === '클라' ? C.client : C.pkt, { size: 18, alpha: kk });
+    txt(de, x + 54, y + 40, { size: 28, color: C.dim, alpha: kk });
+  });
+  ctx.restore();
+}
+
+const OUTRO = {
+  nodes: [[C.client, '입력 예측', '클라가 먼저 이동'], [C.pkt, '전송', '지연 · 손실'], [C.server, '서버 판정', '속도 · 충돌 · 상태 · 틱'], [C.red, '보정', '어긋나면 되돌림'], [C.ok, '재조정 · 스무딩', '되돌림 줄이고 부드럽게']],
+  tagline: ['러버밴딩은', '서버', '판정으로', '되돌아가는', '것.'], taglineColors: [null, C.server, null, null, null],
+  footer: 'Prediction → Network → Authority → Correction → Reconciliation',
+};
+function overOutro(t) {
+  const v = t - OUTRO_AT, a = win(t, OUTRO_AT, DURATION + .2, .6); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(5,8,14,.72)'; ctx.fillRect(0, 0, W, H);
+  txt('NET DEBUG · 세션 요약', W / 2, 200, { size: 26, weight: 700, mono: true, color: C.dim, align: 'center', ls: 3, alpha: eo(p(v, .1, .6)) });
+  const n = OUTRO.nodes.length, cw = 300, gap = 36, x0 = W / 2 - (n * cw + (n - 1) * gap) / 2, y = 300, kl = eio(p(v, .3, 1.6));
+  line(x0 + cw / 2, y + 70, lerp(x0 + cw / 2, x0 + (n - 1) * (cw + gap) + cw / 2, kl), y + 70, 'rgba(220,228,240,.3)', 3);
+  OUTRO.nodes.forEach(([col, lab, sub], i) => {
+    const k = eback(p(v, .3 + i * .3, .6)); if (k <= 0) return;
+    const x = x0 + i * (cw + gap);
+    ctx.save(); ctx.globalAlpha *= clamp(k); ctx.translate(x + cw / 2, y + 120); ctx.scale(k, k); ctx.translate(-(x + cw / 2), -(y + 120));
+    panel(x, y, cw, 240, { fill: 'rgba(10,14,24,.92)', stroke: col, lw: 2.5, r: 14 });
+    rr(x + 22, y + 26, 56, 56, 8); ctx.fillStyle = col; ctx.fill();
+    txt(String(i + 1), x + 50, y + 66, { size: 32, weight: 800, mono: true, color: '#0a0f18', align: 'center' });
+    txt(lab, x + 22, y + 140, { size: 34, weight: 800, color: col });
+    txt(sub, x + 22, y + 190, { size: 26, color: C.dim });
+    ctx.restore();
+  });
+  // tagline, word by word, centered
+  font(72, 800); const sp = 72 * .28, ws = OUTRO.tagline, widths = ws.map(w => ctx.measureText(w).width);
+  let x = W / 2 - (widths.reduce((q, b) => q + b, 0) + sp * (ws.length - 1)) / 2;
+  ws.forEach((w, i) => {
+    const k = eo(p(v, 1.8 + i * .1, .8));
+    ctx.save(); ctx.globalAlpha *= k; font(72, 800); ctx.fillStyle = OUTRO.taglineColors[i] || C.text; ctx.fillText(w, x, 720 + (1 - k) * 40); ctx.restore();
+    x += widths[i] + sp;
+  });
+  txt(OUTRO.footer, W / 2, 800, { size: 26, color: C.faint, align: 'center', mono: true, alpha: eo(p(v, 2.6, .8)) });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+const SCENES = [sceneTitle, scene01, scene02, scene03, scene04, scene05, sceneOutro];
+const OVERS = [() => {}, over01, over02, over03, over04, over05, () => {}];
+const CUTS = [5.0, 14.0, 25.5, 37.0, 50.5, OUTRO_AT];
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  reset();
+  const ch = t < 5 ? 0 : t < 14 ? 1 : t < 25.5 ? 2 : t < 37 ? 3 : t < 50.5 ? 4 : t < OUTRO_AT ? 5 : 6;
+  SCENES[ch](t);
+  lights(F.dk || 0);
+  composer.render();
+  ctx.drawImage(gl.domElement, 0, 0, W, H);
+  // dip to dark on each scene cut (the 3D world changes place between chapters)
+  let dip = 0; for (const c of CUTS) dip = Math.max(dip, 1 - clamp(Math.abs(t - c) / .32));
+  if (ch === 4) { const u = t - 37; for (let i = 1; i < 4; i++) dip = Math.max(dip, .85 * (1 - clamp(Math.abs(u - CASE_0 - i * CASE_T) / .16))); }
+  if (dip > 0) { ctx.fillStyle = `rgba(4,6,10,${dip})`; ctx.fillRect(0, 0, W, H); }
+  overTitle(t);
+  OVERS[ch](t);
+  overOutro(t);
+  headers(t); progress(t);
+  txt('* 화면의 수치는 이해를 돕기 위한 예시', 112, 222, { size: 22, color: C.dim, sh: 6, alpha: win(t, HEAD[0][0] + .3, OUTRO_AT, .5) });
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  trackTex.redraw();
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [OUTRO_AT, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 12.7;   // ch01 freeze-frame: client ahead, server ghost stopped, correction vector
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
