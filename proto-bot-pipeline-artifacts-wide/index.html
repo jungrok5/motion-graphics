@@ -1,0 +1,1450 @@
+<meta charset="utf-8">
+<title>Proto Bot Artifacts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="패킷 정의 하나로 개발부터 라이브까지: 실제 파일과 화면을 공간에 늘어놓은 3D 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="64" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:04</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../proto-bot-pipeline/article.html">설명</a><a href="../proto-bot-pipeline/terms.html">용어집</a><a href="../proto-bot-pipeline/">2D 원본</a><a href="../proto-bot-pipeline-artifacts/">모바일 세로 영상</a></nav>
+</div>
+<!-- Same notes as ../proto-bot-pipeline/index.html (verbatim). Not shown on this page. -->
+<section class="notes" id="notes" hidden>
+<p class="lede">이 영상은 게임 클라이언트와 서버가 주고받는 패킷을 Protobuf(<code>.proto</code>) 한 파일로 정의하고, 같은 파일에서 생성한 코드로 봇 클라이언트까지 만드는 흐름을 보여 준다. 봇이 클라·서버와 같은 생성 코드를 쓰기 때문에 패킷 구조가 어긋나지 않고, 그 봇 하나를 서버 컨텐츠 검증과 퍼블리셔의 부하 테스트에 그대로 재사용할 수 있다.</p>
+
+<article data-ch="01">
+<p>왼쪽 에디터에 <code>game_packet.proto</code> 파일이 타이핑된다. <code>syntax = "proto3";</code>, <code>package game;</code> 아래에 <code>LoginReq</code>(<code>account_id</code>, <code>token</code>), <code>EnterDungeonReq</code>(<code>dungeon_id</code>, <code>party_id</code>), <code>SkillUseReq</code>(<code>skill_id</code>, <code>target_id</code>) 세 메시지가 선언된다. 각 필드에는 타입과 번호(<code>= 1</code>, <code>= 2</code>)가 붙는데, 이 번호가 직렬화된 바이트 안에서 필드를 구분하는 태그다.</p>
+<p>오른쪽 카드 세 장이 이 파일의 성격을 정리한다.</p>
+<ul>
+<li><strong>message = 패킷 하나</strong>: 필드 이름, 타입, 번호(tag)를 선언한다.</li>
+<li><strong>언어 중립 스키마</strong>: C#, C++, Go 등 원하는 언어로 코드를 생성할 수 있다.</li>
+<li><strong>Single Source of Truth</strong>: 패킷의 원본은 이 파일 하나뿐이다.</li>
+</ul>
+<p>인프라 쪽 감각으로 보면 API 스펙 파일 하나를 두고 모든 소비자가 그 스펙에서 코드를 뽑아 쓰는 구조와 같다.</p>
+</article>
+
+<article data-ch="02">
+<p><code>.proto</code> 카드에서 출발한 선이 가운데 <code>protoc</code>(codegen) 노드를 거쳐 오른쪽 세 카드로 갈라진다. Client(Unity · C#, <code>GamePacket.cs</code>), Server(C++, <code>game_packet.pb.h</code>), Bot Client(C# .NET, <code>GamePacket.cs</code>)다. 각 카드에는 <code>EnterDungeonReq</code>에 해당하는 생성 코드가 찍힌다. C# 쪽은 <code>DungeonId</code>, <code>PartyId</code> 속성, C++ 쪽은 <code>dungeon_id()</code>, <code>party_id()</code> 접근자다.</p>
+<p>봇 카드에는 "클라와 같은 생성 코드를 그대로 사용"이라는 주석과 함께 <code>new EnterDungeonReq { DungeonId = 101, PartyId = party.Id }</code>로 패킷을 만드는 코드가 나온다. 봇도 손으로 바이트를 짜지 않고 클라와 같은 클래스를 쓴다는 뜻이다.</p>
+<p>화면 문구는 "protoc 한 번 → 클라 · 서버 · 봇", "같은 .proto에서 생성 → 구조가 그대로 일치"다. 세 코드가 같은 스키마에서 나왔으니 필드 이름, 타입, 번호가 서로 다를 수 없다.</p>
+</article>
+
+<article data-ch="03">
+<p>같은 화면에서 <code>.proto</code>의 <code>EnterDungeonReq</code>에 <code>int32 difficulty = 3;</code> 한 줄이 초록색으로 추가되고 버전 칩이 <code>v1.3</code>에서 <code>v1.4</code>로 바뀐다. 펄스가 <code>protoc</code>를 지나 세 카드에 동시에 도착하면 Client에는 <code>Difficulty</code> 속성, Server에는 <code>difficulty()</code> 접근자, 봇에는 같은 <code>Difficulty</code> 속성이 생긴다. 봇 카드의 <code>Difficulty = 3,</code> 줄에는 "시나리오에서 값 지정" 라벨이 붙는다. 재생성은 구조만 만들고, 값을 넣는 시나리오 코드는 사람이 쓰기 때문이다. 세 카드 모두 <code>v1.4</code>와 체크 배지를 단다.</p>
+<p>왼쪽 아래에는 비교 대상으로 빨간 점선의 "손으로 짠 봇 패킷" 카드가 나온다. 버전은 <code>v1.3</code>에 머물러 있고 "번호 · 타입 수동 관리 → 어긋나면 서버가 잘못 파싱", "→ 테스트 결과를 믿을 수 없음"이라는 문구와 함께 X 표시가 붙는다.</p>
+<p>문구는 "필드를 추가해도 재생성 · 재빌드 한 번이면 끝", "봇 패킷 구조가 클라 · 서버와 자동으로 같이 갱신"이다. 봇 · 클라 · 서버를 같은 <code>.proto</code> 리비전으로 다시 빌드해야 하므로 보통 CI에서 재생성을 강제한다. 봇을 별도로 손으로 유지하면 스키마가 바뀔 때마다 누군가 따라 고쳐야 하고, 그걸 놓치면 봇이 실제 클라와 다른 패킷을 보내게 된다.</p>
+</article>
+
+<article data-ch="04">
+<p>앞부분은 주차별 간트 차트다. 서버팀의 "던전 컨텐츠 서버 로직"은 W3에 끝나고, 클라팀은 W7까지 "UI · 연출 · 리소스 작업 중…"이다. <code>NOW</code> 표시가 W3 끝에 오면 남는 빈 구간에 "클라 연동까지 대기…?"가 떴다가 "봇 클라이언트로 바로 컨텐츠 테스트" 막대로 바뀐다. 화면 문구는 "서버는 보통 클라보다 먼저 컨텐츠를 완성합니다.", "기다리지 말고, 봇이 클라 대신 패킷을 보내 검증합니다."다.</p>
+<p>뒷부분은 Bot Client와 Game Server 사이의 시퀀스 다이어그램이다. 순서는 다음과 같다.</p>
+<ul>
+<li><code>LoginReq</code> → <code>LoginAck</code></li>
+<li><code>EnterWorldReq</code> → <code>EnterWorldAck</code></li>
+<li><code>EnterDungeonReq</code> → <code>EnterDungeonAck</code></li>
+<li><code>SkillUseReq × N</code>을 연속으로 보내는 버스트</li>
+<li>서버가 보내는 <code>DungeonClearNoti</code></li>
+</ul>
+<p>왼쪽의 Client 카드는 "개발 중…" 상태이고 "실제 클라가 보낼 패킷 순서 그대로 봇이 흉내"라고 적혀 있다. 오른쪽 "클라 없이 검증" 체크리스트에는 로그인 · 월드 입장, 던전 입장 시퀀스, 전투 패킷 반복, 클리어 · 보상 검증이 차례로 체크된다. 서버팀은 클라 완성을 기다리지 않고 실제 클라와 같은 순서의 패킷으로 컨텐츠 로직을 끝까지 돌려 볼 수 있다.</p>
+</article>
+
+<article data-ch="05">
+<p>서버팀 카드에서 퍼블리셔(QA · 인프라팀) 카드로 "BotClient 패키지"가 넘어간다. 패키지에는 생성된 패킷 코드, 컨텐츠 시나리오, 부하 설정(동접 · RPS)이 들어 있고, 용도는 장비 스펙 산정과 라이브 인프라 테스트다.</p>
+<p>이어지는 부하 대시보드에서 동시 접속 봇 수가 0에서 6,000까지 올라간다. 가운데에는 LB, Game Server, DB의 CPU 게이지가 있고, 오른쪽 "CPU 사용률 vs 동시 접속(Game Server · 1대)" 그래프에는 "임계 70%" 선이 그어져 있다. 곡선이 동접 5,000 지점에서 70%에 닿으면 "서버 1대 ≈ 동접 5,000" 마커가 뜬다. 아래 칩에는 <code>RPS</code>, <code>p99 지연</code>, <code>DB QPS</code>가 동접에 따라 함께 오른다.</p>
+<p>결과 카드는 두 장이다.</p>
+<ul>
+<li><strong>장비 스펙 산정</strong>: 대당 동접 5,000(CPU 70% 기준), 목표 동접 50,000 → 게임 서버 10대 + 여유분. DB · LB 같은 공유 자원은 따로 측정한다.</li>
+<li><strong>라이브 인프라 테스트</strong>: 실서비스 환경에 같은 봇으로 부하를 넣어 LB · 네트워크 · DB 병목을 오픈 전에 확인한다.</li>
+</ul>
+<p>화면 하단에 "수치는 설명을 위한 예시입니다"라고 표기되어 있다. 위 숫자는 모두 예시이며 실제 산정은 각 게임의 측정값으로 해야 한다.</p>
+</article>
+
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>패킷</dt><dd>클라이언트와 서버가 주고받는 메시지 한 단위다. 영상에서는 <code>.proto</code>의 <code>message</code> 하나가 패킷 하나에 해당한다.</dd>
+<dt>Protobuf (프로토콜 버퍼)</dt><dd>Google이 만든 직렬화 형식이다. 스키마를 <code>.proto</code> 파일에 적고, 여기서 각 언어용 직렬화 코드를 생성해 쓴다.</dd>
+<dt><code>.proto</code> 파일</dt><dd>메시지 이름, 필드 이름, 타입, 번호를 선언하는 스키마 파일이다. 영상에서는 <code>game_packet.proto</code>가 모든 패킷의 원본이다.</dd>
+<dt>필드 번호(tag)</dt><dd>각 필드 뒤의 <code>= 1</code>, <code>= 2</code> 같은 숫자다. 직렬화된 바이트에서는 이름 대신 이 번호로 필드를 구분하므로 한 번 정하면 바꾸지 않는다.</dd>
+<dt><code>protoc</code></dt><dd>Protobuf 컴파일러다. <code>.proto</code>를 읽어 C#, C++ 등 지정한 언어의 클래스 코드를 만든다.</dd>
+<dt>코드 생성(codegen)</dt><dd>스키마에서 소스 코드를 자동으로 만들어 내는 과정이다. 사람이 직접 짜지 않으니 클라, 서버, 봇의 패킷 구조가 같게 유지된다.</dd>
+<dt>Single Source of Truth</dt><dd>같은 정보의 원본을 한 곳에만 두는 원칙이다. 여기서는 패킷 정의가 <code>.proto</code> 한 파일에만 있다.</dd>
+<dt>봇 클라이언트</dt><dd>사람 대신 프로그램이 실제 클라처럼 서버에 접속해 패킷을 보내는 테스트용 클라이언트다. 화면이나 리소스 없이 패킷 흐름만 재현한다.</dd>
+<dt>패킷 플로우</dt><dd>로그인부터 던전 클리어까지 클라가 서버와 주고받는 패킷의 순서다. 봇은 이 순서를 그대로 따라 한다.</dd>
+<dt>퍼블리셔</dt><dd>게임을 서비스하고 운영하는 회사 또는 조직이다. 영상에서는 QA와 인프라팀이 봇을 받아 부하 테스트를 한다.</dd>
+<dt>동접 (CCU)</dt><dd>같은 시점에 접속해 있는 사용자 수다. 서버 대수를 정할 때 기준이 되는 값이다.</dd>
+<dt>부하 테스트</dt><dd>많은 봇을 동시에 접속시켜 서버와 인프라가 어디까지 버티는지 재는 테스트다. 영상에서는 CPU 70%를 임계로 잡는다.</dd>
+<dt><code>RPS</code> / <code>DB QPS</code></dt><dd>초당 요청 수와 DB의 초당 쿼리 수다. 동접이 늘 때 서버와 DB가 받는 부하를 나타낸다.</dd>
+<dt><code>p99</code> 지연</dt><dd>요청의 99%가 이 시간 안에 끝난다는 뜻의 응답 시간 지표다. 평균에 묻히는 느린 요청을 드러낸다.</dd>
+</dl>
+</section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  패킷 정의 하나로, 개발부터 라이브까지 — 실물을 공간에 늘어놓기 (16:9 PC, full explainer)
+//  The real artifacts (game_packet.proto in an editor, protoc in a terminal, the generated C# / C++ / bot files,
+//  the team schedule, the bot's packet log, the load-test dashboard) stand in one dark workspace, in pipeline order.
+//  The camera walks through them; a field or a packet visibly travels from one artifact to the next.
+//  Look comes from the subject: JetBrains-style dark editor (Rider / CLion), terminal, Grafana-like dashboard.
+//  three.js renders offscreen → drawImage onto #c → 2D header, captions, status bar on top.
+//  Every frame is a pure function of t: renderAt(t). Facts, chapters and timing follow ../proto-bot-pipeline/index.html.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 64;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── palette: the tools themselves ────────────────────────────
+// Editor = JetBrains dark (Rider / CLion), terminal = plain dark shell, dashboard = Grafana-like dark.
+// Roles: amber = the data in flight (a field, a file, a packet) · blue client · violet server · green bot / OK · pink publisher · red failure/threshold.
+const K = {
+  desk: '#0b0b0c', ed: '#1e1f22', chrome: '#2b2d30', border: '#3c3f45', line: '#26282c', text: '#bcbec4', hi: '#dfe1e5', dim: '#8c9097', faint: '#5f636a',
+  term: '#141516', dash: '#111217', dpanel: '#181b1f', dborder: '#2c3235',
+  amber: '#ffb547', client: '#56a8f5', server: '#b48cf2', bot: '#73bf69', pub: '#f07ab0', red: '#f2495c', yellow: '#fade2a', teal: '#2aacb8',
+};
+const SY = { kw: '#cf8e6d', str: '#6aab73', num: '#2aacb8', com: '#7a7e85', fn: '#56a8f5', prop: '#c77dbb', txt: '#bcbec4', punc: '#a3a6ad' };
+
+// ── timeline (same chapters as the 2D video) ─────────────────
+const HEAD = [
+  [5.0, 14.3, '01', '패킷 정의', '클라와 서버가 주고받는 모든 메시지를 .proto 한 파일에'],
+  [14.3, 23.8, '02', '코드 생성', 'protoc 한 번으로 클라 · 서버 · 봇 코드를 동시에'],
+  [23.8, 33.3, '03', '항상 동기화', '봇도 같은 생성 코드를 쓰니까, 패킷이 낡지 않습니다'],
+  [33.3, 46.5, '04', '서버가 먼저', '클라 연동 전, 봇이 클라의 패킷 플로우를 그대로 흉내 냅니다'],
+  [46.5, 58.5, '05', '퍼블리셔에게', '같은 봇을 수천 개 띄워 장비 스펙 산정 · 라이브 인프라 테스트'],
+];
+const OUT0 = 58.5;
+
+// ── three.js setup ───────────────────────────────────────────
+const FOV = 40;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(K.desk);
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .1, 600);
+scene.add(camera);
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .5, .45, .86);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const TAN = Math.tan(FOV / 2 * Math.PI / 180);
+
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function canvasTex(c, mip = true) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps = mip; if (!mip) t.minFilter = THREE.LinearFilter; return t; }
+
+// ── the desk: warm graphite with soft light pools under the artifacts ─────
+const NPOOL = 16;
+const floorMat = new THREE.ShaderMaterial({
+  depthWrite: false, fog: false,
+  uniforms: { uCam: { value: new THREE.Vector3() }, uPool: { value: Array.from({ length: NPOOL }, () => new THREE.Vector4()) }, uPub: { value: 0 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform vec4 uPool[${NPOOL}]; uniform float uPub;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+    void main(){
+      float d = length(vW.xz - uCam.xz);
+      vec3 base = vec3(.010,.0095,.009);
+      // faint brushed texture along x, like a desk mat
+      float grain = hash(floor(vW.xz * vec2(1.5, 28.))) * .004;
+      vec3 c = base + grain;
+      for (int i = 0; i < ${NPOOL}; i++) {
+        vec4 P = uPool[i];
+        if (P.w <= 0.) continue;
+        vec2 q = (vW.xz - P.xy) / vec2(P.z, P.z * .55);
+        c += vec3(.075,.060,.045) * exp(-dot(q,q)) * P.w;
+      }
+      // publisher side of the desk: a slight rose tint and a seam line
+      float side = smoothstep(72.0, 74.0, vW.x);
+      c = mix(c, c * vec3(1.15,.92,1.02) + vec3(.006,.002,.004), side * uPub);
+      float seam = exp(-abs(vW.x - 73.0) * 9.) * uPub * smoothstep(-30., 4., vW.z) * smoothstep(14., 4., vW.z);
+      c += vec3(.25,.10,.18) * seam * .22;
+      float fade = exp(-d * .012);
+      c = mix(vec3(.0105,.0100,.0098), c, clamp(fade * 1.4, 0., 1.));
+      gl_FragColor = vec4(c, 1.);
+    }`,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.position.set(45, 0, 0); floor.renderOrder = 0;
+scene.add(floor);
+
+// shared textures
+const shadowTex = (() => { const c = mkCanvas(256, 128), g = c.getContext('2d'); const gr = g.createRadialGradient(128, 64, 0, 128, 64, 128); gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.setTransform(1, 0, 0, .5, 0, 32); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c); })();
+const reflAlpha = (() => { const c = mkCanvas(4, 256), g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#000'); gr.addColorStop(.55, '#000'); gr.addColorStop(1, '#666'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); return new THREE.CanvasTexture(c); })();
+const glowTex = (() => { const c = mkCanvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.2, 'rgba(255,255,255,.8)'); gr.addColorStop(.5, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+
+// ── canvas drawing kit (design px; 100 design px = 1 world unit) ─────
+const TS = 1.5;    // texture px per design px
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function gt(g, s, x, y, o = {}) {
+  const { size = 28, weight = 500, color = K.text, align = 'left', mono = false, alpha = 1, base = 'alphabetic', ls = 0 } = o;
+  if (alpha <= 0) return;
+  g.save(); g.globalAlpha *= alpha; g.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  g.fillStyle = color; g.textAlign = align; g.textBaseline = base; if (ls) g.letterSpacing = ls + 'px'; g.fillText(s, x, y); g.restore();
+}
+function mw(g, s, size, weight = 500, mono = false) { g.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return g.measureText(s).width; }
+function gdot(g, x, y, r, col, a = 1) { g.save(); g.globalAlpha *= a; g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = col; g.fill(); g.restore(); }
+function gcheck(g, x, y, s, col, a = 1, lw = .16) { if (a <= 0) return; g.save(); g.globalAlpha *= a; g.strokeStyle = col; g.lineWidth = s * lw; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(x - s * .36, y); g.lineTo(x - s * .1, y + s * .26); g.lineTo(x + s * .38, y - s * .28); g.stroke(); g.restore(); }
+function gcross(g, x, y, s, col, a = 1) { if (a <= 0) return; g.save(); g.globalAlpha *= a; g.strokeStyle = col; g.lineWidth = s * .16; g.lineCap = 'round'; g.beginPath(); g.moveTo(x - s * .3, y - s * .3); g.lineTo(x + s * .3, y + s * .3); g.moveTo(x + s * .3, y - s * .3); g.lineTo(x - s * .3, y + s * .3); g.stroke(); g.restore(); }
+function gchip(g, label, x, y, col, o = {}) {   // pill; x = right edge when align right
+  const { size = 22, align = 'left', fillA = .16, alpha = 1, mono = true, weight = 700 } = o;
+  if (alpha <= 0) return 0;
+  const w = mw(g, label, size, weight, mono) + size * 1.1, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  g.save(); g.globalAlpha *= alpha; rr(g, X, y - h / 2, w, h, 8); g.fillStyle = rgba(col, fillA); g.fill(); g.lineWidth = 1.5; g.strokeStyle = rgba(col, .75); g.stroke();
+  gt(g, label, X + w / 2, y + size * .36, { size, weight, color: col, align: 'center', mono }); g.restore();
+  return w;
+}
+const KW = new Set(['syntax', 'package', 'message', 'string', 'int32', 'int64', 'public', 'sealed', 'partial', 'class', 'final', 'var', 'new', 'const', 'get', 'set', 'int', 'int32_t']);
+const PROP = new Set(['DungeonId', 'PartyId', 'Difficulty', 'Id']);
+function tokens(line) {
+  const out = [], re = /(\/\/.*$|"[^"]*"|\s+|0x[0-9a-fA-F]+|\d+|[A-Za-z_]\w*|::|.)/g; let m;
+  while ((m = re.exec(line))) {
+    const s = m[0]; let c = SY.txt;
+    if (s.startsWith('//')) c = SY.com;
+    else if (s[0] === '"') c = SY.str;
+    else if (/^(0x[0-9a-fA-F]+|\d+)$/.test(s)) c = SY.num;
+    else if (KW.has(s)) c = SY.kw;
+    else if (PROP.has(s)) c = SY.prop;
+    else if (/^[A-Za-z_]\w*$/.test(s) && line[m.index + s.length] === '(') c = SY.fn;
+    else if (/^[^\w\s]+$/.test(s)) c = SY.punc;
+    out.push([s, c]);
+  }
+  return out;
+}
+function codeLine(g, s, x, y, size, limit = Infinity) {
+  g.font = `500 ${size}px ${MONO}`; let xx = x;
+  for (const [tok, c] of tokens(s)) { if (limit <= 0) break; const v = tok.slice(0, limit); g.fillStyle = c; g.fillText(v, xx, y); xx += g.measureText(v).width; limit -= v.length; }
+  return xx;
+}
+// window chrome: title bar with role label + file tabs + optional version chip
+const TB = 62;
+function frame(g, w, h, o = {}) {
+  g.setTransform(TS, 0, 0, TS, 0, 0); g.clearRect(0, 0, w, h);
+  rr(g, 2, 2, w - 4, h - 4, 14); g.fillStyle = o.bg || K.ed; g.fill();
+  g.save(); rr(g, 2, 2, w - 4, h - 4, 14); g.clip(); g.fillStyle = o.bar || K.chrome; g.fillRect(0, 0, w, TB); g.fillStyle = K.border; g.fillRect(0, TB, w, 1.5); g.restore();
+  let x = 24;
+  if (o.role) {
+    const [lab, col, sub] = o.role;
+    gdot(g, x + 7, TB / 2, 7, col);
+    gt(g, lab, x + 24, TB / 2 + 10, { size: 28, weight: 800, color: col }); x += 24 + mw(g, lab, 28, 800) + 14;
+    if (sub) { gt(g, sub, x, TB / 2 + 9, { size: 24, color: K.dim }); x += mw(g, sub, 24) + 22; }
+  }
+  for (const [name, active, acc] of (o.tabs || [])) {
+    const tw = mw(g, name, 23, 500, true) + 40;
+    if (active) { g.fillStyle = o.bg || K.ed; g.fillRect(x, 8, tw, TB - 8); g.fillStyle = acc || K.amber; g.fillRect(x, TB - 3, tw, 3); }
+    gt(g, name, x + 20, TB / 2 + 10, { size: 23, mono: true, color: active ? K.hi : K.dim });
+    x += tw + 4;
+  }
+  if (o.ver) gchip(g, o.ver[0], w - 22, TB / 2, o.ver[1], { align: 'right', size: 21, fillA: .14 + (o.ver[2] || 0) * .35 });
+  g.save(); if (o.dash) g.setLineDash(o.dash); rr(g, 2, 2, w - 4, h - 4, 14); g.lineWidth = o.lw || 2; g.strokeStyle = o.stroke || K.border; g.stroke(); g.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  ARTIFACTS
+// ═════════════════════════════════════════════════════════════
+// E · game_packet.proto in the editor
+const PROTO = [
+  'syntax = "proto3";', 'package game;', '',
+  'message LoginReq {', '  string account_id = 1;', '  string token      = 2;', '}', '',
+  'message EnterDungeonReq {', '  int32 dungeon_id = 1;', '  int32 party_id   = 2;', '}', '',
+  'message SkillUseReq {', '  int32 skill_id  = 1;', '  int64 target_id = 2;', '}',
+];
+const PROTO_CHARS = PROTO.reduce((s, l) => s + l.length + 1, 0);
+const NEWF = '  int32 difficulty = 3;';
+const E_CODE = { x: 104, y: TB + 66, lh: 46, size: 32 };
+const CW32 = 32 * .6;   // JetBrains Mono advance
+const E_INS = 11;        // the new field goes in before line 12 ("}")
+const insE = t => eo(p(t, 24.5, .5));
+const vE = t => t > 25.35;
+function drawE(g, t) {
+  const w = 840, h = 960;
+  const ins = insE(t), flashV = vE(t) ? 1 - p(t, 25.35, .9) : 0;
+  frame(g, w, h, { tabs: [['game_packet.proto', true, K.amber], ['README.md', false]], ver: [vE(t) ? 'v1.4' : 'v1.3', vE(t) ? K.bot : K.dim, flashV] });
+  const chars = PROTO_CHARS * p(t, 5.9, 5.4);
+  const { x, y, lh, size } = E_CODE;
+  // tab highlight (Single Source of Truth)
+  const k3 = win(t, 10.3, 14.2, .4);
+  if (k3 > 0) { g.save(); g.globalAlpha = k3; rr(g, 6, 10, mw(g, 'game_packet.proto', 23, 500, true) + 30, TB - 14, 6); g.lineWidth = 3; g.strokeStyle = K.bot; g.stroke(); g.restore(); }
+  let left = chars, cursor = null;
+  const rowY = i => y + (i + (i >= E_INS ? ins : 0)) * lh;
+  // inserted line (v1.4)
+  if (ins > 0) {
+    const yy = y + E_INS * lh, fl = 1 - p(t, 27.5, 3) * .55;
+    g.save(); g.globalAlpha = ins;
+    g.fillStyle = rgba(K.bot, .16 * fl); g.fillRect(0, yy - lh * .74, w, lh);
+    g.fillStyle = K.bot; g.fillRect(70, yy - lh * .74, 5, lh);
+    gt(g, String(E_INS + 1), 56, yy, { size: 22, color: K.bot, mono: true, align: 'right' });
+    const cx = codeLine(g, NEWF, x, yy, size, Math.floor(NEWF.length * p(t, 24.7, .7)));
+    if (t < 25.6) { g.fillStyle = K.hi; g.fillRect(cx + 2, yy - 26, 3, 34); }
+    g.restore();
+  }
+  PROTO.forEach((ln, i) => {
+    if (left <= 0) return;
+    const yy = rowY(i);
+    // tag highlight (field numbers)
+    gt(g, String(i + 1 + (i >= E_INS && ins > .5 ? 1 : 0)), 56, yy, { size: 22, color: K.faint, mono: true, align: 'right' });
+    const cx = codeLine(g, ln, x, yy, size, left);
+    cursor = [cx, yy, i]; left -= ln.length + 1;
+  });
+  // field-number boxes and syntax line box (annotations 1 and 2)
+  const k1 = win(t, 7.2, 14.2, .4), k2 = win(t, 8.8, 14.2, .4);
+  g.save();
+  PROTO.forEach((ln, i) => {
+    const m = /= (\d);/.exec(ln); if (!m || k1 <= 0) return;
+    const lineStart = PROTO.slice(0, i).reduce((s, l) => s + l.length + 1, 0);
+    if (chars < lineStart + ln.length) return;
+    const cx = x + m.index * CW32 - 4;
+    g.globalAlpha = k1; rr(g, cx, rowY(i) - 30, CW32 * 3 + 8, 40, 6); g.lineWidth = 2.5; g.strokeStyle = K.amber; g.stroke();
+  });
+  if (k2 > 0 && chars > 20) { g.globalAlpha = k2; rr(g, x - 10, rowY(0) - 32, CW32 * 18 + 20, 44, 6); g.lineWidth = 2.5; g.strokeStyle = K.client; g.stroke(); }
+  g.restore();
+  // caret
+  if (cursor && t < 14.4 && (chars < PROTO_CHARS || Math.floor(t * 2) % 2 === 0)) { g.fillStyle = K.hi; g.fillRect(cursor[0] + 2, cursor[1] - 26, 3, 34); }
+  // the EnterDungeonReq block glows when it leaves for protoc (ch2)
+  const kb = win(t, 14.6, 16.0, .3);
+  if (kb > 0) { g.save(); g.globalAlpha = kb; rr(g, 10, rowY(8) - 36, w - 20, lh * 4 + 8, 8); g.lineWidth = 3; g.strokeStyle = K.amber; g.stroke(); g.fillStyle = rgba(K.amber, .07); g.fill(); g.restore(); }
+  // status line at the bottom of the editor
+  g.fillStyle = K.line; g.fillRect(0, h - 48, w, 1.5);
+  gt(g, `${vE(t) ? 18 : 17} lines · proto3`, 24, h - 16, { size: 21, color: K.dim, mono: true });
+  gt(g, 'Protocol Buffers', w - 24, h - 16, { size: 21, color: K.dim, align: 'right' });
+}
+
+// T · terminal: protoc
+const TERM_EVENTS = [
+  // [time, text, kind, typeDur]
+  [15.05, './gen_packets.sh', 'cmd', .55],
+  [15.85, 'protoc --csharp_out=Client/  game_packet.proto', 'out', 0],
+  [16.2, 'protoc --cpp_out=Server/     game_packet.proto', 'out', 0],
+  [16.55, 'protoc --csharp_out=Bot/     game_packet.proto', 'out', 0],
+  [16.95, '✓ 3 targets generated · v1.3', 'ok', 0],
+  [26.25, './gen_packets.sh', 'cmd', .45],
+  [26.85, 'protoc --csharp_out=Client/  game_packet.proto', 'out', 0],
+  [27.0, 'protoc --cpp_out=Server/     game_packet.proto', 'out', 0],
+  [27.15, 'protoc --csharp_out=Bot/     game_packet.proto', 'out', 0],
+  [27.4, '✓ 3 targets regenerated · v1.4', 'ok', 0],
+];
+function drawT(g, t) {
+  const w = 980, h = 380;
+  frame(g, w, h, { bg: K.term, bar: '#232427', tabs: [['Terminal', true, K.bot], ['zsh', false]] });
+  const rows = [];
+  for (const [tt, s, kind, td] of TERM_EVENTS) {
+    if (t < tt - (kind === 'cmd' ? .5 : 0)) break;
+    if (kind === 'cmd') rows.push({ kind, s: s.slice(0, Math.floor(s.length * p(t, tt, td))), typing: t < tt + td });
+    else rows.push({ kind, s });
+  }
+  const last = rows[rows.length - 1];
+  if (!last || last.kind !== 'cmd') rows.push({ kind: 'cmd', s: '', idle: true });
+  const vis = rows.slice(-6), x = 28, y0 = TB + 54, lh = 46;
+  vis.forEach((r, i) => {
+    const yy = y0 + i * lh;
+    if (r.kind === 'cmd') {
+      gt(g, '~/game', x, yy, { size: 30, mono: true, color: K.bot, weight: 700 });
+      gt(g, '$', x + 130, yy, { size: 30, mono: true, color: K.dim });
+      gt(g, r.s, x + 166, yy, { size: 30, mono: true, color: K.hi });
+      if (i === vis.length - 1 && (r.typing || Math.floor(t * 2) % 2 === 0)) { g.fillStyle = K.hi; g.fillRect(x + 168 + mw(g, r.s, 30, 500, true), yy - 26, 16, 32); }
+    } else if (r.kind === 'ok') gt(g, r.s, x, yy, { size: 30, mono: true, color: K.bot, weight: 700 });
+    else gt(g, r.s, x, yy, { size: 30, mono: true, color: '#9da1a8' });
+  });
+}
+
+// F1–F3 · generated code (EnterDungeonReq part)
+const FILES = [
+  { id: 'F1', role: ['Client', K.client, 'Unity · C#'], tabs: [['GamePacket.cs', true, K.client]],
+    lines: ['public sealed partial class EnterDungeonReq', '    : IMessage<EnterDungeonReq> {', '  public int DungeonId { get; set; }', '  public int PartyId { get; set; }'],
+    add: { idx: 4, s: '  public int Difficulty { get; set; }' } },
+  { id: 'F2', role: ['Server', K.server, 'C++'], tabs: [['game_packet.pb.h', true, K.server]],
+    lines: ['class EnterDungeonReq final', '    : public ::google::protobuf::Message {', '  int32_t dungeon_id() const;', '  int32_t party_id() const;'],
+    add: { idx: 4, s: '  int32_t difficulty() const;' } },
+  { id: 'F3', role: ['Bot Client', K.bot, 'C# (.NET)'], tabs: [['GamePacket.cs', false], ['DungeonScenario.cs', true, K.bot]],
+    lines: ['// 클라와 같은 생성 코드를 그대로 사용', 'var req = new EnterDungeonReq {', '  DungeonId = 101, PartyId = party.Id,', '};'],
+    add: { idx: 3, s: '  Difficulty = 3,' } },
+];
+const ARR1 = [16.85, 17.2, 17.55];       // codegen chips arrive (ch2)
+const ARR2 = [27.65, 27.8, 27.95];       // v1.4 chips arrive (ch3)
+const FW = 940, FH = [330, 330, 350];
+function drawF(i) {
+  const f = FILES[i];
+  return (g, t) => {
+    const w = FW, h = FH[i], uk = eo(p(t, ARR2[i], .5)), flash = uk * (1 - p(t, ARR2[i] + .6, 1.2));
+    frame(g, w, h, { role: f.role, tabs: f.tabs, ver: [uk > .5 ? 'v1.4' : 'v1.3', uk > .5 ? K.bot : K.dim, flash], stroke: rgba(f.role[1], .55) });
+    const x = 34, y = TB + 52, lh = 44, size = 30;
+    let left = 200 * p(t, ARR1[i] + .1, 1.8);
+    f.lines.forEach((ln, j) => {
+      if (left <= 0) return;
+      const yy = y + (j + (j >= f.add.idx ? uk : 0)) * lh;
+      codeLine(g, ln, x, yy, size, left); left -= ln.length + 1;
+    });
+    if (uk > 0) {
+      const yy = y + f.add.idx * lh, fl = 1 - p(t, ARR2[i] + 2, 3) * .55;
+      g.save(); g.globalAlpha = uk; g.fillStyle = rgba(K.bot, .16 * fl); g.fillRect(0, yy - lh * .74, w, lh); g.fillStyle = K.bot; g.fillRect(0, yy - lh * .74, 5, lh);
+      const ex = codeLine(g, f.add.s, x, yy, size, Math.floor(40 * p(t, ARR2[i] + .1, .5)));
+      g.restore();
+      if (f.id === 'F3') gchip(g, '← 시나리오에서 값 지정', ex + 22, yy - 10, K.bot, { size: 23, mono: false, alpha: eo(p(t, 28.4, .5)) });
+    }
+    const kb = eback(p(t, ARR2[i] + .45, .5));
+    if (kb > 0) { g.save(); g.translate(w - 50, h - 46); g.scale(kb, kb); gdot(g, 0, 0, 24, rgba(K.bot, .22)); gcheck(g, 0, 0, 28, K.bot); g.restore(); }
+  };
+}
+
+// HW · hand-written bot packet (stale)
+function drawHW(g, t) {
+  const w = 860, h = 372;
+  const shake = Math.sin(t * 60) * 5 * (1 - p(t, 29.9, .5)) * p(t, 29.35, .1);
+  g.setTransform(TS, 0, 0, TS, 0, 0); g.clearRect(0, 0, w, h); g.translate(shake, 0);
+  rr(g, 2, 2, w - 4, h - 4, 14); g.fillStyle = '#211a1c'; g.fill();
+  g.save(); rr(g, 2, 2, w - 4, h - 4, 14); g.clip(); g.fillStyle = '#2d2225'; g.fillRect(0, 0, w, TB); g.restore();
+  g.save(); g.setLineDash([12, 9]); rr(g, 2, 2, w - 4, h - 4, 14); g.lineWidth = 3; g.strokeStyle = rgba(K.red, .85); g.stroke(); g.restore();
+  gdot(g, 31, TB / 2, 7, K.red);
+  gt(g, '손으로 짠 봇 패킷', 48, TB / 2 + 10, { size: 28, weight: 800, color: K.hi });
+  gt(g, 'HandPacket.cs', 312, TB / 2 + 9, { size: 23, mono: true, color: K.dim });
+  gchip(g, 'v1.3', w - 76, TB / 2, K.red, { align: 'right', size: 21 });
+  const x = 30, y = TB + 50;
+  codeLine(g, 'buf.Add(0x08); buf.AddVarint(dungeonId);', x, y, 30);
+  codeLine(g, 'buf.Add(0x10); buf.AddVarint(partyId);', x, y + 44, 30);
+  gt(g, '// v1.4 difficulty(3번) 미반영', x, y + 88, { size: 30, mono: true, color: rgba(K.red, .9) });
+  g.fillStyle = 'rgba(242,73,92,0.25)'; g.fillRect(0, y + 118, w, 1.5);
+  gt(g, '번호 · 타입 수동 관리 → 어긋나면 서버가 잘못 파싱', x, y + 166, { size: 29, weight: 700, color: '#ff7383', alpha: eo(p(t, 29.6, .5)) });
+  gt(g, '→ 테스트 결과를 믿을 수 없음', x, y + 210, { size: 29, color: K.dim, alpha: eo(p(t, 30.4, .5)) });
+  const kx = eback(p(t, 29.35, .5));
+  if (kx > 0) { g.save(); g.translate(w - 34, 36); g.scale(kx, kx); gdot(g, 0, 0, 25, '#3a1218'); g.lineWidth = 2; g.strokeStyle = K.red; g.beginPath(); g.arc(0, 0, 25, 0, 7); g.stroke(); gcross(g, 0, 0, 28, K.red); g.restore(); }
+}
+
+// S · team schedule (week timeline)
+function drawS(g, t) {
+  const w = 1620, h = 560, v = t - 33.3;
+  frame(g, w, h, { tabs: [['던전 업데이트 일정', true, K.server], ['Board', false]], role: null });
+  gt(g, 'Timeline · 주 단위', w - 26, TB / 2 + 9, { size: 23, color: K.dim, align: 'right' });
+  const x0 = 250, colW = 160, top = TB + 30;
+  for (let wk = 0; wk <= 8; wk++) {
+    const x = x0 + wk * colW;
+    g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, top + 40, 1.5, 380);
+    if (wk < 8) gt(g, 'W' + (wk + 1), x + colW / 2, top + 26, { size: 24, mono: true, color: K.dim, align: 'center' });
+  }
+  const prog = eio(p(v, .5, 1.9));
+  const lanes = [[K.server, '서버팀', 172, 3, '던전 컨텐츠 서버 로직'], [K.client, '클라팀', 312, 7, 'UI · 연출 · 리소스 작업 중…']];
+  lanes.forEach(([col, name, ly, len, lab]) => {
+    gt(g, name, 36, top + ly + 12, { size: 32, weight: 800, color: col });
+    rr(g, x0, top + ly - 34, colW * len, 68, 10); g.fillStyle = rgba(col, .08); g.fill(); g.lineWidth = 1.5; g.strokeStyle = rgba(col, .4); g.stroke();
+    rr(g, x0, top + ly - 34, Math.max(1, colW * 3 * prog), 68, 10); g.fillStyle = rgba(col, .34); g.fill();
+    gt(g, lab, x0 + 22, top + ly + 11, { size: 29, weight: 700, color: K.hi });
+  });
+  // NOW marker
+  const px = x0 + colW * 3 * prog;
+  g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(px - 1.5, top + 70, 3, 330);
+  gchip(g, 'NOW', px, top + 58, '#ffffff', { align: 'center', size: 19, alpha: eo(p(v, .4, .4)) });
+  const kd = eback(p(v, 2.4, .5));
+  if (kd > 0) { g.save(); g.translate(x0 + colW * 3 - 36, top + 172); g.scale(kd, kd); gdot(g, 0, 0, 22, K.server); gcheck(g, 0, 0, 26, '#1b1325'); g.restore(); }
+  // gap after the server lane
+  const gx = x0 + colW * 3 + 12, gw = colW * 5 - 12, gy = top + 172 - 34;
+  const kg = Math.min(eo(p(v, 2.6, .5)), 1 - eo(p(v, 3.6, .4)));
+  if (kg > 0) {
+    g.save(); g.globalAlpha = kg; rr(g, gx, gy, gw, 68, 10); g.clip(); g.strokeStyle = rgba(K.amber, .32); g.lineWidth = 2;
+    for (let x = gx - 70; x < gx + gw; x += 20) { g.beginPath(); g.moveTo(x, gy + 68); g.lineTo(x + 68, gy); g.stroke(); }
+    g.restore();
+    gt(g, '클라 연동까지 대기…?', gx + gw / 2, gy + 45, { size: 29, weight: 700, color: K.amber, align: 'center', alpha: kg });
+  }
+  const kb = eback(p(v, 3.6, .7));
+  if (kb > 0) {
+    const bx = gx + (1 - clamp(kb)) * 80;
+    g.save(); g.globalAlpha = clamp(kb); rr(g, bx, gy, gw, 68, 10); g.fillStyle = rgba(K.bot, .2); g.fill(); g.lineWidth = 2.5; g.strokeStyle = K.bot; g.stroke();
+    gt(g, '▶', bx + 22, gy + 45, { size: 26, color: K.bot });
+    gt(g, '봇 클라이언트로 바로 컨텐츠 테스트', bx + 60, gy + 45, { size: 29, weight: 800, color: K.bot });
+    g.restore();
+  }
+  // legend
+  g.fillStyle = K.line; g.fillRect(0, h - 60, w, 1.5);
+  gt(g, '예시 일정', 30, h - 20, { size: 22, color: K.faint });
+}
+
+// CS · the real client (in development)
+function drawCS(g, t) {
+  const w = 600, h = 300;
+  frame(g, w, h, { role: ['Client', K.client, 'Unity'], dash: [10, 8], stroke: rgba(K.client, .6), bg: '#1b1d21' });
+  gt(g, '개발 중…', w - 26, TB / 2 + 9, { size: 24, color: K.dim, align: 'right' });
+  const k = eo(p(t, 39.4, .6));
+  gt(g, '실제 클라가 보낼', 30, TB + 64, { size: 30, color: K.dim, alpha: k });
+  gt(g, '패킷 순서 그대로', 30, TB + 112, { size: 30, weight: 700, color: K.hi, alpha: k });
+  gt(g, '봇이 흉내 → → →', 30, TB + 160, { size: 30, weight: 700, color: K.bot, alpha: eo(p(t, 39.8, .6)) });
+  // spinner
+  const a0 = t * 4;
+  g.save(); g.translate(w - 60, h - 60); g.strokeStyle = rgba(K.client, .7); g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.arc(0, 0, 20, a0, a0 + 4.2); g.stroke(); g.restore();
+}
+
+// B / L / R · packet flow: bot log, server log, content test
+const SEQ = [[1, 'LoginReq'], [-1, 'LoginAck'], [1, 'EnterWorldReq'], [-1, 'EnterWorldAck'], [1, 'EnterDungeonReq'], [-1, 'EnterDungeonAck'], [1, 'SkillUseReq × N', 'burst'], [-1, 'DungeonClearNoti']];
+const SEQ_T0 = 38.8;
+const STARTS = (() => { const s = []; let s0 = .9; SEQ.forEach(m => { s.push(SEQ_T0 + s0); s0 += m[2] ? 1.8 : .55; }); return s; })();
+const FLY = .45;
+const LOG = { y0: TB + 58, lh: 46 };
+const logRowY = i => LOG.y0 + 46 + i * LOG.lh;   // first row under the comment line
+function drawLog(side) {
+  return (g, t) => {
+    const w = 580, h = 520, bot = side === 'B';
+    frame(g, w, h, { bg: K.term, bar: '#232427', role: bot ? ['Bot Client', K.bot, 'bot-0001'] : ['Game Server', K.server, 'log'], stroke: rgba(bot ? K.bot : K.server, .55) });
+    gt(g, bot ? '// 실제 클라 패킷 순서 그대로' : '// 받은 순서대로 처리', 28, LOG.y0, { size: 26, mono: true, color: SY.com });
+    SEQ.forEach(([dir, lab], i) => {
+      const st = STARTS[i], mine = bot ? dir > 0 : dir < 0;   // the side that sends
+      const at = mine ? st : st + FLY;
+      const k = eo(p(t, at, .25)); if (k <= 0) return;
+      const yy = logRowY(i), col = dir > 0 ? K.bot : K.server;
+      const arrow = mine ? '→' : '←';
+      const fresh = 1 - p(t, at + .3, .8);
+      if (fresh > 0) { g.fillStyle = rgba(col, .14 * fresh * k); g.fillRect(0, yy - 33, w, LOG.lh); }
+      gt(g, String(i + 1).padStart(2, '0'), 28, yy, { size: 26, mono: true, color: K.faint, alpha: k });
+      gt(g, arrow, 78, yy, { size: 30, mono: true, color: col, weight: 700, alpha: k });
+      gt(g, lab, 116, yy, { size: 30, mono: true, color: K.hi, alpha: k });
+    });
+  };
+}
+const CHECKS = [[1, '로그인 · 월드 입장'], [5, '던전 입장 시퀀스'], [6, '전투 패킷 반복'], [7, '클리어 · 보상 검증']];
+function drawR(g, t) {
+  const w = 620, h = 520;
+  frame(g, w, h, { role: ['클라 없이 검증', K.hi], tabs: [], stroke: rgba(K.bot, .4) });
+  gt(g, 'content-test', w - 26, TB / 2 + 9, { size: 22, mono: true, color: K.dim, align: 'right' });
+  let done = 0;
+  CHECKS.forEach(([ri, lab], j) => {
+    const at = STARTS[ri] + .5, k = eo(p(t, at, .4)), yy = TB + 84 + j * 84;
+    if (k > 0) done++;
+    rr(g, 24, yy - 46, w - 48, 70, 10); g.fillStyle = k > 0 ? rgba(K.bot, .08 * k) : 'rgba(255,255,255,0.02)'; g.fill();
+    if (k > 0) { gdot(g, 64, yy - 11, 19, rgba(K.bot, .25 * k)); gcheck(g, 64, yy - 11, 24, K.bot, k); }
+    else { g.save(); g.strokeStyle = K.faint; g.lineWidth = 2.5; g.beginPath(); g.arc(64, yy - 11, 17, 0, 7); g.stroke(); g.restore(); }
+    gt(g, lab, 102, yy, { size: 30, weight: 700, color: k > 0 ? K.hi : K.dim });
+  });
+  g.fillStyle = K.line; g.fillRect(0, h - 64, w, 1.5);
+  gt(g, `${done} / 4 passed`, 28, h - 22, { size: 26, mono: true, weight: 700, color: done === 4 ? K.bot : K.dim });
+}
+
+// P · the BotClient package handed to the publisher
+function drawP(g, t) {
+  const w = 980, h = 330;
+  frame(g, w, h, { role: ['BotClient 패키지', K.bot], tabs: [], stroke: rgba(K.bot, .7), lw: 2.5 });
+  gt(g, 'BotClient-v1.4.zip', w - 26, TB / 2 + 9, { size: 22, mono: true, color: K.dim, align: 'right' });
+  const rows = [['├─ Packets/GamePacket.cs', '생성된 패킷 코드'], ['├─ Scenarios/DungeonClear.cs', '컨텐츠 시나리오'], ['└─ loadtest.yaml', '부하 설정 (동접 · RPS)']];
+  gt(g, 'BotClient/', 30, TB + 54, { size: 28, mono: true, color: K.hi, weight: 700 });
+  rows.forEach(([a, b], i) => {
+    const yy = TB + 54 + (i + 1) * 50;
+    gt(g, a, 30, yy, { size: 28, mono: true, color: K.text });
+    gt(g, b, w - 30, yy, { size: 28, color: K.dim, align: 'right' });
+  });
+}
+
+// D · load-test dashboard
+const cpuAt = ccu => { const k = ccu / 1000; return 5 + 11 * k + .4 * k * k; };   // 5,000 CCU → 70%
+const latAt = ccu => { const k = ccu / 1000; return 18 + 6 * k + (k > 4.8 ? (k - 4.8) ** 2 * 40 : 0); };
+const ccuAt = t => 6000 * eio(p(t, 50.0, 5.4));
+const GRID = (() => { const r = rng(42), cells = []; for (let j = 0; j < 13; j++) for (let i = 0; i < 23; i++) cells.push({ i, j, o: r(), ph: r() * 6 }); return cells.sort((a, b) => a.o - b.o); })();
+function dpanel(g, x, y, w, h, title, o = {}) {
+  rr(g, x, y, w, h, 8); g.fillStyle = K.dpanel; g.fill(); g.lineWidth = 1.5; g.strokeStyle = o.stroke || K.dborder; g.stroke();
+  if (title) gt(g, title, x + 22, y + 44, { size: 30, weight: 700, color: '#d8d9da' });
+}
+function drawD(g, t) {
+  const w = 1720, h = 880, ccu = ccuAt(t), cpu = cpuAt(ccu), lat = latAt(ccu);
+  frame(g, w, h, { bg: K.dash, bar: '#181b1f', role: ['부하 테스트', K.pub, 'loadtest / dungeon_clear'] });
+  gchip(g, '● LIVE', w - 200, TB / 2, K.red, { align: 'right', size: 20 });
+  gt(g, 'last 15m', w - 26, TB / 2 + 8, { size: 22, mono: true, color: K.dim, align: 'right' });
+  const Y0 = TB + 16;
+  // bots
+  dpanel(g, 16, Y0, 520, 520, '동시 접속 봇');
+  gt(g, fmt(ccu), 512, Y0 + 168, { size: 112, weight: 800, mono: true, color: K.bot, align: 'right' });
+  const shown = Math.floor(GRID.length * ccu / 6000);
+  for (let n = 0; n < shown; n++) {
+    const c = GRID[n], x = 52 + c.i * 20.5, y = Y0 + 236 + c.j * 21;
+    g.fillStyle = rgba(K.bot, .5 + .45 * Math.sin(t * 5 + c.ph)); g.fillRect(x - 5, y - 5, 10, 10);
+  }
+  // gauges
+  dpanel(g, 548, Y0, 320, 520, 'CPU');
+  [['LB', Math.min(99, cpu * .45)], ['Game Server', cpu], ['DB', Math.min(99, cpu * .62)]].forEach(([name, load], i) => {
+    const y = Y0 + 120 + i * 140, col = load < 60 ? K.bot : load < 72 ? K.yellow : K.red;
+    gt(g, name, 570, y, { size: 28, weight: 700, color: K.hi });
+    gt(g, Math.round(load) + '%', 846, y + 52, { size: 46, weight: 800, mono: true, color: col, align: 'right' });
+    rr(g, 570, y + 70, 276, 10, 5); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fill();
+    rr(g, 570, y + 70, Math.max(8, 276 * load / 100), 10, 5); g.fillStyle = col; g.fill();
+  });
+  // chart
+  const CX = 880, CY = Y0, CWd = 824, CHt = 520;
+  dpanel(g, CX, CY, CWd, CHt, 'CPU 사용률 vs 동시 접속');
+  gt(g, 'Game Server · 1대', CX + CWd - 22, CY + 42, { size: 23, mono: true, color: K.dim, align: 'right' });
+  const px0 = CX + 92, px1 = CX + CWd - 30, py0 = CY + CHt - 64, py1 = CY + 86;
+  const X = c => lerp(px0, px1, c / 6000), Y = c => lerp(py0, py1, c / 100);
+  g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.07)';
+  [0, 25, 50, 75, 100].forEach(v => { g.beginPath(); g.moveTo(px0, Y(v)); g.lineTo(px1, Y(v)); g.stroke(); gt(g, v + '%', px0 - 14, Y(v) + 8, { size: 22, mono: true, color: K.dim, align: 'right' }); });
+  [0, 2000, 4000, 6000].forEach(v => gt(g, v ? v / 1000 + 'k' : '0', X(v), py0 + 38, { size: 22, mono: true, color: K.dim, align: 'center' }));
+  g.save(); g.setLineDash([10, 9]); g.strokeStyle = rgba(K.red, .85); g.lineWidth = 2.5; g.beginPath(); g.moveTo(px0, Y(70)); g.lineTo(px1, Y(70)); g.stroke(); g.restore();
+  gt(g, '임계 70%', px0 + 12, Y(70) - 14, { size: 26, weight: 800, color: K.red, mono: true });
+  if (ccu > 10) {
+    const gr = g.createLinearGradient(0, py1, 0, py0); gr.addColorStop(0, rgba(K.bot, .3)); gr.addColorStop(1, rgba(K.bot, 0));
+    g.beginPath(); g.moveTo(X(0), py0);
+    for (let c = 0; c <= ccu; c += 40) g.lineTo(X(c), Y(cpuAt(c) + Math.sin(c * .006) * .7));
+    g.lineTo(X(ccu), Y(cpu)); g.lineTo(X(ccu), py0); g.closePath(); g.fillStyle = gr; g.fill();
+    g.beginPath(); for (let c = 0; c <= ccu; c += 40) { const yy = Y(cpuAt(c) + Math.sin(c * .006) * .7); c ? g.lineTo(X(c), yy) : g.moveTo(X(c), yy); }
+    g.lineTo(X(ccu), Y(cpu)); g.strokeStyle = K.bot; g.lineWidth = 3.5; g.stroke();
+    gdot(g, X(ccu), Y(cpu), 8, cpu > 70 ? K.red : K.bot);
+  }
+  const km = eback(p(ccu, 5000, 400));
+  if (km > 0) {
+    g.save(); g.setLineDash([5, 7]); g.strokeStyle = rgba(K.pub, .9); g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(5000), py0); g.lineTo(X(5000), Y(70)); g.stroke(); g.restore();
+    gdot(g, X(5000), Y(70), 11 * clamp(km, 0, 1.3), K.pub);
+    g.save(); g.translate(X(5000) - 30, Y(70) - 92); g.scale(km, km);
+    rr(g, -400, -36, 400, 68, 10); g.fillStyle = '#3a1c2c'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = K.pub; g.stroke();
+    gt(g, '서버 1대 ≈ 동접 5,000', -200, 12, { size: 34, weight: 800, color: K.pub, align: 'center' });
+    g.restore();
+  }
+  // stat panels
+  [['RPS', fmt(ccu * 8), K.bot, c => c * 8 / 48000], ['p99 지연', Math.round(lat) + 'ms', lat > 80 ? K.red : K.bot, c => (latAt(c) - 18) / 120], ['DB QPS', fmt(ccu * 1.6), K.client, c => c / 6000]].forEach(([lab, val, col, f], i) => {
+    const x = 16 + i * 568, y = Y0 + 536, pw = 556, ph = 260;
+    dpanel(g, x, y, pw, ph, lab);
+    gt(g, val, x + 22, y + 140, { size: 66, weight: 800, mono: true, color: col });
+    // sparkline
+    g.beginPath();
+    for (let s = 0; s <= 60; s++) { const c = ccu * s / 60, xx = x + 22 + (pw - 44) * s / 60, yy = y + ph - 24 - clamp(f(c)) * 74; s ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+    g.strokeStyle = rgba(col, .8); g.lineWidth = 2.5; g.stroke();
+  });
+}
+// RS1 / RS2 · results written down
+function drawRS(i) {
+  return (g, t) => {
+    const w = 840, h = 340;
+    const col = i === 0 ? K.pub : K.client;
+    frame(g, w, h, { tabs: [[i === 0 ? 'capacity_plan.md' : 'live_infra_test.md', true, col]], stroke: rgba(col, .7), lw: 2.5 });
+    if (i === 0) {
+      gt(g, '장비 스펙 산정', 32, TB + 60, { size: 36, weight: 800, color: col });
+      gt(g, '대당 동접 5,000 (CPU 70% 기준), 목표 동접 50,000', 32, TB + 112, { size: 28, color: K.dim });
+      gt(g, '→ 게임 서버 10대 + 여유분', 32, TB + 178, { size: 44, weight: 800, color: K.hi });
+      gt(g, 'DB · LB 등 공유 자원은 별도 측정', 32, TB + 232, { size: 28, color: K.dim });
+    } else {
+      gt(g, '라이브 인프라 테스트', 32, TB + 60, { size: 36, weight: 800, color: col });
+      gt(g, '실서비스 환경에 같은 봇으로 부하 투입', 32, TB + 116, { size: 30, color: K.dim });
+      gt(g, 'LB · 네트워크 · DB 병목을', 32, TB + 178, { size: 40, weight: 800, color: K.hi });
+      gt(g, '오픈 전에 확인', 32, TB + 232, { size: 40, weight: 800, color: K.hi });
+    }
+  };
+}
+
+// ── artifact registry + 3D meshes ────────────────────────────
+// live: intervals where the content changes; outside them the texture is the state at the nearest earlier edge.
+const SPEC = {
+  E: { w: 840, h: 960, pos: [0, 5.7, 0], yaw: .14, draw: drawE, live: [[5.0, 14.5], [24.3, 28.0]] },
+  T: { w: 980, h: 380, pos: [10.2, 2.35, 2.0], yaw: .04, draw: drawT, live: [[14.4, 17.8], [25.6, 28.2]] },
+  F1: { w: FW, h: FH[0], pos: [20.6, 9.75, 0], yaw: -.1, draw: drawF(0), live: [[16.5, 19.2], [27.4, 31]] },
+  F2: { w: FW, h: FH[1], pos: [20.6, 6.2, 0], yaw: -.1, draw: drawF(1), live: [[16.9, 19.6], [27.5, 31]] },
+  F3: { w: FW, h: FH[2], pos: [20.6, 2.55, 0], yaw: -.1, draw: drawF(2), live: [[17.2, 19.9], [27.6, 31]] },
+  HW: { w: 860, h: 372, pos: [11.2, 6.6, .6], yaw: .1, draw: drawHW, live: [[28.4, 31.2]] },
+  S: { w: 1620, h: 560, pos: [34.6, 6.3, 0], yaw: 0, draw: drawS, live: [[33.3, 38.4]] },
+  CS: { w: 600, h: 300, pos: [45.9, 5.9, -.4], yaw: .12, draw: drawCS, live: [[38.6, 46.6]] },
+  B: { w: 580, h: 520, pos: [52.5, 5.6, 0], yaw: .06, draw: drawLog('B'), live: [[39.4, 46.0]] },
+  L: { w: 580, h: 520, pos: [60.4, 5.6, 0], yaw: 0, draw: drawLog('L'), live: [[39.4, 46.0]] },
+  R: { w: 620, h: 520, pos: [67.1, 5.6, 0], yaw: -.06, draw: drawR, live: [[39.4, 46.0]] },
+  P: { w: 980, h: 330, pos: [58, 5.6, 2.4], yaw: 0, draw: drawP, live: [] },
+  D: { w: 1720, h: 880, pos: [88.5, 6.4, 0], yaw: 0, draw: drawD, live: [[49.3, 56.0]] },
+  RS1: { w: 840, h: 340, pos: [83.9, 2.9, 3.4], yaw: .05, draw: drawRS(0), live: [] },
+  RS2: { w: 840, h: 340, pos: [93.1, 2.9, 3.4], yaw: -.05, draw: drawRS(1), live: [] },
+};
+const ORDER = Object.keys(SPEC);
+const RIM_M = 44;
+const rimMat = () => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uSize: { value: new THREE.Vector2() }, uM: { value: RIM_M }, uK: { value: 0 }, uC: { value: new THREE.Color() }, uS: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `varying vec2 vUv; uniform vec2 uSize; uniform float uM; uniform float uK; uniform vec3 uC; uniform float uS;
+    float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
+    void main(){
+      vec2 full = uSize + 2. * uM; vec2 p = (vUv - .5) * full;
+      float d = sdRR(p, uSize * .5 - 2., 14.);
+      float rim = exp(-abs(d) / 2.2);
+      float outer = d > 0. ? exp(-d / 16.) * .45 : 0.;
+      float top = .55 + .45 * clamp(p.y / full.y + .5, 0., 1.);
+      float sweep = exp(-pow((p.x / full.x * .7 - p.y / full.y) - uS, 2.) / .006);
+      vec3 c = uC * (rim * (top + 1.6 * sweep) + outer);
+      gl_FragColor = vec4(c * uK, 1.);
+    }`,
+});
+const ART = {};
+for (const id of ORDER) {
+  const s = SPEC[id], ww = s.w / 100, hh = s.h / 100;
+  const c = mkCanvas(Math.round(s.w * TS), Math.round(s.h * TS)), g = c.getContext('2d');
+  const tex = canvasTex(c);
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: .02, side: THREE.FrontSide, fog: false, color: new THREE.Color(.97, .97, .97) });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), mat); mesh.renderOrder = 5; mesh.position.z = .061;
+  const slabMat = new THREE.MeshBasicMaterial({ color: 0x17181a, transparent: true, fog: false });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(ww - .06, hh - .06, .12), slabMat); slab.renderOrder = 4;
+  const rm = rimMat(); rm.uniforms.uSize.value.set(s.w, s.h);
+  const rim = new THREE.Mesh(new THREE.PlaneGeometry(ww + 2 * RIM_M / 100, hh + 2 * RIM_M / 100), rm); rim.position.z = .07; rim.renderOrder = 6;
+  grp.add(slab); grp.add(mesh); grp.add(rim);
+  scene.add(grp);
+  const reflMat = new THREE.MeshBasicMaterial({ map: tex, alphaMap: reflAlpha, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, color: new THREE.Color(.6, .6, .6) });
+  const refl = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), reflMat); refl.renderOrder = 1; scene.add(refl);
+  const shMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: false });
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(ww * 1.15, 2.6), shMat); shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; scene.add(shadow);
+  ART[id] = { id, s, c, g, tex, grp, mesh, mat, slab, slabMat, rim, rm, refl, reflMat, shadow, shMat, key: null };
+}
+// design px on an artifact → world point (uses current placement)
+const _v3 = new THREE.Vector3();
+function artPt(id, x, y, z = .07) {
+  const a = ART[id]; a.grp.updateMatrixWorld();
+  return a.grp.localToWorld(new THREE.Vector3((x / a.s.w - .5) * a.s.w / 100, (.5 - y / a.s.h) * a.s.h / 100, z));
+}
+function liveT(iv, t) {
+  if (!iv.length) return 0;
+  let last = iv[0][0];
+  for (const [a, b] of iv) { if (t < a) return last; if (t <= b) return t; last = b; }
+  return last;
+}
+
+// ── presence and placement per artifact (pure in t) ──────────
+// returns { k: 0..1 presence, rise, rimCol, rimK, pos override }
+const OVER = t => Math.max(1 - p(t, 3.9, 1.0), eo(p(t, OUT0 + .2, 1.6)));   // overview: title and outro show the whole desk
+function place(id, t) {
+  const S = SPEC[id]; let k = 1, rimK = 0, rimCol = K.amber, pos = S.pos.slice();
+  const ov = OVER(t);
+  const appear = (t0, d = .7) => eo(p(t, t0, d));
+  switch (id) {
+    case 'E': rimK = .5 * win(t, 5.2, 14.3) + .9 * Math.sin(p(t, 12, 2.3) * Math.PI) + .7 * win(t, 24.2, 26.2); rimCol = t > 20 ? K.bot : K.amber; break;
+    case 'T': rimK = .8 * win(t, 15.0, 17.3) + .8 * win(t, 26.2, 27.6); rimCol = K.amber; break;
+    case 'F1': case 'F2': case 'F3': {
+      const i = +id[1] - 1; k = Math.max(appear(ARR1[i] - .45, .6), ov);
+      rimK = .9 * win(t, ARR1[i] - .1, ARR1[i] + .9, .3) + 1.0 * win(t, ARR2[i] - .05, ARR2[i] + 1.4, .3) + (i === 2 ? .35 * win(t, 18, 33) : 0);
+      rimCol = t > 25 ? K.bot : FILES[i].role[1]; break;
+    }
+    case 'HW': k = Math.max(appear(28.6, .8), ov * .9); rimK = .7 * win(t, 29.3, 33); rimCol = K.red; break;
+    case 'S': k = Math.max(appear(33.0, .8), ov); rimK = .5 * win(t, 33.6, 39); rimCol = K.server; break;
+    case 'CS': k = Math.max(appear(38.9, .8) * .85, ov * .8) * (1 - .5 * eo(p(t, 42, 1))); break;
+    case 'B': case 'L': case 'R': k = Math.max(appear(38.8 + (id === 'B' ? 0 : id === 'L' ? .12 : .24), .7), ov);
+      rimK = id === 'R' ? .9 * win(t, STARTS[7] + .4, 46.5) : .45 * win(t, 39.5, 46.5); rimCol = id === 'L' ? K.server : K.bot; break;
+    case 'P': {
+      // pops up in front of the server log, flies over the seam to the publisher side, then parks left of the dashboard
+      const kp = eback(p(t, 46.6, .5)), m = eio(p(t, 47.1, 1.7));
+      const a = [60.1, 5.4, 2.6], b = [75.9, 3.0, 4.6];
+      pos = [lerp(a[0], b[0], m), lerp(a[1], b[1], m) + Math.sin(m * Math.PI) * 2.6, lerp(a[2], b[2], m)];
+      k = clamp(kp) * (1 - eo(p(t, 50.4, .8)));
+      if (ov > 0 && t > OUT0) { k = ov; pos = b; }
+      rimK = 1.1 * k; rimCol = K.bot; break;
+    }
+    case 'D': k = Math.max(appear(49.75, .8), ov); rimK = .5 * win(t, 49.5, 58.3); rimCol = K.pub;
+      if (t > 55.3 && t < OUT0 + .5) k *= 1 - .3 * eo(p(t, 55.4, .6)); break;
+    case 'RS1': case 'RS2': { const i = id === 'RS1' ? 0 : 1; k = Math.max(appear(55.5 + i * .35, .7), ov); rimK = .8 * k * (1 - ov); rimCol = i ? K.client : K.pub;
+      pos[1] -= (1 - appear(55.5 + i * .35, .7)) * .5; break; }
+  }
+  if (id !== 'P' && !['F1', 'F2', 'F3', 'HW', 'S', 'CS', 'B', 'L', 'R', 'D', 'RS1', 'RS2'].includes(id)) k = 1;
+  // in the title the future artifacts are faint outlines of what is coming; they leave as the camera dives in
+  if (t < 5.4 && id !== 'E' && id !== 'T') k = Math.max(k, .8 * (1 - p(t, 3.9, 1.0)));
+  return { k, rimK: clamp(rimK, 0, 1.6), rimCol, pos };
+}
+
+// ── thick glowing lines (screen-space quads) ─────────────────
+const MAXSEG = 1400;
+const lineGeo = new THREE.InstancedBufferGeometry();
+lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+lineGeo.setIndex([0, 1, 2, 0, 2, 3]);
+const iA = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iB = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3);
+const iC = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iWd = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG), 1);
+[iA, iB, iC, iWd].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+lineGeo.setAttribute('iA', iA); lineGeo.setAttribute('iB', iB); lineGeo.setAttribute('iC', iC); lineGeo.setAttribute('iW', iWd);
+const lineMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uRes: { value: new THREE.Vector2(W, H) } },
+  vertexShader: `attribute vec3 iA; attribute vec3 iB; attribute vec3 iC; attribute float iW; uniform vec2 uRes; varying vec3 vC; varying float vS;
+    void main(){
+      vec4 a = projectionMatrix * viewMatrix * vec4(iA, 1.);
+      vec4 b = projectionMatrix * viewMatrix * vec4(iB, 1.);
+      const float N = .12;
+      if (a.w < N && b.w < N) { gl_Position = vec4(2., 2., 2., 1.); vC = vec3(0.); vS = 0.; return; }
+      if (a.w < N) a = mix(a, b, (N - a.w) / (b.w - a.w));
+      if (b.w < N) b = mix(b, a, (N - b.w) / (a.w - b.w));
+      vec2 sa = a.xy / a.w * uRes * .5, sb = b.xy / b.w * uRes * .5;
+      vec2 dir = sb - sa; float L = length(dir); dir = L > 1e-4 ? dir / L : vec2(1., 0.);
+      vec2 n = vec2(-dir.y, dir.x);
+      vec4 c = mix(a, b, position.x);
+      vec2 off = (n * position.y + dir * (position.x * 2. - 1.) * .5) * iW;
+      c.xy += off / (uRes * .5) * c.w;
+      gl_Position = c; vC = iC; vS = position.y;
+    }`,
+  fragmentShader: `varying vec3 vC; varying float vS; void main(){ float f = exp(-vS * vS * 3.5); gl_FragColor = vec4(vC * f, 1.); }`,
+});
+const lineMesh = new THREE.Mesh(lineGeo, lineMat); lineMesh.frustumCulled = false; lineMesh.renderOrder = 7; scene.add(lineMesh);
+let NS = 0;
+const _c = new THREE.Color();
+function seg(a, b, col, inten, wd) {
+  if (NS >= MAXSEG || inten <= .002) return;
+  _c.set(col);
+  iA.array.set([a.x, a.y, a.z], NS * 3); iB.array.set([b.x, b.y, b.z], NS * 3);
+  iC.array.set([_c.r * inten, _c.g * inten, _c.b * inten], NS * 3); iWd.array[NS] = wd; NS++;
+}
+function bez(P, u) {
+  const [a, b, c, d] = P, v = 1 - u;
+  return new THREE.Vector3(
+    v * v * v * a.x + 3 * v * v * u * b.x + 3 * v * u * u * c.x + u * u * u * d.x,
+    v * v * v * a.y + 3 * v * v * u * b.y + 3 * v * u * u * c.y + u * u * u * d.y,
+    v * v * v * a.z + 3 * v * v * u * b.z + 3 * v * u * u * c.z + u * u * u * d.z);
+}
+// draw a bezier with a glowing core; k = reveal 0..1, hot = position of the travelling head (or -1)
+function curve(P, k, col, base, wd = 3, hot = -1, dash = false, sub = 40) {
+  if (k <= 0) return;
+  let prev = bez(P, 0);
+  for (let i = 1; i <= sub; i++) {
+    const u = k * i / sub, q = bez(P, u);
+    if (!dash || i % 2) {
+      const heat = hot >= 0 ? Math.exp(-Math.pow((u - hot) * 9, 2)) : 0;
+      seg(prev, q, col, base + heat * 1.6, wd + heat * 3);
+    }
+    prev = q;
+  }
+}
+const link = (a, b, lift = 1.2, out = 1.5) => {
+  const dx = b.x - a.x;
+  return [a, new THREE.Vector3(a.x + Math.max(out, dx * .35), a.y + lift, a.z), new THREE.Vector3(b.x - Math.max(out, dx * .35), b.y + lift, b.z), b];
+};
+
+// ── data chips: the actual thing in flight (a file, a field, a packet) ─────
+function chipTex(label, col) {
+  const size = 34, padX = 22;
+  const c0 = mkCanvas(8, 8).getContext('2d'); c0.font = `700 ${size}px ${MONO}`;
+  const w = Math.ceil(c0.measureText(label).width + padX * 2 + 30), h = 64;
+  const c = mkCanvas(w * 2, h * 2), g = c.getContext('2d'); g.scale(2, 2);
+  rr(g, 2, 2, w - 4, h - 4, 12); g.fillStyle = '#1a1407'; g.fill(); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
+  gdot(g, padX + 4, h / 2, 7, col);
+  g.font = `700 ${size}px ${MONO}`; g.fillStyle = '#fff4dc'; g.textBaseline = 'middle'; g.fillText(label, padX + 22, h / 2 + 2);
+  const t = canvasTex(c, false); return { t, aspect: w / h };
+}
+const CHIPS = [];
+function addChip(label, col, t0, dur, pathFn, size = .62) {
+  const { t, aspect } = chipTex(label, col);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  sp.renderOrder = 9; sp.center.set(.5, .5); scene.add(sp);
+  const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(col).multiplyScalar(1.6), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  gl.renderOrder = 8; scene.add(gl);
+  CHIPS.push({ sp, gl, t0, dur, pathFn, size, aspect, label, col });
+}
+function addDot(col, t0, dur, pathFn, size = .5) {
+  const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(col).multiplyScalar(2), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  gl.renderOrder = 8; scene.add(gl);
+  CHIPS.push({ sp: null, gl, t0, dur, pathFn, size });
+}
+
+// anchor paths (computed from current artifact placement, so they follow moving artifacts)
+const E_BLOCK_Y = E_CODE.y + 9.5 * E_CODE.lh;
+const pE_T = () => link(artPt('E', 840, E_BLOCK_Y), artPt('T', 0, 220), 1.4, 2);
+const pT_F = i => () => link(artPt('T', 980, 220), artPt(FILES[i].id, 0, FH[i] / 2), .8 - i * .6, 1.6);
+const pE_T2 = () => link(artPt('E', 840, E_CODE.y + E_INS * E_CODE.lh - 12), artPt('T', 0, 260), 1.6, 2);
+const pT_HW = () => link(artPt('T', 420, 0), artPt('HW', 420, 372), .1, .3);
+const pRow = (i, dir) => () => {
+  const y = logRowY(i) - 10;
+  const a = artPt('B', 580, y), b = artPt('L', 0, y);
+  return dir > 0 ? [a, a.clone().lerp(b, .33), a.clone().lerp(b, .66), b] : [b, b.clone().lerp(a, .33), b.clone().lerp(a, .66), a];
+};
+
+addChip('game_packet.proto', K.amber, 14.9, .95, pE_T);
+['GamePacket.cs', 'game_packet.pb.h', 'GamePacket.cs'].forEach((lab, i) => addChip(lab, FILES[i].role[1], ARR1[i] - .9, .9, pT_F(i)));
+addChip('+ int32 difficulty = 3;', K.amber, 25.6, .85, pE_T2);
+[0, 1, 2].forEach(i => addChip('+ difficulty · v1.4', K.bot, ARR2[i] - .75, .75, pT_F(i), .6));
+SEQ.forEach(([dir, lab, kind], i) => {
+  if (kind === 'burst') {
+    addChip('SkillUseReq', K.bot, STARTS[i], FLY, pRow(i, 1), .46);
+    for (let j = 0; j < 9; j++) {
+      addDot(K.bot, STARTS[i] + .4 + j * .14, .38, pRow(i, 1), .45);
+      addDot(K.server, STARTS[i] + .55 + j * .14, .38, pRow(i, -1), .32);
+    }
+  } else addChip(lab, dir > 0 ? K.bot : K.server, STARTS[i], FLY, pRow(i, dir), .46);
+});
+
+// ── floor route: the whole pipeline on the desk, in order ────
+const ROUTE = [[0, 3.2], [10.2, 4.4], [20.6, 3.2], [34.6, 3.2], [52.5, 3.2], [60.4, 3.2], [67.1, 3.2], [75.9, 5.2], [88.5, 3.4]].map(([x, z]) => new THREE.Vector3(x, .03, z));
+const ROUTE_T = [5.0, 14.6, 16.4, 33.3, 38.9, 39.2, 39.5, 47.2, 49.2];    // when each stop is reached
+// nodes for the title strip and the outro: [label, sub, world pos, color]
+const NODES = [
+  ['.proto', '단일 원천', [0, 0, 3.2], K.amber], ['Codegen', '클라 · 서버 · 봇', [20.6, 0, 3.2], K.client], ['Bot Client', '패킷 항상 최신', [52.5, 0, 3.2], K.bot],
+  ['컨텐츠 테스트', '서버 선개발 검증', [67.1, 0, 3.2], K.server], ['스펙 · 라이브', '퍼블리셔 부하 테스트', [88.5, 0, 3.4], K.pub],
+];
+
+// floor labels: who owns which side of the desk
+const FLOOR_LABELS = [];
+function floorLabel(lines, col, wU) {
+  const c = mkCanvas(1400, 260), g = c.getContext('2d');
+  const paint = () => { g.clearRect(0, 0, 1400, 260); gt(g, lines[0], 20, 110, { size: 96, weight: 800, color: col });
+    if (lines[1]) gt(g, lines[1], 24, 210, { size: 64, weight: 600, color: 'rgba(220,220,225,0.75)' }); t.needsUpdate = true; };
+  const t = canvasTex(c); paint(); FLOOR_LABELS.push(paint);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(wU, wU * 260 / 1400), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, fog: false, opacity: .0 }));
+  m.rotation.x = -Math.PI / 2; m.renderOrder = 3; scene.add(m); return m;
+}
+const signDev = floorLabel(['서버팀', '개발 · 컨텐츠 테스트'], K.server, 8);
+signDev.position.set(63.0, .02, 6.4);
+const signPub = floorLabel(['퍼블리셔', 'QA · 인프라팀'], K.pub, 9);
+signPub.position.set(78.5, .02, 6.6);
+
+// dust in the air
+const dust = (() => {
+  const R = rng(17), n = 600, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = -15 + R() * 120; pos[i * 3 + 1] = R() * 16; pos[i * 3 + 2] = -20 + R() * 34; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: .05, color: 0xffd9a8, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scene.add(pts); return pts;
+})();
+
+// ── camera: framed poses, Hermite-smoothed in time ───────────
+// fr(): put world point c at screen (sx, sy) with s screen px per design px, looking with yaw/pitch (deg).
+function fr(c, s, sx, sy, yawDeg = 0, pitchDeg = 0) {
+  const yaw = yawDeg * Math.PI / 180, pit = pitchDeg * Math.PI / 180;
+  const dir = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pit), -Math.sin(pit), -Math.cos(yaw) * Math.cos(pit));
+  const d = H / (200 * s * TAN), ppu = s * 100;
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+  const C = new THREE.Vector3(...c);
+  const pos = C.clone().addScaledVector(dir, -d).addScaledVector(right, (W / 2 - sx) / ppu).addScaledVector(up, (sy - H / 2) / ppu);
+  return { pos, tgt: pos.clone().addScaledVector(dir, d) };
+}
+const raw = (pos, tgt) => ({ pos: new THREE.Vector3(...pos), tgt: new THREE.Vector3(...tgt) });
+const S_ = SPEC;
+const colC = [S_.F1.pos[0], (S_.F1.pos[1] + S_.F3.pos[1]) / 2, 0];
+const CAM = [
+  [0.0, raw([44.5, 38, 78], [44.5, -1, -8])],
+  [3.7, raw([44.5, 36, 75], [44.5, -1, -8])],
+  [5.5, fr(S_.E.pos, .82, 700, 600, 14, 3)],
+  [11.8, fr(S_.E.pos, .86, 690, 598, 11, 2)],
+  [14.2, fr(S_.E.pos, .86, 650, 600, 10, 2)],
+  [15.6, fr(S_.T.pos, .95, 960, 640, 4, 8)],
+  [17.0, fr([16, 5, 1], .8, 960, 560, 0, 4)],
+  [18.4, fr(colC, .9, 1300, 596, -8, 0)],
+  [22.9, fr(colC, .92, 1290, 598, -6, 0)],
+  [24.3, fr([S_.E.pos[0] + .6, 5.4, 0], .9, 1150, 610, 10, 2)],
+  [25.6, fr([S_.E.pos[0] + .6, 5.4, 0], .92, 1140, 610, 9, 2)],
+  [26.6, fr([10.6, 3.8, 1.5], .74, 960, 600, 2, 6)],
+  [27.9, fr([18.0, 6.0, 0], .78, 1180, 580, -6, 2)],
+  [32.9, fr([17.8, 6.0, 0], .8, 1170, 580, -4, 2)],
+  [34.2, fr(S_.S.pos, .95, 960, 520, 0, 2)],
+  [38.3, fr(S_.S.pos, .97, 960, 520, 1, 2)],
+  [40.1, fr([53.1, 5.6, 0], .8, 960, 600, 3, 1)],
+  [41.7, fr([59.9, 5.6, 0], .84, 960, 600, 0, 1)],
+  [45.9, fr([59.9, 5.6, 0], .86, 960, 600, -1, 1)],
+  [46.9, fr([61.1, 5.4, 2.6], .8, 880, 560, -4, 4)],
+  [48.9, fr([75.9, 3.0, 4.6], .86, 760, 520, -8, 8)],
+  [49.6, fr([79.0, 4.5, 3], .62, 960, 560, -4, 4)],
+  [50.6, fr(S_.D.pos, .9, 960, 618, 0, 1)],
+  [54.9, fr(S_.D.pos, .91, 960, 618, 1, 1)],
+  [56.0, fr([88.5, 5.6, 1.5], .8, 960, 590, 0, 2)],
+  [58.3, fr([88.5, 5.6, 1.5], .81, 960, 590, -1, 2)],
+  [60.6, raw([44.5, 39.5, 81], [44.5, -1, -8])],
+  [64.0, raw([44.5, 37.5, 78], [44.5, -1, -8])],
+];
+// monotone cubic (Fritsch–Carlson) per component: no overshoot, holds stay still, long moves stay smooth
+const CAM_T = CAM.map(k => k[0]);
+const CAM_C = ['pos', 'tgt'].flatMap(key => ['x', 'y', 'z'].map(ax => {
+  const y = CAM.map(k => k[1][key][ax]), n = y.length, d = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) d.push((y[i + 1] - y[i]) / (CAM_T[i + 1] - CAM_T[i]));
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) continue;
+    const h0 = CAM_T[i] - CAM_T[i - 1], h1 = CAM_T[i + 1] - CAM_T[i], w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+    m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+  }
+  return { y, m };
+}));
+function camAt(t) {
+  const n = CAM.length;
+  t = clamp(t, CAM_T[0], CAM_T[n - 1]);
+  let i = 0; while (i < n - 2 && t > CAM_T[i + 1]) i++;
+  const h = CAM_T[i + 1] - CAM_T[i], u = (t - CAM_T[i]) / h, u2 = u * u, u3 = u2 * u;
+  const v = CAM_C.map(({ y, m }) => y[i] * (2 * u3 - 3 * u2 + 1) + m[i] * h * (u3 - 2 * u2 + u) + y[i + 1] * (-2 * u3 + 3 * u2) + m[i + 1] * h * (u3 - u2));
+  return { pos: new THREE.Vector3(v[0], v[1], v[2]), tgt: new THREE.Vector3(v[3], v[4], v[5]) };
+}
+
+// ── 2D overlay ───────────────────────────────────────────────
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#e6e7ea', align = 'left', alpha = 1, mono = false, ls = 0, base = 'alphabetic', shadow = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; if (ls) ctx.letterSpacing = ls + 'px';
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = shadow; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return ctx.measureText(s).width; }
+function proj(v) { const q = v.clone().project(camera); return [(q.x + 1) / 2 * W, (1 - q.y) / 2 * H, q.z]; }
+function shade(x0, y0, x1, y1, a) {   // soft dark backing for text
+  const g = ctx.createRadialGradient((x0 + x1) / 2, (y0 + y1) / 2, 0, (x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) * .62);
+  g.addColorStop(0, `rgba(8,8,9,${.78 * a})`); g.addColorStop(1, 'rgba(8,8,9,0)'); ctx.fillStyle = g; ctx.fillRect(x0 - 200, y0 - 200, x1 - x0 + 400, y1 - y0 + 400);
+}
+function header(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+    ctx.save(); ctx.globalAlpha = a;
+    // backing: solid behind the text, fading out to the right and below, so window content never shows through the header
+    const bw = Math.max(tw(title, 56, 800), tw(sub, 30), 560) + 64 + 60;
+    const hg = ctx.createLinearGradient(0, 0, bw + 260, 0); hg.addColorStop(0, 'rgba(9,9,10,0.9)'); hg.addColorStop(bw / (bw + 260), 'rgba(9,9,10,0.84)'); hg.addColorStop(1, 'rgba(9,9,10,0)');
+    ctx.fillStyle = hg; ctx.fillRect(0, 0, bw + 260, 204);
+    const vg = ctx.createLinearGradient(0, 204, 0, 250); vg.addColorStop(0, 'rgba(9,9,10,0.84)'); vg.addColorStop(1, 'rgba(9,9,10,0)');
+    ctx.save(); ctx.fillStyle = vg; ctx.globalAlpha *= 1; ctx.fillRect(0, 204, bw, 46); ctx.restore();
+    // terminal-prompt kicker: where we are in the pipeline
+    const x = 64;
+    txt('~/proto-bot-pipeline', x, 64, { size: 24, mono: true, color: '#7d8188' });
+    const pw = tw('~/proto-bot-pipeline ', 24, 500, true);
+    txt('$', x + pw, 64, { size: 24, mono: true, color: K.amber, weight: 700 });
+    txt(`step ${n}/05`, x + pw + 30, 64, { size: 24, mono: true, color: '#c9cbd0', weight: 600 });
+    txt(title, x - (1 - k) * 24, 128, { size: 56, weight: 800, color: '#f3f3f4', alpha: k });
+    txt(sub, x, 178, { size: 30, color: '#a6aab1', alpha: k2 });
+    ctx.restore();
+  }
+}
+function statusBar(t) {
+  const a = clamp(Math.min(t - 4.8, OUT0 - .2 - t) * 2.5); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const y = 1034, h = 46;
+  ctx.fillStyle = '#2b2d30'; ctx.fillRect(0, y, W, h); ctx.fillStyle = '#3c3f45'; ctx.fillRect(0, y, W, 1.5);
+  // branch
+  ctx.save(); ctx.strokeStyle = '#a8abb2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(40, y + 15, 4, 0, 7); ctx.moveTo(40, y + 19); ctx.lineTo(40, y + 34); ctx.moveTo(52, y + 18); ctx.quadraticCurveTo(52, y + 27, 40, y + 29); ctx.stroke(); ctx.beginPath(); ctx.arc(52, y + 14, 4, 0, 7); ctx.stroke(); ctx.restore();
+  txt('main', 64, y + 30, { size: 20, mono: true, color: '#c9cbd0' });
+  // chapter segments
+  const x0 = 170, x1 = 1530, T0 = HEAD[0][0], T1 = OUT0, X = tt => lerp(x0, x1, (tt - T0) / (T1 - T0));
+  HEAD.forEach(([s, e, n, title], i) => {
+    const xa = X(s) + 3, xb = X(e) - 3, on = t >= s && t < e, done = t >= e;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(xa, y + 38, xb - xa, 4);
+    ctx.fillStyle = done ? 'rgba(255,181,71,0.55)' : K.amber; ctx.fillRect(xa, y + 38, (xb - xa) * clamp((t - s) / (e - s)), 4);
+    let lab = `${n} ${title}`; while (tw(lab, 19, 600) > xb - xa - 10 && lab.length > 3) lab = lab.slice(0, -1);
+    txt(lab, xa + 2, y + 28, { size: 19, weight: on ? 700 : 500, color: on ? '#f0f0f0' : done ? '#9da1a8' : '#6b6f76' });
+  });
+  const v14 = vE(t), fn = win(t, 50.2, 60, .5);
+  txt('game_packet.proto', 1600, y + 30, { size: 19, mono: true, color: '#a8abb2', alpha: 1 - fn });
+  txt(v14 ? 'v1.4' : 'v1.3', 1880, y + 30, { size: 19, mono: true, weight: 700, color: v14 ? K.bot : '#a8abb2', align: 'right', alpha: 1 - fn });
+  txt('* 수치는 설명을 위한 예시입니다', 1880, y + 30, { size: 20, color: '#c9cbd0', align: 'right', alpha: fn });
+  ctx.restore();
+}
+function caption(l1, l2, a, x = 64, y = 262, col2 = '#b5b9c0') {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  shade(x - 40, y - 60, x + Math.max(tw(l1, 42, 800), tw(l2, 31)) + 40, y + 70, 1);
+  txt(l1, x - (1 - eo(clamp(a))) * 20, y, { size: 42, weight: 800, color: '#f3f3f4', shadow: 12 });
+  txt(l2, x, y + 52, { size: 31, color: col2, shadow: 12 });
+  ctx.restore();
+}
+// ch1 annotations: comment cards pinned to the code
+const NOTES = [
+  [K.amber, 'message = 패킷 하나', '필드 이름 · 타입 · 번호(tag)를 선언', () => artPt('E', E_CODE.x + 21 * CW32 + 10, E_CODE.y + 4 * E_CODE.lh - 10)],
+  [K.client, '언어 중립 스키마', 'C# · C++ · Go … 원하는 언어로 생성', () => artPt('E', E_CODE.x + 18 * CW32 + 10, E_CODE.y - 10)],
+  [K.bot, 'Single Source of Truth', '패킷의 원본은 오직 이 파일 하나', () => artPt('E', 250, 30)],
+];
+function annotations(t) {
+  const fade = 1 - eio(p(t, 13.9, .4));
+  NOTES.forEach(([col, title, desc, anchor], i) => {
+    const k = eo(p(t, 7 + i * 1.6, .8)) * fade; if (k <= 0) return;
+    const bx = 1210 + (1 - k) * 40, by = 300 + i * 214, bw = 640, bh = 170;
+    const [ax, ay] = proj(anchor());
+    ctx.save(); ctx.globalAlpha = k;
+    // leader line from the card to the code it explains
+    ctx.strokeStyle = rgba(col, .8); ctx.lineWidth = 2.5; ctx.setLineDash([2, 7]); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx, by + bh / 2); ctx.bezierCurveTo(bx - 120, by + bh / 2, ax + 120, ay, ax + 12, ay); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(ax + 6, ay, 7, 0, 7); ctx.fillStyle = col; ctx.fill();
+    // card styled as a review comment
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 12); ctx.fillStyle = 'rgba(30,31,34,0.96)'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#3c3f45'; ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(bx, by + 14, 5, bh - 28);
+    txt(String(i + 1), bx + 34, by + 58, { size: 26, mono: true, weight: 800, color: col });
+    txt(title, bx + 72, by + 66, { size: 38, weight: 800, color: '#f0f0f1' });
+    txt(desc, bx + 72, by + 122, { size: 29, color: '#a9adb4' });
+    ctx.restore();
+  });
+}
+// label next to a world point (for the hand-off and the title/outro strip)
+function tag(v, s, o = {}) { const [x, y] = proj(v); txt(s, x + (o.dx || 0), y + (o.dy || 0), o); return [x, y]; }
+
+function titleCard(t) {
+  const a = 1 - eio(p(t, 4.5, .7)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const lg = ctx.createLinearGradient(0, 0, 0, 620); lg.addColorStop(0, 'rgba(8,8,9,0.92)'); lg.addColorStop(.75, 'rgba(8,8,9,0.6)'); lg.addColorStop(1, 'rgba(8,8,9,0)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, 620);
+  txt('PROTOBUF · CODEGEN · BOT CLIENT · LOAD TEST', 120, 150, { size: 24, weight: 600, color: '#8c9097', mono: true, ls: 4, alpha: eo(p(t, .2, .8)) });
+  const k1 = eo(p(t, .45, .8)), k2 = eo(p(t, .85, .8));
+  ctx.font = `800 100px ${SANS}`;
+  txt('패킷 정의 하나로,', 116, 276 + (1 - k1) * 30, { size: 100, weight: 800, color: '#f4f4f5', alpha: k1 });
+  const w1 = tw('개발부터 ', 100, 800);
+  txt('개발부터', 116, 398 + (1 - k2) * 30, { size: 100, weight: 800, color: '#f4f4f5', alpha: k2 });
+  txt('라이브까지', 116 + w1, 398 + (1 - k2) * 30, { size: 100, weight: 800, color: K.amber, alpha: k2 });
+  // caret
+  const cx = 116 + w1 + tw('라이브까지', 100, 800) + 14;
+  if (Math.floor(t * 2.2) % 2 === 0 && k2 > .5) { ctx.fillStyle = K.amber; ctx.fillRect(cx, 316, 14, 96); }
+  txt('프로토버퍼로 만든 봇 클라이언트가 개발 · 테스트 · 라이브를 하나로 잇는 방법', 120, 470, { size: 31, color: '#a6aab1', alpha: eo(p(t, 1.7, .8)) });
+  ctx.restore();
+  // the story strip is the desk itself: label each stop where it stands
+  NODES.forEach(([lab, , pos, col], i) => {
+    const kk = eo(p(t, 2.1 + i * .3, .6)) * a; if (kk <= 0) return;
+    const [x, y] = proj(new THREE.Vector3(pos[0], 0, pos[2] + 2.5));
+    ctx.save(); ctx.globalAlpha = kk;
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fill(); ctx.restore();
+    txt(lab, x, y + 46, { size: 28, weight: 700, color: col, align: 'center', mono: true, alpha: kk, shadow: 10 });
+  });
+}
+function handoffText(t) {
+  const a = win(t, 48.4, 49.95, .3); if (a <= 0) return;
+  const P = ART.P; const v = artPt('P', 980, 165);
+  const [x, y] = proj(v);
+  ['→ 장비 스펙 산정', '→ 라이브 인프라 테스트'].forEach((s, i) => {
+    const k = eo(p(t, 48.6 + i * .2, .4)) * a;
+    if (i === 0) { ctx.save(); ctx.globalAlpha = a; shade(x + 10, y - 70, x + 440, y + 50, 1); ctx.restore(); }
+    txt(s, x + 30, y - 20 + i * 50, { size: 34, weight: 800, color: '#f0f0f1', alpha: k, shadow: 14 });
+  });
+}
+function outro(t) {
+  const v = t - OUT0, a = eo(p(v, .2, .8)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  NODES.forEach(([lab, sub, pos, col], i) => {
+    const kk = eo(p(v, .4 + i * .3, .6)); if (kk <= 0) return;
+    const [x, y] = proj(new THREE.Vector3(pos[0], 0, pos[2] + 2.5));
+    ctx.save(); ctx.globalAlpha *= kk; ctx.beginPath(); ctx.arc(x, y, 10, 0, 7); ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 22; ctx.fill(); ctx.restore();
+    txt(lab, x, y + 50, { size: 32, weight: 800, color: col, align: 'center', alpha: kk, shadow: 14 });
+    txt(sub, x, y + 88, { size: 26, color: '#c3c6cc', align: 'center', alpha: kk, shadow: 14 });
+  });
+  const lg = ctx.createLinearGradient(0, 0, 0, 470); lg.addColorStop(0, 'rgba(8,8,9,0.92)'); lg.addColorStop(.7, 'rgba(8,8,9,0.55)'); lg.addColorStop(1, 'rgba(8,8,9,0)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, 470);
+  const k1 = eo(p(t, 60.3, .8)), k2 = eo(p(t, 60.7, .8));
+  txt('패킷 정의 하나가,', 116, 200 + (1 - k1) * 26, { size: 84, weight: 800, color: '#f4f4f5', alpha: k1 });
+  const w1 = tw('개발부터 ', 84, 800);
+  txt('개발부터', 116, 306 + (1 - k2) * 26, { size: 84, weight: 800, color: '#f4f4f5', alpha: k2 });
+  txt('라이브까지.', 116 + w1, 306 + (1 - k2) * 26, { size: 84, weight: 800, color: K.amber, alpha: k2 });
+  if (Math.floor(t * 2.2) % 2 === 0 && k2 > .5) { ctx.fillStyle = K.amber; ctx.fillRect(116 + w1 + tw('라이브까지.', 84, 800) + 12, 238, 12, 80); }
+  txt('Protobuf → Codegen → Bot Client → Content Test → Capacity & Live', 120, 380, { size: 26, color: '#8c9097', mono: true, alpha: eo(p(t, 61.1, .8)) });
+  ctx.restore();
+}
+function overlay(t) {
+  titleCard(t);
+  header(t);
+  annotations(t);
+  // ch2 / ch3 captions
+  const c1 = win(t, 17.1, 23.4, .45), c2 = win(t, 24.3, 33.0, .45);
+  caption('protoc 한 번 → 클라 · 서버 · 봇', '같은 .proto에서 생성 → 구조가 그대로 일치', c1);
+  caption('필드를 추가해도 재생성 · 재빌드 한 번이면 끝', '봇 패킷 구조가 클라 · 서버와 자동으로 같이 갱신', c2);
+  // ch4 part A lines
+  const v = t - 33.3, aA = win(t, 33.3, 39.1, .5);
+  if (aA > 0) {
+    ctx.save(); ctx.globalAlpha = aA;
+    shade(80, 830, 1100, 940, 1);
+    txt('서버는 보통 클라보다 먼저 컨텐츠를 완성합니다.', 120, 872, { size: 42, weight: 800, color: '#f3f3f4', alpha: eo(p(v, 1.2, .6)), shadow: 12 });
+    txt('기다리지 말고, 봇이 클라 대신 패킷을 보내 검증합니다.', 120, 934, { size: 36, weight: 700, color: K.bot, alpha: eo(p(v, 3.9, .6)), shadow: 12 });
+    ctx.restore();
+  }
+  handoffText(t);
+  // footnote for the example numbers (ch5)
+  statusBar(t);
+  outro(t);
+}
+
+// ── frame ────────────────────────────────────────────────────
+const frustum = new THREE.Frustum(), _pm = new THREE.Matrix4();
+const _sphere = new THREE.Sphere();
+function renderAt(t) {
+  t = clamp(t, 0, DURATION);
+  // camera first (texture redraws depend on what is in view)
+  const cam = camAt(t);
+  camera.position.copy(cam.pos);
+  camera.position.x += Math.sin(t * .5) * .06; camera.position.y += Math.sin(t * .37 + 1) * .05;
+  camera.lookAt(cam.tgt); camera.updateMatrixWorld();
+  _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(_pm);
+  // artifacts
+  const pools = floorMat.uniforms.uPool.value; let pi = 0;
+  for (const id of ORDER) {
+    const a = ART[id], pl = place(id, t), k = pl.k;
+    const [x, y, z] = pl.pos, rise = (1 - k) * .6;
+    a.grp.position.set(x, y - rise, z); a.grp.rotation.set(0, a.s.yaw, 0); a.grp.updateMatrixWorld();
+    const vis = k > .003;
+    a.grp.visible = vis; a.refl.visible = vis; a.shadow.visible = vis;
+    a.mat.opacity = k; a.slabMat.opacity = k;
+    a.rm.uniforms.uK.value = pl.rimK * k; a.rm.uniforms.uC.value.set(pl.rimCol); a.rm.uniforms.uS.value = ((t * .35 + x * .07) % 1.6) - .3;
+    a.refl.position.set(x, -(y - rise), z + .06); a.refl.rotation.set(0, a.s.yaw, 0); a.refl.scale.set(1, -1, 1); a.reflMat.opacity = .2 * k;
+    a.shadow.position.set(x, .012, z + .25); a.shMat.opacity = .7 * k * clamp(1.4 - (y - a.s.h / 200) * .12);
+    if (pi < NPOOL) pools[pi++].set(x, z + 1.2, a.s.w / 100 * .7, k * (.45 + .9 * clamp(pl.rimK)));
+    if (vis) {
+      _sphere.set(a.grp.position, Math.hypot(a.s.w, a.s.h) / 200);
+      if (frustum.intersectsSphere(_sphere)) {
+        const key = Math.round(liveT(a.s.live, t) * 60);
+        if (a.key !== key) { a.g.setTransform(1, 0, 0, 1, 0, 0); a.s.draw(a.g, key / 60); a.tex.needsUpdate = true; a.key = key; }
+      }
+    }
+  }
+  for (; pi < NPOOL; pi++) pools[pi].set(0, 0, 1, 0);
+  floorMat.uniforms.uCam.value.copy(camera.position);
+  floorMat.uniforms.uPub.value = Math.max(eo(p(t, 46.8, 1.2)), OVER(t) * .8);
+  const sg = eo(p(t, 46.6, 1)) * (1 - eo(p(t, 50.6, .8)));
+  signDev.material.opacity = Math.max(sg, OVER(t) * .6) * .9; signPub.material.opacity = Math.max(sg, OVER(t) * .6, eo(p(t, 47.5, 1)) * (1 - eo(p(t, 50.6, .8)))) * .9;
+
+  // lines
+  NS = 0;
+  const chapterOut = (t0, t1) => win(t, t0, t1, .6);
+  const ov = OVER(t);
+  // codegen links (ch2 → ch3)
+  const lk = Math.max(chapterOut(14.6, 33.4), ov);
+  if (lk > 0) {
+    const hot1 = p(t, 14.9, .95), hot2 = p(t, 25.6, .85);
+    curve(pE_T(), eo(p(t, 14.7, .7)) || ov, K.amber, .22 * lk, 3, hot1 > 0 && hot1 < 1 ? eio(hot1) : -1);
+    if (hot2 > 0 && hot2 < 1) curve(pE_T2(), 1, K.amber, .0, 3, eio(hot2));
+    FILES.forEach((f, i) => {
+      const r1 = p(t, ARR1[i] - .9, .9), r2 = p(t, ARR2[i] - .75, .75);
+      const hot = r1 > 0 && r1 < 1 ? eio(r1) : r2 > 0 && r2 < 1 ? eio(r2) : -1;
+      curve(pT_F(i)(), Math.max(eo(r1), ov), t > 26 ? K.bot : f.role[1], .2 * lk, 3, hot);
+    });
+    // the hand-written bot never receives the update: a broken red stub
+    const kh = Math.max(eo(p(t, 28.9, .6)), ov * .8) * lk;
+    if (kh > 0) curve(pT_HW(), .62, K.red, .5 * kh, 2.5, -1, true, 24);
+  }
+  // packet flow rows (sequence diagram drawn in the air between the two logs)
+  const fk = Math.max(win(t, 39.0, 46.6, .5), ov);
+  if (fk > 0) SEQ.forEach(([dir], i) => {
+    const r = p(t, STARTS[i], FLY); if (r <= 0 && ov <= 0) return;
+    const P = pRow(i, dir)();
+    curve(P, Math.max(eio(r), ov), dir > 0 ? K.bot : K.server, .35 * fk, 2.4, r > 0 && r < 1 ? eio(r) : -1, dir < 0, 16);
+  });
+  // package hand-off arc
+  const pk = win(t, 47.0, 50.4, .4);
+  if (pk > 0) {
+    const a0 = new THREE.Vector3(60.1, 5.4 - SPEC.P.h / 200, 2.6), b0 = new THREE.Vector3(75.9, 3.0 - SPEC.P.h / 200, 4.6);
+    const P = [a0, a0.clone().add(new THREE.Vector3(4, 3.4, 0)), b0.clone().add(new THREE.Vector3(-4, 3.4, 0)), b0];
+    curve(P, eio(p(t, 47.1, 1.7)), K.bot, .5 * pk, 3.2, -1, false, 40);
+  }
+  // floor route: lights up as the story reaches each stop; full and pulsing in title / outro
+  for (let i = 0; i < ROUTE.length - 1; i++) {
+    const r = Math.max(p(t, ROUTE_T[i], Math.max(.4, ROUTE_T[i + 1] - ROUTE_T[i])), ov * eo(p(t, 1.6 + i * .25, .5)), ov * (t > OUT0 ? 1 : 0));
+    if (r <= 0) continue;
+    const a = ROUTE[i], b = ROUTE[i + 1];
+    const steps = 10;
+    for (let s = 0; s < steps; s++) {
+      const u0 = s / steps, u1 = (s + 1) / steps; if (u0 > r) break;
+      const q0 = a.clone().lerp(b, u0), q1 = a.clone().lerp(b, Math.min(u1, r));
+      const runner = ov > 0 ? Math.exp(-Math.pow(((i + u0) / (ROUTE.length - 1) - ((t * .32) % 1.3 - .15)) * 14, 2)) : 0;
+      seg(q0, q1, K.amber, .16 + .25 * ov + runner * 1.4, 2.4 + 2 * ov + runner * 3);
+    }
+  }
+  iA.needsUpdate = iB.needsUpdate = iC.needsUpdate = iWd.needsUpdate = true;
+  lineGeo.instanceCount = Math.max(1, NS);
+  if (!NS) { iC.array.fill(0, 0, 3); }
+
+  // chips
+  for (const c of CHIPS) {
+    const r = p(t, c.t0, c.dur), on = r > 0 && r < 1;
+    if (c.sp) c.sp.visible = on; c.gl.visible = on;
+    if (!on) continue;
+    const q = bez(c.pathFn(), eio(r));
+    const fade = Math.min(1, r * 8, (1 - r) * 8);
+    if (c.sp) {
+      c.sp.position.copy(q).add(new THREE.Vector3(0, .42, 0));
+      c.sp.scale.set(c.size * c.aspect, c.size, 1); c.sp.material.opacity = fade;
+    }
+    c.gl.position.copy(q); const gs = (c.sp ? 1.1 : c.size * 2.2) * (1 + .12 * Math.sin(t * 20)); c.gl.scale.set(gs, gs, 1); c.gl.material.opacity = fade;
+  }
+  dust.rotation.y = t * .004; dust.position.y = Math.sin(t * .3) * .15;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  overlay(t);
+  const fo = p(t, DURATION - .6, .6); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  // chip labels and floor labels were drawn before the fonts loaded: redraw them
+  for (const c of CHIPS) if (c.sp) { const { t: tex, aspect } = chipTex(c.label, c.col); c.sp.material.map.dispose(); c.sp.material.map = tex; c.aspect = aspect; }
+  for (const id of ORDER) ART[id].key = null;
+  FLOOR_LABELS.forEach(f => f());
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [OUT0, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 30.5;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += Math.min(.1, (now - last) / 1000) * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>

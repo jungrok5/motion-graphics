@@ -1,0 +1,996 @@
+<meta charset="utf-8">
+<title>Proto Bot Artifacts Vertical</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="패킷 정의 하나로 개발부터 라이브까지: 실제 파일과 화면을 공간에 늘어놓은 3D 세로 영상"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../proto-bot-pipeline-artifacts-wide/">전체 영상</a><a href="../proto-bot-pipeline/">2D 원본</a><a href="../proto-bot-pipeline/article.html">설명</a><a href="../proto-bot-pipeline/terms.html">용어집</a></nav>
+</div>
+<!-- Source text for article.html (설명) and terms.html (용어집); scripts/build-articles.mjs builds both. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  패킷 정의 하나로, 개발부터 라이브까지 — 실물을 공간에 늘어놓기 (9:16 mobile, ~21 s cut of ../proto-bot-pipeline-artifacts-wide/)
+//  The real artifacts (game_packet.proto in an editor, protoc in a terminal, the generated C# / C++ / bot files,
+//  the team schedule, the bot's packet log, the load-test dashboard) stand in one dark workspace, in pipeline order.
+//  The camera walks through them; a field or a packet visibly travels from one artifact to the next.
+//  Look comes from the subject: JetBrains-style dark editor (Rider / CLion), terminal, Grafana-like dashboard.
+//  three.js renders offscreen → drawImage onto #c → 2D header, captions, status bar on top.
+//  Every frame is a pure function of t: renderAt(t). Facts, chapters and timing follow ../proto-bot-pipeline/index.html.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1080, H = 1920, DURATION = 21;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── palette: the tools themselves ────────────────────────────
+// Editor = JetBrains dark (Rider / CLion), terminal = plain dark shell, dashboard = Grafana-like dark.
+// Roles: amber = the data in flight (a field, a file, a packet) · blue client · violet server · green bot / OK · pink publisher · red failure/threshold.
+const K = {
+  desk: '#0b0b0c', ed: '#1e1f22', chrome: '#2b2d30', border: '#3c3f45', line: '#26282c', text: '#bcbec4', hi: '#dfe1e5', dim: '#8c9097', faint: '#5f636a',
+  term: '#141516', dash: '#111217', dpanel: '#181b1f', dborder: '#2c3235',
+  amber: '#ffb547', client: '#56a8f5', server: '#b48cf2', bot: '#73bf69', pub: '#f07ab0', red: '#f2495c', yellow: '#fade2a', teal: '#2aacb8',
+};
+const SY = { kw: '#cf8e6d', str: '#6aab73', num: '#2aacb8', com: '#7a7e85', fn: '#56a8f5', prop: '#c77dbb', txt: '#bcbec4', punc: '#a3a6ad' };
+
+// ── timeline (same chapters as the 2D video) ─────────────────
+const OUT0 = 58.5;
+
+// ── three.js setup ───────────────────────────────────────────
+const FOV = 40;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(K.desk);
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .1, 600);
+scene.add(camera);
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .5, .45, .86);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const TAN = Math.tan(FOV / 2 * Math.PI / 180);
+
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function canvasTex(c, mip = true) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps = mip; if (!mip) t.minFilter = THREE.LinearFilter; return t; }
+
+// ── the desk: warm graphite with soft light pools under the artifacts ─────
+const NPOOL = 16;
+const floorMat = new THREE.ShaderMaterial({
+  depthWrite: false, fog: false,
+  uniforms: { uCam: { value: new THREE.Vector3() }, uPool: { value: Array.from({ length: NPOOL }, () => new THREE.Vector4()) }, uPub: { value: 0 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform vec4 uPool[${NPOOL}]; uniform float uPub;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+    void main(){
+      float d = length(vW.xz - uCam.xz);
+      vec3 base = vec3(.010,.0095,.009);
+      // faint brushed texture along x, like a desk mat
+      float grain = hash(floor(vW.xz * vec2(1.5, 28.))) * .004;
+      vec3 c = base + grain;
+      for (int i = 0; i < ${NPOOL}; i++) {
+        vec4 P = uPool[i];
+        if (P.w <= 0.) continue;
+        vec2 q = (vW.xz - P.xy) / vec2(P.z, P.z * .55);
+        c += vec3(.075,.060,.045) * exp(-dot(q,q)) * P.w;
+      }
+      // publisher side of the desk: a slight rose tint and a seam line
+      float side = smoothstep(72.0, 74.0, vW.x);
+      c = mix(c, c * vec3(1.15,.92,1.02) + vec3(.006,.002,.004), side * uPub);
+      float seam = exp(-abs(vW.x - 73.0) * 9.) * uPub * smoothstep(-30., 4., vW.z) * smoothstep(14., 4., vW.z);
+      c += vec3(.25,.10,.18) * seam * .22;
+      float fade = exp(-d * .012);
+      c = mix(vec3(.0105,.0100,.0098), c, clamp(fade * 1.4, 0., 1.));
+      gl_FragColor = vec4(c, 1.);
+    }`,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.position.set(45, 0, 0); floor.renderOrder = 0;
+scene.add(floor);
+
+// shared textures
+const shadowTex = (() => { const c = mkCanvas(256, 128), g = c.getContext('2d'); const gr = g.createRadialGradient(128, 64, 0, 128, 64, 128); gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.setTransform(1, 0, 0, .5, 0, 32); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c); })();
+const reflAlpha = (() => { const c = mkCanvas(4, 256), g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#000'); gr.addColorStop(.55, '#000'); gr.addColorStop(1, '#666'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); return new THREE.CanvasTexture(c); })();
+const glowTex = (() => { const c = mkCanvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.2, 'rgba(255,255,255,.8)'); gr.addColorStop(.5, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+
+// ── canvas drawing kit (design px; 100 design px = 1 world unit) ─────
+const TS = 1.5;    // texture px per design px
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function gt(g, s, x, y, o = {}) {
+  const { size = 28, weight = 500, color = K.text, align = 'left', mono = false, alpha = 1, base = 'alphabetic', ls = 0 } = o;
+  if (alpha <= 0) return;
+  g.save(); g.globalAlpha *= alpha; g.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  g.fillStyle = color; g.textAlign = align; g.textBaseline = base; if (ls) g.letterSpacing = ls + 'px'; g.fillText(s, x, y); g.restore();
+}
+function mw(g, s, size, weight = 500, mono = false) { g.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return g.measureText(s).width; }
+function gdot(g, x, y, r, col, a = 1) { g.save(); g.globalAlpha *= a; g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = col; g.fill(); g.restore(); }
+function gcheck(g, x, y, s, col, a = 1, lw = .16) { if (a <= 0) return; g.save(); g.globalAlpha *= a; g.strokeStyle = col; g.lineWidth = s * lw; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(x - s * .36, y); g.lineTo(x - s * .1, y + s * .26); g.lineTo(x + s * .38, y - s * .28); g.stroke(); g.restore(); }
+function gcross(g, x, y, s, col, a = 1) { if (a <= 0) return; g.save(); g.globalAlpha *= a; g.strokeStyle = col; g.lineWidth = s * .16; g.lineCap = 'round'; g.beginPath(); g.moveTo(x - s * .3, y - s * .3); g.lineTo(x + s * .3, y + s * .3); g.moveTo(x + s * .3, y - s * .3); g.lineTo(x - s * .3, y + s * .3); g.stroke(); g.restore(); }
+function gchip(g, label, x, y, col, o = {}) {   // pill; x = right edge when align right
+  const { size = 22, align = 'left', fillA = .16, alpha = 1, mono = true, weight = 700 } = o;
+  if (alpha <= 0) return 0;
+  const w = mw(g, label, size, weight, mono) + size * 1.1, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  g.save(); g.globalAlpha *= alpha; rr(g, X, y - h / 2, w, h, 8); g.fillStyle = rgba(col, fillA); g.fill(); g.lineWidth = 1.5; g.strokeStyle = rgba(col, .75); g.stroke();
+  gt(g, label, X + w / 2, y + size * .36, { size, weight, color: col, align: 'center', mono }); g.restore();
+  return w;
+}
+const KW = new Set(['syntax', 'package', 'message', 'string', 'int32', 'int64', 'public', 'sealed', 'partial', 'class', 'final', 'var', 'new', 'const', 'get', 'set', 'int', 'int32_t']);
+const PROP = new Set(['DungeonId', 'PartyId', 'Difficulty', 'Id']);
+function tokens(line) {
+  const out = [], re = /(\/\/.*$|"[^"]*"|\s+|0x[0-9a-fA-F]+|\d+|[A-Za-z_]\w*|::|.)/g; let m;
+  while ((m = re.exec(line))) {
+    const s = m[0]; let c = SY.txt;
+    if (s.startsWith('//')) c = SY.com;
+    else if (s[0] === '"') c = SY.str;
+    else if (/^(0x[0-9a-fA-F]+|\d+)$/.test(s)) c = SY.num;
+    else if (KW.has(s)) c = SY.kw;
+    else if (PROP.has(s)) c = SY.prop;
+    else if (/^[A-Za-z_]\w*$/.test(s) && line[m.index + s.length] === '(') c = SY.fn;
+    else if (/^[^\w\s]+$/.test(s)) c = SY.punc;
+    out.push([s, c]);
+  }
+  return out;
+}
+function codeLine(g, s, x, y, size, limit = Infinity) {
+  g.font = `500 ${size}px ${MONO}`; let xx = x;
+  for (const [tok, c] of tokens(s)) { if (limit <= 0) break; const v = tok.slice(0, limit); g.fillStyle = c; g.fillText(v, xx, y); xx += g.measureText(v).width; limit -= v.length; }
+  return xx;
+}
+// window chrome: title bar with role label + file tabs + optional version chip
+const TB = 62;
+function frame(g, w, h, o = {}) {
+  g.setTransform(TS, 0, 0, TS, 0, 0); g.clearRect(0, 0, w, h);
+  rr(g, 2, 2, w - 4, h - 4, 14); g.fillStyle = o.bg || K.ed; g.fill();
+  g.save(); rr(g, 2, 2, w - 4, h - 4, 14); g.clip(); g.fillStyle = o.bar || K.chrome; g.fillRect(0, 0, w, TB); g.fillStyle = K.border; g.fillRect(0, TB, w, 1.5); g.restore();
+  let x = 24;
+  if (o.role) {
+    const [lab, col, sub] = o.role;
+    gdot(g, x + 7, TB / 2, 7, col);
+    gt(g, lab, x + 24, TB / 2 + 10, { size: 28, weight: 800, color: col }); x += 24 + mw(g, lab, 28, 800) + 14;
+    if (sub) { gt(g, sub, x, TB / 2 + 9, { size: 24, color: K.dim }); x += mw(g, sub, 24) + 22; }
+  }
+  for (const [name, active, acc] of (o.tabs || [])) {
+    const tw = mw(g, name, 23, 500, true) + 40;
+    if (active) { g.fillStyle = o.bg || K.ed; g.fillRect(x, 8, tw, TB - 8); g.fillStyle = acc || K.amber; g.fillRect(x, TB - 3, tw, 3); }
+    gt(g, name, x + 20, TB / 2 + 10, { size: 23, mono: true, color: active ? K.hi : K.dim });
+    x += tw + 4;
+  }
+  if (o.ver) gchip(g, o.ver[0], w - 22, TB / 2, o.ver[1], { align: 'right', size: 21, fillA: .14 + (o.ver[2] || 0) * .35 });
+  g.save(); if (o.dash) g.setLineDash(o.dash); rr(g, 2, 2, w - 4, h - 4, 14); g.lineWidth = o.lw || 2; g.strokeStyle = o.stroke || K.border; g.stroke(); g.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  VERTICAL CUT (1080×1920, ~21 s): the same artifacts recomposed for a phone.
+//  Content runs on the wide video's clock through srcT(v), so every state and number matches it.
+// ═════════════════════════════════════════════════════════════
+const SEG = [   // [v0, v1, w0, w1]: vertical time → wide-video time
+  [0, 2.6, 8.6, 11.4],
+  [2.6, 6.6, 14.6, 18.6],
+  [6.6, 10.4, 24.3, 28.6],
+  [10.4, 14.4, 39.6, 45.6],
+  [14.4, 18.6, 49.8, 56.0],
+  [18.6, 21.0, 56.0, 56.6],
+];
+function srcT(v) { for (const [a, b, c, d] of SEG) if (v <= b) return lerp(c, d, clamp((v - a) / (b - a))); return SEG[SEG.length - 1][3]; }
+const VHEAD = [   // vertical chapters: [v0, v1, number, title, header sub]
+  [2.6, 6.6, '02', '코드 생성', 'protoc 한 번으로 클라 · 서버 · 봇 코드를 동시에'],
+  [6.6, 10.4, '03', '항상 동기화', '봇도 같은 생성 코드를 쓰니까, 패킷이 낡지 않습니다'],
+  [10.4, 14.4, '04', '서버가 먼저', '클라 연동 전, 봇이 클라의 패킷 플로우를 그대로 흉내 냅니다'],
+  [14.4, 18.6, '05', '퍼블리셔에게', '같은 봇을 수천 개 띄워 장비 스펙 산정 · 라이브 인프라 테스트'],
+];
+const END = 18.6;
+
+// ── artifacts (portrait sizes; code ≥ 34 design px so it stays ≥ 26 px on screen) ─────
+const PROTO = [
+  'syntax = "proto3";', 'package game;', '',
+  'message LoginReq {', '  string account_id = 1;', '  string token      = 2;', '}', '',
+  'message EnterDungeonReq {', '  int32 dungeon_id = 1;', '  int32 party_id   = 2;', '}', '',
+  'message SkillUseReq {', '  int32 skill_id  = 1;', '  int64 target_id = 2;', '}',
+];
+const PROTO_CHARS = PROTO.reduce((s, l) => s + l.length + 1, 0);
+const NEWF = '  int32 difficulty = 3;';
+const E_CODE = { x: 116, y: TB + 76, lh: 56, size: 40 };
+const E_INS = 11;
+const insE = t => eo(p(t, 24.5, .5));
+const vE = t => t > 25.35;
+function drawE(g, t) {
+  const w = 1000, h = 1120, ins = insE(t), flashV = vE(t) ? 1 - p(t, 25.35, .9) : 0;
+  frame(g, w, h, { tabs: [['game_packet.proto', true, K.amber]], ver: [vE(t) ? 'v1.4' : 'v1.3', vE(t) ? K.bot : K.dim, flashV] });
+  const chars = PROTO_CHARS * p(t, 5.9, 5.4), { x, y, lh, size } = E_CODE;
+  const rowY = i => y + (i + (i >= E_INS ? ins : 0)) * lh;
+  if (ins > 0) {
+    const yy = y + E_INS * lh, fl = 1 - p(t, 27.5, 3) * .55;
+    g.save(); g.globalAlpha = ins;
+    g.fillStyle = rgba(K.bot, .16 * fl); g.fillRect(0, yy - lh * .74, w, lh); g.fillStyle = K.bot; g.fillRect(80, yy - lh * .74, 5, lh);
+    gt(g, String(E_INS + 1), 64, yy, { size: 26, color: K.bot, mono: true, align: 'right' });
+    const cx = codeLine(g, NEWF, x, yy, size, Math.floor(NEWF.length * p(t, 24.7, .7)));
+    if (t < 25.6) { g.fillStyle = K.hi; g.fillRect(cx + 2, yy - 32, 4, 42); }
+    g.restore();
+  }
+  let left = chars, cursor = null;
+  PROTO.forEach((ln, i) => {
+    if (left <= 0) return;
+    const yy = rowY(i);
+    gt(g, String(i + 1 + (i >= E_INS && ins > .5 ? 1 : 0)), 64, yy, { size: 26, color: K.faint, mono: true, align: 'right' });
+    cursor = [codeLine(g, ln, x, yy, size, left), yy]; left -= ln.length + 1;
+  });
+  if (cursor && t < 14.4 && (chars < PROTO_CHARS || Math.floor(t * 2) % 2 === 0)) { g.fillStyle = K.hi; g.fillRect(cursor[0] + 2, cursor[1] - 32, 4, 42); }
+  const kb = win(t, 14.6, 16.0, .3);
+  if (kb > 0) { g.save(); g.globalAlpha = kb; rr(g, 10, rowY(8) - 44, w - 20, lh * 4 + 10, 8); g.lineWidth = 3; g.strokeStyle = K.amber; g.stroke(); g.fillStyle = rgba(K.amber, .07); g.fill(); g.restore(); }
+}
+const TERM_EVENTS = [
+  [15.05, './gen_packets.sh', 'cmd', .55],
+  [15.85, '→ Client/GamePacket.cs', 'out', 0], [16.2, '→ Server/game_packet.pb.h', 'out', 0], [16.55, '→ Bot/GamePacket.cs', 'out', 0],
+  [16.95, '✓ 3 targets · v1.3', 'ok', 0],
+  [26.25, './gen_packets.sh', 'cmd', .45],
+  [26.85, '→ Client/GamePacket.cs', 'out', 0], [27.0, '→ Server/game_packet.pb.h', 'out', 0], [27.15, '→ Bot/GamePacket.cs', 'out', 0],
+  [27.4, '✓ 3 targets · v1.4', 'ok', 0],
+];
+function drawT(g, t) {
+  const w = 1000, h = 400;
+  frame(g, w, h, { bg: K.term, bar: '#232427', tabs: [['Terminal', true, K.bot]] });
+  gt(g, 'protoc', w - 26, TB / 2 + 9, { size: 24, mono: true, color: K.dim, align: 'right' });
+  const rows = [];
+  for (const [tt, s, kind, td] of TERM_EVENTS) {
+    if (t < tt - (kind === 'cmd' ? .5 : 0)) break;
+    if (kind === 'cmd') rows.push({ kind, s: s.slice(0, Math.floor(s.length * p(t, tt, td))), typing: t < tt + td }); else rows.push({ kind, s });
+  }
+  if (!rows.length || rows[rows.length - 1].kind !== 'cmd') rows.push({ kind: 'cmd', s: '' });
+  const vis = rows.slice(-5), x = 30, y0 = TB + 60, lh = 62;
+  vis.forEach((r, i) => {
+    const yy = y0 + i * lh;
+    if (r.kind === 'cmd') {
+      gt(g, '$', x, yy, { size: 36, mono: true, color: K.bot, weight: 700 });
+      gt(g, r.s, x + 44, yy, { size: 36, mono: true, color: K.hi });
+      if (i === vis.length - 1 && (r.typing || Math.floor(t * 2) % 2 === 0)) { g.fillStyle = K.hi; g.fillRect(x + 48 + mw(g, r.s, 36, 500, true), yy - 30, 20, 38); }
+    } else gt(g, r.s, x, yy, { size: 36, mono: true, color: r.kind === 'ok' ? K.bot : '#a3a7ae', weight: r.kind === 'ok' ? 700 : 500 });
+  });
+}
+const FILES = [
+  { id: 'F1', role: ['Client', K.client, 'C#'], tabs: [['GamePacket.cs', true, K.client]],
+    lines: ['partial class EnterDungeonReq {', '  public int DungeonId { get; set; }', '  public int PartyId { get; set; }'],
+    add: { idx: 3, s: '  public int Difficulty { get; set; }' } },
+  { id: 'F2', role: ['Server', K.server, 'C++'], tabs: [['game_packet.pb.h', true, K.server]],
+    lines: ['class EnterDungeonReq final {', '  int32_t dungeon_id() const;', '  int32_t party_id() const;'],
+    add: { idx: 3, s: '  int32_t difficulty() const;' } },
+  { id: 'F3', role: ['Bot Client', K.bot, 'C#'], tabs: [['DungeonScenario.cs', true, K.bot]],
+    lines: ['// 클라와 같은 생성 코드를 그대로 사용', 'var req = new EnterDungeonReq {', '  DungeonId = 101, PartyId = party.Id,'],
+    add: { idx: 3, s: '  Difficulty = 3,' } },
+];
+const ARR1 = [16.85, 17.2, 17.55], ARR2 = [27.65, 27.8, 27.95];
+const FW = 1000, FH = [360, 360, 360];
+function drawF(i) {
+  const f = FILES[i];
+  return (g, t) => {
+    const w = FW, h = FH[i], uk = eo(p(t, ARR2[i], .5)), flash = uk * (1 - p(t, ARR2[i] + .6, 1.2));
+    frame(g, w, h, { role: f.role, tabs: f.tabs, ver: [uk > .5 ? 'v1.4' : 'v1.3', uk > .5 ? K.bot : K.dim, flash], stroke: rgba(f.role[1], .55) });
+    const x = 30, y = TB + 58, lh = 52, size = 34;
+    let left = 200 * p(t, ARR1[i] + .1, .9);
+    f.lines.forEach((ln, j) => { if (left <= 0) return; codeLine(g, ln, x, y + j * lh, size, left); left -= ln.length + 1; });
+    if (uk > 0) {
+      const yy = y + f.add.idx * lh, fl = 1 - p(t, ARR2[i] + 2, 3) * .55;
+      g.save(); g.globalAlpha = uk; g.fillStyle = rgba(K.bot, .18 * fl); g.fillRect(0, yy - lh * .74, w, lh); g.fillStyle = K.bot; g.fillRect(0, yy - lh * .74, 5, lh);
+      const ex = codeLine(g, f.add.s, x, yy, size, Math.floor(40 * p(t, ARR2[i] + .1, .5)));
+      g.restore();
+      if (f.id === 'F3') gchip(g, '← 시나리오에서 값 지정', ex + 20, yy - 12, K.bot, { size: 28, mono: false, alpha: eo(p(t, 28.3, .4)) });
+    }
+    const kb = eback(p(t, ARR2[i] + .45, .5));
+    if (kb > 0) { g.save(); g.translate(w - 52, h - 48); g.scale(kb, kb); gdot(g, 0, 0, 26, rgba(K.bot, .22)); gcheck(g, 0, 0, 30, K.bot); g.restore(); }
+  };
+}
+const SEQ = [[1, 'LoginReq'], [-1, 'LoginAck'], [1, 'EnterWorldReq'], [-1, 'EnterWorldAck'], [1, 'EnterDungeonReq'], [-1, 'EnterDungeonAck'], [1, 'SkillUseReq × N', 'burst'], [-1, 'DungeonClearNoti']];
+const SEQ_T0 = 38.8;
+const STARTS = (() => { const s = []; let s0 = .9; SEQ.forEach(m => { s.push(SEQ_T0 + s0); s0 += m[2] ? 1.8 : .55; }); return s; })();
+const FLY = .45;
+const LOG = { y0: TB + 62, lh: 56 };
+const logRowY = i => LOG.y0 + 58 + i * LOG.lh;
+function drawLog(side) {
+  return (g, t) => {
+    const w = 1000, h = 640, bot = side === 'B';
+    frame(g, w, h, { bg: K.term, bar: '#232427', role: bot ? ['Bot Client', K.bot, 'bot-0001'] : ['Game Server', K.server, 'log'], stroke: rgba(bot ? K.bot : K.server, .55) });
+    gt(g, bot ? '// 실제 클라가 보낼 패킷 순서 그대로' : '// 클라 없이, 봇의 패킷으로 검증', 30, LOG.y0, { size: 32, mono: true, color: SY.com });
+    SEQ.forEach(([dir, lab], i) => {
+      const st = STARTS[i], mine = bot ? dir > 0 : dir < 0, at = mine ? st : st + FLY;
+      const k = eo(p(t, at, .25)); if (k <= 0) return;
+      const yy = logRowY(i), col = dir > 0 ? K.bot : K.server, fresh = 1 - p(t, at + .3, .8);
+      if (fresh > 0) { g.fillStyle = rgba(col, .15 * fresh * k); g.fillRect(0, yy - 40, w, LOG.lh); }
+      gt(g, String(i + 1).padStart(2, '0'), 30, yy, { size: 30, mono: true, color: K.faint, alpha: k });
+      gt(g, mine ? '→' : '←', 92, yy, { size: 36, mono: true, color: col, weight: 700, alpha: k });
+      gt(g, lab, 140, yy, { size: 36, mono: true, color: K.hi, alpha: k });
+      if (!bot && dir > 0 && t > st + FLY + .3) gcheck(g, w - 50, yy - 12, 28, K.bot, eo(p(t, st + FLY + .3, .3)));
+    });
+  };
+}
+const cpuAt = ccu => { const k = ccu / 1000; return 5 + 11 * k + .4 * k * k; };
+const latAt = ccu => { const k = ccu / 1000; return 18 + 6 * k + (k > 4.8 ? (k - 4.8) ** 2 * 40 : 0); };
+const ccuAt = t => 6000 * eio(p(t, 50.0, 5.4));
+const GRID = (() => { const r = rng(42), cells = []; for (let j = 0; j < 6; j++) for (let i = 0; i < 40; i++) cells.push({ i, j, o: r(), ph: r() * 6 }); return cells.sort((a, b) => a.o - b.o); })();
+function dpanel(g, x, y, w, h, title) {
+  rr(g, x, y, w, h, 8); g.fillStyle = K.dpanel; g.fill(); g.lineWidth = 1.5; g.strokeStyle = K.dborder; g.stroke();
+  if (title) gt(g, title, x + 24, y + 52, { size: 36, weight: 700, color: '#d8d9da' });
+}
+function drawD(g, t) {
+  const w = 1000, h = 1330, ccu = ccuAt(t), cpu = cpuAt(ccu);
+  frame(g, w, h, { bg: K.dash, bar: '#181b1f', role: ['부하 테스트', K.pub, 'dungeon_clear'] });
+  gchip(g, '● LIVE', w - 24, TB / 2, K.red, { align: 'right', size: 22 });
+  const Y0 = TB + 16;
+  dpanel(g, 16, Y0, w - 32, 330, '동시 접속 봇');
+  gt(g, fmt(ccu), w - 44, Y0 + 176, { size: 150, weight: 800, mono: true, color: K.bot, align: 'right' });
+  const shown = Math.floor(GRID.length * ccu / 6000);
+  for (let n = 0; n < shown; n++) { const c = GRID[n], x = 44 + c.i * 23.4, y = Y0 + 216 + c.j * 18; g.fillStyle = rgba(K.bot, .5 + .45 * Math.sin(t * 5 + c.ph)); g.fillRect(x - 5, y - 5, 10, 10); }
+  // chart
+  const CY = Y0 + 346, CHt = 600;
+  dpanel(g, 16, CY, w - 32, CHt, 'CPU 사용률 vs 동시 접속');
+  gt(g, 'Game Server · 1대', w - 40, CY + 50, { size: 28, color: K.dim, align: 'right' });
+  const px0 = 120, px1 = w - 50, py0 = CY + CHt - 70, py1 = CY + 100;
+  const X = c => lerp(px0, px1, c / 6000), Y = c => lerp(py0, py1, c / 100);
+  g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.07)';
+  [0, 25, 50, 75, 100].forEach(v => { g.beginPath(); g.moveTo(px0, Y(v)); g.lineTo(px1, Y(v)); g.stroke(); gt(g, v + '%', px0 - 14, Y(v) + 10, { size: 26, mono: true, color: K.dim, align: 'right' }); });
+  [0, 2000, 4000, 6000].forEach(v => gt(g, v ? v / 1000 + 'k' : '0', X(v), py0 + 44, { size: 26, mono: true, color: K.dim, align: 'center' }));
+  g.save(); g.setLineDash([12, 10]); g.strokeStyle = rgba(K.red, .85); g.lineWidth = 3; g.beginPath(); g.moveTo(px0, Y(70)); g.lineTo(px1, Y(70)); g.stroke(); g.restore();
+  gt(g, '임계 70%', px0 + 14, Y(70) - 16, { size: 34, weight: 800, color: K.red, mono: true });
+  if (ccu > 10) {
+    const gr = g.createLinearGradient(0, py1, 0, py0); gr.addColorStop(0, rgba(K.bot, .3)); gr.addColorStop(1, rgba(K.bot, 0));
+    g.beginPath(); g.moveTo(X(0), py0);
+    for (let c = 0; c <= ccu; c += 40) g.lineTo(X(c), Y(cpuAt(c) + Math.sin(c * .006) * .7));
+    g.lineTo(X(ccu), Y(cpu)); g.lineTo(X(ccu), py0); g.closePath(); g.fillStyle = gr; g.fill();
+    g.beginPath(); for (let c = 0; c <= ccu; c += 40) { const yy = Y(cpuAt(c) + Math.sin(c * .006) * .7); c ? g.lineTo(X(c), yy) : g.moveTo(X(c), yy); }
+    g.lineTo(X(ccu), Y(cpu)); g.strokeStyle = K.bot; g.lineWidth = 4.5; g.stroke();
+    gdot(g, X(ccu), Y(cpu), 10, cpu > 70 ? K.red : K.bot);
+  }
+  const km = eback(p(ccu, 5000, 400));
+  if (km > 0) {
+    g.save(); g.setLineDash([6, 8]); g.strokeStyle = rgba(K.pub, .9); g.lineWidth = 3; g.beginPath(); g.moveTo(X(5000), py0); g.lineTo(X(5000), Y(70)); g.stroke(); g.restore();
+    gdot(g, X(5000), Y(70), 13 * clamp(km, 0, 1.3), K.pub);
+    g.save(); g.translate(X(5000) - 20, Y(70) - 104); g.scale(km, km);
+    rr(g, -520, -42, 520, 80, 12); g.fillStyle = '#3a1c2c'; g.fill(); g.lineWidth = 3; g.strokeStyle = K.pub; g.stroke();
+    gt(g, '서버 1대 ≈ 동접 5,000', -260, 14, { size: 42, weight: 800, color: K.pub, align: 'center' });
+    g.restore();
+  }
+  // gauges
+  const GY = CY + CHt + 16, gw = (w - 32 - 32) / 3;
+  [['LB', Math.min(99, cpu * .45)], ['Game Server', cpu], ['DB', Math.min(99, cpu * .62)]].forEach(([name, load], i) => {
+    const x = 16 + i * (gw + 16), col = load < 60 ? K.bot : load < 72 ? K.yellow : K.red;
+    dpanel(g, x, GY, gw, h - GY - 16, null);
+    gt(g, name, x + 22, GY + 50, { size: 30, weight: 700, color: K.hi });
+    gt(g, Math.round(load) + '%', x + gw - 22, GY + 140, { size: 60, weight: 800, mono: true, color: col, align: 'right' });
+    rr(g, x + 22, GY + 168, gw - 44, 12, 6); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fill();
+    rr(g, x + 22, GY + 168, Math.max(10, (gw - 44) * load / 100), 12, 6); g.fillStyle = col; g.fill();
+  });
+}
+
+const SPEC = {
+  E: { w: 1000, h: 1120, pos: [0, 6.6, 0], yaw: .06, draw: drawE, live: [[8.6, 11.6], [14.4, 16.2], [24.3, 28.0]] },
+  T: { w: 1000, h: 400, pos: [13, 14.75, 0], yaw: -.03, draw: drawT, live: [[14.4, 17.8], [25.6, 28.2]] },
+  F1: { w: FW, h: FH[0], pos: [13, 10.7, 0], yaw: -.03, draw: drawF(0), live: [[16.5, 19.2], [27.4, 30]] },
+  F2: { w: FW, h: FH[1], pos: [13, 6.85, 0], yaw: -.03, draw: drawF(1), live: [[16.9, 19.6], [27.5, 30]] },
+  F3: { w: FW, h: FH[2], pos: [13, 3.0, 0], yaw: -.03, draw: drawF(2), live: [[17.2, 19.9], [27.6, 30]] },
+  B: { w: 1000, h: 640, pos: [27, 11.0, 0], yaw: 0, draw: drawLog('B'), live: [[39.4, 46.0]] },
+  L: { w: 1000, h: 640, pos: [27, 3.6, 0], yaw: 0, draw: drawLog('L'), live: [[39.4, 46.0]] },
+  D: { w: 1000, h: 1330, pos: [41, 7.6, 0], yaw: 0, draw: drawD, live: [[49.6, 56.0]] },
+};
+
+const HEAD = VHEAD;
+const ORDER = Object.keys(SPEC);
+const RIM_M = 44;
+const rimMat = () => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uSize: { value: new THREE.Vector2() }, uM: { value: RIM_M }, uK: { value: 0 }, uC: { value: new THREE.Color() }, uS: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `varying vec2 vUv; uniform vec2 uSize; uniform float uM; uniform float uK; uniform vec3 uC; uniform float uS;
+    float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
+    void main(){
+      vec2 full = uSize + 2. * uM; vec2 p = (vUv - .5) * full;
+      float d = sdRR(p, uSize * .5 - 2., 14.);
+      float rim = exp(-abs(d) / 2.2);
+      float outer = d > 0. ? exp(-d / 16.) * .45 : 0.;
+      float top = .55 + .45 * clamp(p.y / full.y + .5, 0., 1.);
+      float sweep = exp(-pow((p.x / full.x * .7 - p.y / full.y) - uS, 2.) / .006);
+      vec3 c = uC * (rim * (top + 1.6 * sweep) + outer);
+      gl_FragColor = vec4(c * uK, 1.);
+    }`,
+});
+const ART = {};
+for (const id of ORDER) {
+  const s = SPEC[id], ww = s.w / 100, hh = s.h / 100;
+  const c = mkCanvas(Math.round(s.w * TS), Math.round(s.h * TS)), g = c.getContext('2d');
+  const tex = canvasTex(c);
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: .02, side: THREE.FrontSide, fog: false, color: new THREE.Color(.97, .97, .97) });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), mat); mesh.renderOrder = 5; mesh.position.z = .061;
+  const slabMat = new THREE.MeshBasicMaterial({ color: 0x17181a, transparent: true, fog: false });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(ww - .06, hh - .06, .12), slabMat); slab.renderOrder = 4;
+  const rm = rimMat(); rm.uniforms.uSize.value.set(s.w, s.h);
+  const rim = new THREE.Mesh(new THREE.PlaneGeometry(ww + 2 * RIM_M / 100, hh + 2 * RIM_M / 100), rm); rim.position.z = .07; rim.renderOrder = 6;
+  grp.add(slab); grp.add(mesh); grp.add(rim);
+  scene.add(grp);
+  const reflMat = new THREE.MeshBasicMaterial({ map: tex, alphaMap: reflAlpha, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, color: new THREE.Color(.6, .6, .6) });
+  const refl = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), reflMat); refl.renderOrder = 1; scene.add(refl);
+  const shMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: false });
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(ww * 1.15, 2.6), shMat); shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; scene.add(shadow);
+  ART[id] = { id, s, c, g, tex, grp, mesh, mat, slab, slabMat, rim, rm, refl, reflMat, shadow, shMat, key: null };
+}
+// design px on an artifact → world point (uses current placement)
+const _v3 = new THREE.Vector3();
+function artPt(id, x, y, z = .07) {
+  const a = ART[id]; a.grp.updateMatrixWorld();
+  return a.grp.localToWorld(new THREE.Vector3((x / a.s.w - .5) * a.s.w / 100, (.5 - y / a.s.h) * a.s.h / 100, z));
+}
+// ── thick glowing lines (screen-space quads) ─────────────────
+const MAXSEG = 1400;
+const lineGeo = new THREE.InstancedBufferGeometry();
+lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+lineGeo.setIndex([0, 1, 2, 0, 2, 3]);
+const iA = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iB = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3);
+const iC = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iWd = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG), 1);
+[iA, iB, iC, iWd].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+lineGeo.setAttribute('iA', iA); lineGeo.setAttribute('iB', iB); lineGeo.setAttribute('iC', iC); lineGeo.setAttribute('iW', iWd);
+const lineMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uRes: { value: new THREE.Vector2(W, H) } },
+  vertexShader: `attribute vec3 iA; attribute vec3 iB; attribute vec3 iC; attribute float iW; uniform vec2 uRes; varying vec3 vC; varying float vS;
+    void main(){
+      vec4 a = projectionMatrix * viewMatrix * vec4(iA, 1.);
+      vec4 b = projectionMatrix * viewMatrix * vec4(iB, 1.);
+      const float N = .12;
+      if (a.w < N && b.w < N) { gl_Position = vec4(2., 2., 2., 1.); vC = vec3(0.); vS = 0.; return; }
+      if (a.w < N) a = mix(a, b, (N - a.w) / (b.w - a.w));
+      if (b.w < N) b = mix(b, a, (N - b.w) / (a.w - b.w));
+      vec2 sa = a.xy / a.w * uRes * .5, sb = b.xy / b.w * uRes * .5;
+      vec2 dir = sb - sa; float L = length(dir); dir = L > 1e-4 ? dir / L : vec2(1., 0.);
+      vec2 n = vec2(-dir.y, dir.x);
+      vec4 c = mix(a, b, position.x);
+      vec2 off = (n * position.y + dir * (position.x * 2. - 1.) * .5) * iW;
+      c.xy += off / (uRes * .5) * c.w;
+      gl_Position = c; vC = iC; vS = position.y;
+    }`,
+  fragmentShader: `varying vec3 vC; varying float vS; void main(){ float f = exp(-vS * vS * 3.5); gl_FragColor = vec4(vC * f, 1.); }`,
+});
+const lineMesh = new THREE.Mesh(lineGeo, lineMat); lineMesh.frustumCulled = false; lineMesh.renderOrder = 7; scene.add(lineMesh);
+let NS = 0;
+const _c = new THREE.Color();
+function seg(a, b, col, inten, wd) {
+  if (NS >= MAXSEG || inten <= .002) return;
+  _c.set(col);
+  iA.array.set([a.x, a.y, a.z], NS * 3); iB.array.set([b.x, b.y, b.z], NS * 3);
+  iC.array.set([_c.r * inten, _c.g * inten, _c.b * inten], NS * 3); iWd.array[NS] = wd; NS++;
+}
+function bez(P, u) {
+  const [a, b, c, d] = P, v = 1 - u;
+  return new THREE.Vector3(
+    v * v * v * a.x + 3 * v * v * u * b.x + 3 * v * u * u * c.x + u * u * u * d.x,
+    v * v * v * a.y + 3 * v * v * u * b.y + 3 * v * u * u * c.y + u * u * u * d.y,
+    v * v * v * a.z + 3 * v * v * u * b.z + 3 * v * u * u * c.z + u * u * u * d.z);
+}
+// draw a bezier with a glowing core; k = reveal 0..1, hot = position of the travelling head (or -1)
+function curve(P, k, col, base, wd = 3, hot = -1, dash = false, sub = 40) {
+  if (k <= 0) return;
+  let prev = bez(P, 0);
+  for (let i = 1; i <= sub; i++) {
+    const u = k * i / sub, q = bez(P, u);
+    if (!dash || i % 2) {
+      const heat = hot >= 0 ? Math.exp(-Math.pow((u - hot) * 9, 2)) : 0;
+      seg(prev, q, col, base + heat * 1.6, wd + heat * 3);
+    }
+    prev = q;
+  }
+}
+const link = (a, b, lift = 1.2, out = 1.5) => {
+  const dx = b.x - a.x;
+  return [a, new THREE.Vector3(a.x + Math.max(out, dx * .35), a.y + lift, a.z), new THREE.Vector3(b.x - Math.max(out, dx * .35), b.y + lift, b.z), b];
+};
+
+// ── data chips: the actual thing in flight (a file, a field, a packet) ─────
+function chipTex(label, col) {
+  const size = 34, padX = 22;
+  const c0 = mkCanvas(8, 8).getContext('2d'); c0.font = `700 ${size}px ${MONO}`;
+  const w = Math.ceil(c0.measureText(label).width + padX * 2 + 30), h = 64;
+  const c = mkCanvas(w * 2, h * 2), g = c.getContext('2d'); g.scale(2, 2);
+  rr(g, 2, 2, w - 4, h - 4, 12); g.fillStyle = '#1a1407'; g.fill(); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
+  gdot(g, padX + 4, h / 2, 7, col);
+  g.font = `700 ${size}px ${MONO}`; g.fillStyle = '#fff4dc'; g.textBaseline = 'middle'; g.fillText(label, padX + 22, h / 2 + 2);
+  const t = canvasTex(c, false); return { t, aspect: w / h };
+}
+const CHIPS = [];
+function addChip(label, col, t0, dur, pathFn, size = .62) {
+  const { t, aspect } = chipTex(label, col);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  sp.renderOrder = 9; sp.center.set(.5, .5); scene.add(sp);
+  const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(col).multiplyScalar(1.6), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  gl.renderOrder = 8; scene.add(gl);
+  CHIPS.push({ sp, gl, t0, dur, pathFn, size, aspect, label, col });
+}
+function addDot(col, t0, dur, pathFn, size = .5) {
+  const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(col).multiplyScalar(2), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  gl.renderOrder = 8; scene.add(gl);
+  CHIPS.push({ sp: null, gl, t0, dur, pathFn, size });
+}
+
+// dust in the air
+const dust = (() => {
+  const R = rng(17), n = 600, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = -15 + R() * 120; pos[i * 3 + 1] = R() * 16; pos[i * 3 + 2] = -20 + R() * 34; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: .05, color: 0xffd9a8, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scene.add(pts); return pts;
+})();
+
+// ── camera: framed poses, Hermite-smoothed in time ───────────
+// fr(): put world point c at screen (sx, sy) with s screen px per design px, looking with yaw/pitch (deg).
+function fr(c, s, sx, sy, yawDeg = 0, pitchDeg = 0) {
+  const yaw = yawDeg * Math.PI / 180, pit = pitchDeg * Math.PI / 180;
+  const dir = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pit), -Math.sin(pit), -Math.cos(yaw) * Math.cos(pit));
+  const d = H / (200 * s * TAN), ppu = s * 100;
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+  const C = new THREE.Vector3(...c);
+  const pos = C.clone().addScaledVector(dir, -d).addScaledVector(right, (W / 2 - sx) / ppu).addScaledVector(up, (sy - H / 2) / ppu);
+  return { pos, tgt: pos.clone().addScaledVector(dir, d) };
+}
+const raw = (pos, tgt) => ({ pos: new THREE.Vector3(...pos), tgt: new THREE.Vector3(...tgt) });
+function liveT(iv, t) {
+  if (!iv.length) return 0;
+  let last = iv[0][0];
+  for (const [a, b] of iv) { if (t < a) return last; if (t <= b) return t; last = b; }
+  return last;
+}
+// presence + rim per artifact; t = wide-video time
+function place(id, t) {
+  const S = SPEC[id]; let k = 1, rimK = 0, rimCol = K.amber;
+  const appear = (t0, d = .6) => eo(p(t, t0, d));
+  switch (id) {
+    case 'E': rimK = .5 + .7 * win(t, 24.2, 26.2); rimCol = t > 20 ? K.bot : K.amber; break;
+    case 'T': rimK = .8 * win(t, 15.0, 17.3) + .8 * win(t, 26.2, 27.6); break;
+    case 'F1': case 'F2': case 'F3': { const i = +id[1] - 1; k = appear(ARR1[i] - .45);
+      rimK = .9 * win(t, ARR1[i] - .1, ARR1[i] + .9, .3) + 1.0 * win(t, ARR2[i] - .05, ARR2[i] + 1.4, .3); rimCol = t > 25 ? K.bot : FILES[i].role[1]; break; }
+    case 'B': case 'L': k = appear(38.9 + (id === 'L' ? .12 : 0)); rimK = .5; rimCol = id === 'L' ? K.server : K.bot; break;
+    case 'D': k = appear(49.6, .6); rimK = .5; rimCol = K.pub; break;
+  }
+  return { k, rimK: clamp(rimK, 0, 1.6), rimCol, pos: S.pos.slice() };
+}
+
+// anchor paths
+const E_BLOCK_Y = E_CODE.y + 9.5 * E_CODE.lh;
+const pE_T = () => link(artPt('E', 1000, E_BLOCK_Y), artPt('T', 0, 220), 1.6, 2.4);
+const pE_T2 = () => link(artPt('E', 1000, E_CODE.y + E_INS * E_CODE.lh - 14), artPt('T', 0, 260), 1.8, 2.4);
+const pT_F = i => () => { const a = artPt('T', 1000, 300), b = artPt(FILES[i].id, 1000, FH[i] / 2); return [a, a.clone().add(new THREE.Vector3(1.6 + i * .5, -.6, .3)), b.clone().add(new THREE.Vector3(1.6 + i * .5, .4, .3)), b]; };
+const pRow = (i, dir) => () => {
+  const x = dir > 0 ? 380 : 620;
+  const a = artPt('B', x, 640), b = artPt('L', x, 0);
+  return dir > 0 ? [a, a.clone().lerp(b, .33), a.clone().lerp(b, .66), b] : [b, b.clone().lerp(a, .33), b.clone().lerp(a, .66), a];
+};
+addChip('game_packet.proto', K.amber, 14.9, .95, pE_T, .72);
+['GamePacket.cs', 'game_packet.pb.h', 'GamePacket.cs'].forEach((lab, i) => addChip(lab, FILES[i].role[1], ARR1[i] - .9, .9, pT_F(i), .66));
+addChip('+ int32 difficulty = 3;', K.amber, 25.6, .85, pE_T2, .72);
+[0, 1, 2].forEach(i => addChip('+ difficulty · v1.4', K.bot, ARR2[i] - .75, .75, pT_F(i), .66));
+SEQ.forEach(([dir, lab, kind], i) => {
+  if (kind === 'burst') {
+    addChip('SkillUseReq', K.bot, STARTS[i], FLY, pRow(i, 1), .62);
+    for (let j = 0; j < 9; j++) { addDot(K.bot, STARTS[i] + .4 + j * .14, .38, pRow(i, 1), .5); addDot(K.server, STARTS[i] + .55 + j * .14, .38, pRow(i, -1), .36); }
+  } else addChip(lab, dir > 0 ? K.bot : K.server, STARTS[i], FLY, pRow(i, dir), .62);
+});
+const ROUTE = [[0, 3], [13, 3], [27, 3], [41, 3]].map(([x, z]) => new THREE.Vector3(x, .03, z));
+const ROUTE_V = [0, 2.8, 10.6, 14.5];
+
+// ── camera (vertical time) ───────────────────────────────────
+const S_ = SPEC;
+const colC = [13, (S_.F1.pos[1] + S_.F3.pos[1]) / 2, 0];
+const CAM = [
+  [0.0, fr([0, 6.0, 0], .86, 540, 940, 6, 3)],
+  [2.5, fr([0, 6.0, 0], .9, 540, 940, 4, 3)],
+  [3.6, fr([7, 10.5, 0], .66, 540, 960, 0, 3)],
+  [4.9, fr(colC, .9, 540, 930, -4, 1)],
+  [6.4, fr(colC, .92, 540, 930, -3, 1)],
+  [7.3, fr([0, 5.6, 0], 1.0, 540, 900, 6, 2)],
+  [8.0, fr([0, 5.6, 0], 1.02, 540, 900, 5, 2)],
+  [8.5, fr([7, 10.5, 0], .66, 540, 960, 0, 3)],
+  [9.4, fr(colC, .9, 540, 930, -4, 1)],
+  [10.3, fr(colC, .92, 540, 930, -3, 1)],
+  [11.2, fr([27, 7.3, 0], .8, 540, 920, 0, 1)],
+  [14.2, fr([27, 7.3, 0], .81, 540, 920, 0, 1)],
+  [15.0, fr(S_.D.pos, .82, 540, 930, 0, 1)],
+  [18.4, fr(S_.D.pos, .84, 540, 930, 0, 1)],
+  [21.0, fr([24, 7, 0], .42, 540, 1100, 0, 10)],
+];
+// monotone cubic per component (no overshoot)
+const CAM_T = CAM.map(k => k[0]);
+const CAM_C = ['pos', 'tgt'].flatMap(key => ['x', 'y', 'z'].map(ax => {
+  const y = CAM.map(k => k[1][key][ax]), n = y.length, d = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) d.push((y[i + 1] - y[i]) / (CAM_T[i + 1] - CAM_T[i]));
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) continue;
+    const h0 = CAM_T[i] - CAM_T[i - 1], h1 = CAM_T[i + 1] - CAM_T[i], w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+    m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+  }
+  return { y, m };
+}));
+function camAt(t) {
+  const n = CAM.length;
+  t = clamp(t, CAM_T[0], CAM_T[n - 1]);
+  let i = 0; while (i < n - 2 && t > CAM_T[i + 1]) i++;
+  const h = CAM_T[i + 1] - CAM_T[i], u = (t - CAM_T[i]) / h, u2 = u * u, u3 = u2 * u;
+  const v = CAM_C.map(({ y, m }) => y[i] * (2 * u3 - 3 * u2 + 1) + m[i] * h * (u3 - 2 * u2 + u) + y[i + 1] * (-2 * u3 + 3 * u2) + m[i + 1] * h * (u3 - u2));
+  return { pos: new THREE.Vector3(v[0], v[1], v[2]), tgt: new THREE.Vector3(v[3], v[4], v[5]) };
+}
+
+// ── 2D overlay (vertical) ────────────────────────────────────
+const X0 = 60, X1 = 1020, CX = 540;
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#e6e7ea', align = 'left', alpha = 1, mono = false, ls = 0, base = 'alphabetic', shadow = 0, maxW = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; let sz = size;
+  ctx.font = `${weight} ${sz}px ${mono ? MONO : SANS}`;
+  while (maxW && sz > 30 && ctx.measureText(s).width > maxW) { sz -= 1; ctx.font = `${weight} ${sz}px ${mono ? MONO : SANS}`; }
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; if (ls) ctx.letterSpacing = ls + 'px';
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = shadow; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return ctx.measureText(s).width; }
+function band(y0, y1, a) {   // dark backing for header / caption bands
+  const g = ctx.createLinearGradient(0, y0 - 60, 0, y1 + 60);
+  g.addColorStop(0, 'rgba(9,9,10,0)'); g.addColorStop(.18, `rgba(9,9,10,${.86 * a})`); g.addColorStop(.82, `rgba(9,9,10,${.86 * a})`); g.addColorStop(1, 'rgba(9,9,10,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, y0 - 60, W, y1 - y0 + 120);
+}
+function vheader(v) {
+  for (const [s, e, n, title, sub] of VHEAD) {
+    const a = win(v, s, e, .3); if (a <= 0) continue;
+    const k = eo(p(v, s + .05, .5)), k2 = eo(p(v, s + .2, .5));
+    ctx.save(); ctx.globalAlpha = a;
+    band(110, 330, 1); ctx.fillStyle = 'rgba(9,9,10,0.9)'; ctx.fillRect(0, 0, W, 110);
+    txt('~/proto-bot-pipeline', X0, 172, { size: 30, mono: true, color: '#7d8188' });
+    const pw = tw('~/proto-bot-pipeline ', 30, 500, true);
+    txt('$', X0 + pw, 172, { size: 30, mono: true, color: K.amber, weight: 700 });
+    txt(`step ${n}/05`, X0 + pw + 36, 172, { size: 30, mono: true, color: '#c9cbd0', weight: 600 });
+    txt(title, X0 - (1 - k) * 24, 262, { size: 80, weight: 800, color: '#f3f3f4', alpha: k });
+    txt(sub, X0, 322, { size: 38, color: '#a6aab1', alpha: k2, maxW: X1 - X0 });
+    ctx.restore();
+  }
+}
+const CAPS = [
+  [0.4, 2.6, '클라와 서버가 주고받는 모든 메시지를', '.proto 한 파일에'],
+  [3.3, 6.6, 'protoc 한 번 → 클라 · 서버 · 봇', '같은 .proto에서 생성 → 구조가 그대로 일치'],
+  [7.0, 10.4, '필드를 추가해도 재생성 · 재빌드 한 번이면 끝', '봇 패킷 구조가 클라 · 서버와 자동으로 같이 갱신'],
+  [10.8, 14.4, '기다리지 말고,', '봇이 클라 대신 패킷을 보내 검증합니다.'],
+  [14.7, 16.9, '같은 봇을 수천 개 띄워', '동접에 따른 CPU를 잽니다'],
+  [17.0, 18.6, '서버 1대 ≈ 동접 5,000 (CPU 70% 기준)', '목표 동접 50,000 → 게임 서버 10대 + 여유분'],
+];
+function captions(v) {
+  for (const [s, e, l1, l2] of CAPS) {
+    const a = win(v, s, e, .3); if (a <= 0) continue;
+    ctx.save(); ctx.globalAlpha = a; band(1500, 1660, 1);
+    const k2 = eo(p(v, s + .25, .4));
+    txt(l1, CX, 1560, { size: 54, weight: 800, color: '#f3f3f4', align: 'center', maxW: X1 - X0 });
+    txt(l2, CX, 1630, { size: 44, color: s > 10 && s < 15 ? K.bot : '#b9bdc4', align: 'center', alpha: k2, maxW: X1 - X0 });
+    ctx.restore();
+  }
+  txt('* 수치는 설명을 위한 예시입니다', X0, 1706, { size: 30, color: '#8c9097', alpha: win(v, 14.8, 18.6, .3), shadow: 8 });
+}
+function progressV(v) {
+  const a = clamp(Math.min(v - .2, END - .2 - v) * 3) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(X0, 110, X1 - X0, 4);
+  ctx.fillStyle = K.amber; ctx.fillRect(X0, 110, (X1 - X0) * clamp(v / END), 4);
+  ctx.restore();
+}
+function titleV(v) {
+  const a = 1 - eio(p(v, 2.4, .4)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  band(130, 360, 1);
+  txt('PROTOBUF · CODEGEN · BOT', X0, 176, { size: 30, weight: 600, color: '#8c9097', mono: true, ls: 4, alpha: eo(p(v, .05, .5)) });
+  const k1 = eo(p(v, .15, .6)), k2 = eo(p(v, .4, .6));
+  txt('패킷 정의 하나로,', X0, 262 + (1 - k1) * 20, { size: 84, weight: 800, color: '#f4f4f5', alpha: k1 });
+  const w1 = tw('개발부터 ', 84, 800);
+  txt('개발부터', X0, 360 + (1 - k2) * 20, { size: 84, weight: 800, color: '#f4f4f5', alpha: k2 });
+  txt('라이브까지', X0 + w1, 360 + (1 - k2) * 20, { size: 84, weight: 800, color: K.amber, alpha: k2 });
+  ctx.restore();
+}
+function endCard(v) {
+  const a = eo(p(v, END, .7)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(9,9,10,0.95)'); g.addColorStop(.7, 'rgba(9,9,10,0.9)'); g.addColorStop(1, 'rgba(9,9,10,0.6)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  const k1 = eo(p(v, END + .3, .6)), k2 = eo(p(v, END + .6, .6)), k3 = eo(p(v, END + 1.0, .6));
+  txt('패킷 정의 하나가,', X0, 640 + (1 - k1) * 24, { size: 92, weight: 800, color: '#f4f4f5', alpha: k1 });
+  txt('개발부터', X0, 752 + (1 - k2) * 24, { size: 92, weight: 800, color: '#f4f4f5', alpha: k2 });
+  txt('라이브까지.', X0, 864 + (1 - k2) * 24, { size: 92, weight: 800, color: K.amber, alpha: k2 });
+  if (Math.floor(v * 2.2) % 2 === 0 && k2 > .5) { ctx.fillStyle = K.amber; ctx.fillRect(X0 + tw('라이브까지.', 92, 800) + 12, 786, 14, 90); }
+  txt('.proto → codegen → bot → 컨텐츠 테스트 → 부하 테스트', X0, 960, { size: 34, color: '#9da1a8', mono: false, alpha: k3, maxW: X1 - X0 });
+  ctx.save(); ctx.globalAlpha = k3;
+  ctx.fillStyle = 'rgba(255,181,71,0.5)'; ctx.fillRect(X0, 1090, 80, 3);
+  ctx.restore();
+  txt('전체 영상 · 설명 · 용어집', X0, 1150, { size: 38, weight: 700, color: '#c9cbd0', alpha: k3 });
+  txt('jungrok5.github.io/motion-graphics/', X0, 1210, { size: 34, mono: true, color: K.amber, alpha: k3 });
+  txt('proto-bot-pipeline-artifacts-wide', X0, 1258, { size: 34, mono: true, color: K.amber, alpha: k3 });
+}
+
+// ── frame ────────────────────────────────────────────────────
+const frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sphere = new THREE.Sphere();
+function renderAt(v) {
+  v = clamp(v, 0, DURATION);
+  const t = srcT(v);
+  const cam = camAt(v);
+  camera.position.copy(cam.pos); camera.position.x += Math.sin(v * .5) * .05; camera.position.y += Math.sin(v * .37 + 1) * .04;
+  camera.lookAt(cam.tgt); camera.updateMatrixWorld();
+  _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(_pm);
+  const pools = floorMat.uniforms.uPool.value; let pi = 0;
+  for (const id of ORDER) {
+    const a = ART[id], pl = place(id, t), k = pl.k;
+    const [x, y, z] = pl.pos, rise = (1 - k) * .6;
+    a.grp.position.set(x, y - rise, z); a.grp.rotation.set(0, a.s.yaw, 0); a.grp.updateMatrixWorld();
+    const vis = k > .003; a.grp.visible = vis; a.refl.visible = vis; a.shadow.visible = vis;
+    a.mat.opacity = k; a.slabMat.opacity = k;
+    a.rm.uniforms.uK.value = pl.rimK * k; a.rm.uniforms.uC.value.set(pl.rimCol); a.rm.uniforms.uS.value = ((v * .35 + x * .07) % 1.6) - .3;
+    a.refl.position.set(x, -(y - rise), z + .06); a.refl.rotation.set(0, a.s.yaw, 0); a.refl.scale.set(1, -1, 1); a.reflMat.opacity = .2 * k;
+    a.shadow.position.set(x, .012, z + .25); a.shMat.opacity = .7 * k * clamp(1.4 - (y - a.s.h / 200) * .12);
+    if (pi < NPOOL) pools[pi++].set(x, z + 1.2, a.s.w / 100 * .7, k * (.45 + .9 * clamp(pl.rimK)));
+    if (vis) {
+      _sphere.set(a.grp.position, Math.hypot(a.s.w, a.s.h) / 200);
+      if (frustum.intersectsSphere(_sphere)) {
+        const key = Math.round(liveT(a.s.live, t) * 60);
+        if (a.key !== key) { a.g.setTransform(1, 0, 0, 1, 0, 0); a.s.draw(a.g, key / 60); a.tex.needsUpdate = true; a.key = key; }
+      }
+    }
+  }
+  for (; pi < NPOOL; pi++) pools[pi].set(0, 0, 1, 0);
+  floorMat.uniforms.uCam.value.copy(camera.position); floorMat.uniforms.uPub.value = 0;
+  NS = 0;
+  // codegen links
+  const lk = win(t, 14.6, 30, .6);
+  if (lk > 0) {
+    const hot1 = p(t, 14.9, .95), hot2 = p(t, 25.6, .85);
+    curve(pE_T(), eo(p(t, 14.7, .7)), K.amber, .22 * lk, 3.5, hot1 > 0 && hot1 < 1 ? eio(hot1) : -1);
+    if (hot2 > 0 && hot2 < 1) curve(pE_T2(), 1, K.amber, 0, 3.5, eio(hot2));
+    FILES.forEach((f, i) => {
+      const r1 = p(t, ARR1[i] - .9, .9), r2 = p(t, ARR2[i] - .75, .75);
+      const hot = r1 > 0 && r1 < 1 ? eio(r1) : r2 > 0 && r2 < 1 ? eio(r2) : -1;
+      curve(pT_F(i)(), eo(r1), t > 26 ? K.bot : f.role[1], .2 * lk, 3.5, hot);
+    });
+  }
+  const fk = win(t, 39.0, 46.4, .5);
+  if (fk > 0) SEQ.forEach(([dir], i) => {
+    const r = p(t, STARTS[i], FLY); if (r <= 0) return;
+    curve(pRow(i, dir)(), eio(r), dir > 0 ? K.bot : K.server, .3 * fk, 3, r > 0 && r < 1 ? eio(r) : -1, dir < 0, 12);
+  });
+  for (let i = 0; i < ROUTE.length - 1; i++) {
+    const r = p(v, ROUTE_V[i], Math.max(.4, ROUTE_V[i + 1] - ROUTE_V[i])); if (r <= 0) continue;
+    seg(ROUTE[i], ROUTE[i].clone().lerp(ROUTE[i + 1], r), K.amber, .2, 3);
+  }
+  iA.needsUpdate = iB.needsUpdate = iC.needsUpdate = iWd.needsUpdate = true;
+  lineGeo.instanceCount = Math.max(1, NS);
+  for (const c of CHIPS) {
+    const r = p(t, c.t0, c.dur), on = r > 0 && r < 1;
+    if (c.sp) c.sp.visible = on; c.gl.visible = on;
+    if (!on) continue;
+    const q = bez(c.pathFn(), eio(r)), fade = Math.min(1, r * 8, (1 - r) * 8);
+    if (c.sp) { c.sp.position.copy(q).add(new THREE.Vector3(0, .45, 0)); c.sp.scale.set(c.size * c.aspect, c.size, 1); c.sp.material.opacity = fade; }
+    c.gl.position.copy(q); const gs = (c.sp ? 1.2 : c.size * 2.2) * (1 + .12 * Math.sin(v * 20)); c.gl.scale.set(gs, gs, 1); c.gl.material.opacity = fade;
+  }
+  dust.rotation.y = v * .004;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  { const ta = win(v, 2.5, END + .2, .3); if (ta > 0) { ctx.fillStyle = `rgba(9,9,10,${.9 * ta})`; ctx.fillRect(0, 0, W, 110); } }
+  titleV(v); vheader(v); captions(v); progressV(v); endCard(v);
+  const fo = p(v, DURATION - .4, .4); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo * .0})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  for (const c of CHIPS) if (c.sp) { const { t: tex, aspect } = chipTex(c.label, c.col); c.sp.material.map.dispose(); c.sp.material.map = tex; c.aspect = aspect; }
+  for (const id of ORDER) ART[id].key = null;
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...VHEAD.map(h => [h[0], h[2], h[3]]), [END, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 10.1;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += Math.min(.1, (now - last) / 1000) * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
