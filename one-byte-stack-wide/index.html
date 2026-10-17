@@ -1,0 +1,1258 @@
+<meta charset="utf-8">
+<title>One Byte Stack</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Hex-dump look: graphite, selection yellow, dissector field colours. */
+  :root {
+    --bg: #0b0d11; --surface: #12161d; --line: #252b36; --fg: #ecebe6; --dim: #9097a3;
+    --accent: #ffd84d; --live: #4cc3d9; --text2: #c9c8c1;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 16 / 9)); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(18,22,29,.8); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(255,216,77,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(255,216,77,.1); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1920" height="1080" aria-label="이동 정보 1바이트를 8비트 셀에서 시작해 보는 사람, 갱신 빈도, 동접, 하루, 한 달만큼 실제로 쌓아 올려 월 6.5TB가 되는 과정과, 34B·24B·19B·8B 크기별 트래픽·비용·서버·패킷 수를 보여주는 3D 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="98" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 1:37</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../one-byte/article.html">설명 읽기</a><a href="../one-byte/terms.html">용어집</a><a href="../one-byte/">2D 원본 영상</a><a href="../one-byte-stack/">모바일 세로 영상</a></nav>
+</div>
+<!-- Source text for article.html (설명) and terms.html (용어집); kept verbatim from ../one-byte/index.html. Not shown on this page. -->
+<section class="notes" id="notes" hidden>
+<p class="lede">MMO 서버에서 캐릭터 이동 패킷 하나의 크기를 34B에서 8B까지 줄였을 때 트래픽, 비용, 서버 대수, 패킷 수가 어떻게 달라지는지 계산한 영상이다. 이동 정보는 보는 사람 수, 갱신 빈도, 동접만큼 곱해져서 나가기 때문에 1바이트 차이도 월 단위로는 테라바이트가 된다. 모든 수치는 동접 5,000, 보는 사람 50명, 이동 갱신 10Hz, 이동이 송신의 60%(24B 기준)라는 예시 가정에서 나온 값이다.</p>
+
+<article data-ch="01">
+<p>같은 이동 정보(캐릭터 ID, x/y/z 좌표, 방향, 상태, 시각)를 네 가지 방식으로 인코딩해 바이트 칸으로 나란히 보여준다. 프로토버퍼 기본은 <code>34B</code>, 커스텀 기본은 <code>24B</code>, 커스텀 비트 패킹은 <code>19B</code>, 이동 전용 극단 양자화는 <code>8B</code>다.</p>
+<p>프로토버퍼 행의 빨간 칸은 필드 태그와 길이다. 프로토버퍼는 필드마다 "몇 번 필드인지"를 적는 태그 바이트가 붙고, 메시지를 감싸는 래퍼에도 2바이트가 든다. 커스텀 형식은 필드 순서를 양쪽이 미리 알고 있으니 이 칸이 없다. 비트 패킹은 방향, 상태, 시각 차이(Δt)처럼 범위가 작은 값을 1~2바이트로 줄인 것이다.</p>
+<p>8B 행은 64비트를 슬롯 12b, x 14b, y 14b, z 8b, 방향 6b, 상태 4b, Δt 6b로 나눈다. 캐릭터 ID 대신 AOI 슬롯 번호를 쓰고, 좌표는 셀 기준 상대 좌표로 양자화하고, 방향은 64단계로 줄였다. 영상은 이것을 "이동만 극단적으로 다듬은 예"라고 표시한다. 34B와 8B의 차이는 76%다.</p>
+</article>
+
+<article data-ch="02">
+<p>1바이트를 줄였을 때 서버 송신량이 얼마나 변하는지 곱셈을 한 줄씩 쌓아 보여준다.</p>
+<ul>
+<li><code>1 바이트</code> × 50 (한 명의 이동을 보는 사람 수) = 50B</li>
+<li>× 10 (초당 이동 갱신 10Hz) = 500B/s</li>
+<li>× 5,000 (동시접속) = 2.5MB/s, 즉 <code>20 Mbps</code></li>
+<li>× 86,400 (하루의 초) = 216GB/일</li>
+<li>× 30 (한 달) = 6.5TB/월</li>
+</ul>
+<p>한 사람의 이동은 그 사람을 볼 수 있는 50명에게 각각 따로 나가므로 바이트 하나가 50번 복제된다. 여기에 갱신 빈도와 동접이 곱해진다. 동접 5,000이 24시간 30일 내내 유지된다고 가정한 값이다. 서버 대수는 피크 동접으로 잡지만, 실제 월 송신량과 비용은 평균 동접으로 계산하므로 이보다 작다.</p>
+</article>
+
+<article data-ch="03">
+<p>왼쪽은 플레이어 한 명 기준의 이동 트래픽이다. 24B 패킷을 10Hz로 보내면 내가 보내는 양은 <code>240 B/s</code>이고, 주변에 보이는 50명의 이동을 받는 양은 <code>12.0 KB/s</code>다. 서버 입장에서는 1을 받고 50을 내보낸다. 그래서 서버 트래픽은 수신보다 송신이 훨씬 크고, 송신 대부분이 브로드캐스트가 된다.</p>
+<p>오른쪽은 서버 송신 구성 예시다. 이동 브로드캐스트 60%, 전투·이펙트 25%, 채팅·기타 15%로 둔다. 24B 이동 패킷에서 1바이트는 이동 몫의 1/24이므로 전체 송신의 약 2.5%가 된다.</p>
+<p>브로드캐스트는 보는 사람 수만큼 복제되므로 줄인 바이트도 같은 배수로 줄어든다. 하나만 보면 작지만, 여러 바이트를 줄이면 그만큼 쌓인다.</p>
+</article>
+
+<article data-ch="04">
+<p>네 가지 크기별로 서버 전체 월 송신량과 송신 비용을 막대로 비교한다. 이동 외 송신(전투, 채팅 등)은 고정으로 두고 계산했다.</p>
+<ul>
+<li><code>34B</code>: 324TB, $16.2k~29.2k/월</li>
+<li><code>24B</code>: 259TB, $13.0k~23.3k/월</li>
+<li><code>19B</code>: 227TB, $11.3k~20.4k/월</li>
+<li><code>8B</code>: 156TB, $7.8k~14.0k/월</li>
+</ul>
+<p>비용은 송신 단가 $0.05~0.09/GB 예시로 계산했다. 34B에서 8B로 가면 송신 트래픽은 월 −168TB(−52%), 송신 비용은 월 −$8.4k~15.2k다. 플레이어 한 명이 받는 이동 데이터는 <code>17.0 KB/s</code>에서 <code>4.0 KB/s</code>로, 모바일 이동 데이터 사용량은 시간당 61.2MB에서 14.4MB로 준다.</p>
+</article>
+
+<article data-ch="05">
+<p>서버 대수가 대역폭으로 정해진다고 가정하고 34B에서 25대가 필요하다고 두면, 24B는 20대, 19B는 18대(17.5대 올림), 8B는 12대가 된다. 34B에서 8B로 가면 13대가 줄고, 대당 월 $700 예시로 월 $9.1k다.</p>
+<p>같은 장비로 더 받을 수 있는 인원도 보여준다. 일반 필드는 트래픽이 동접에 비례하므로 송신 총량 비율 그대로 늘어난다(24B ×1.25, 19B ×1.43, 8B ×2.08). 보스존은 모두가 모두를 보기 때문에 트래픽이 인원의 제곱(N²)에 비례한다. 그래서 수용 인원은 바이트 비율의 제곱근만큼 늘어난다(24B ×1.19, 19B ×1.34, 8B ×2.06). 바이트가 약 1/4이 되면 수용 인원은 약 2배다.</p>
+<p>25대는 대역폭 병목을 가정한 예시 값이다. 앞의 송신량(월 324TB, 평균 약 1Gbps)을 25대로 나누면 대당 약 40Mbps라서, 이 규모에서는 실제로 대역폭이 병목이 되지 않는다. 이 계산은 대역폭이 병목일 때만 맞다. 서버가 CPU에서 먼저 막히면 패킷 크기를 줄여도 대수 효과는 작다고 영상에서 따로 표시한다.</p>
+</article>
+
+<article data-ch="06">
+<p>패킷 하나의 페이로드를 최대 1,460B(예시)로 두고, 캐릭터 이동 정보가 몇 명분 들어가는지 보여준다. 34B는 42명, 24B는 60명, 19B는 76명, 8B는 182명이다.</p>
+<p>혼잡 지역에서 60명이 보이는 경우를 예로 들어, 34B는 패킷 2개(60 × 34 = 2,040B), 24B · 19B · 8B는 1개로 충분하다(24B면 1,440B). 패킷 수가 줄면 패킷마다 붙는 헤더, 초당 패킷 수(pps), 커널의 패킷 처리 비용도 같이 준다. 바이트 총량과 별개로 패킷 개수 자체가 서버 부하가 된다.</p>
+</article>
+
+<article data-ch="07">
+<p>프로토버퍼와 커스텀을 같은 수준끼리 비교한다. 기본끼리는 커스텀 24B 대 프로토 34B로 서버 송신이 +25%, 튜닝끼리는 커스텀 19B 대 프로토 26B로 +20%다. 이 퍼센트는 이동 외 송신까지 포함한 전체 송신 기준이다. 엔트리마다 하위 메시지로 담으면 필드 태그와 길이 접두가 튜닝해도 남는다. packed repeated 필드로 열 단위로 담으면 태그·길이가 배열마다 한 번만 붙는다.</p>
+<p>대안으로 이동만 프로토버퍼의 <code>bytes</code> 필드 하나에 담는 방식을 보여준다. 태그·길이 3B 뒤에 8B × 50명 = 400B를 넣으면 캐릭터당 약 8.06B로 커스텀과 같은 크기가 된다.</p>
+<ul>
+<li>나머지 메시지는 프로토버퍼를 그대로 쓴다. 스키마 진화, 클라·서버·봇 코드 생성, 디버깅 편의를 유지할 수 있다.</li>
+<li>바이트는 트래픽 대부분을 차지하는 이동·전투 브로드캐스트 같은 뜨거운 경로에서만 깎는다.</li>
+<li>비용을 정하는 것은 형식 이름보다 실제로 보내는 바이트 수다.</li>
+</ul>
+</article>
+
+<h2>용어 정리</h2>
+<dl class="terms">
+<dt>프로토버퍼 (Protocol Buffers)</dt><dd>스키마 파일로 메시지를 정의하고 여러 언어용 직렬화 코드를 생성해 주는 형식이다. 필드마다 번호 태그를 붙여 보내므로 필드 추가·삭제에 강하지만 그만큼 바이트가 붙는다.</dd>
+<dt>필드 태그 · 길이 접두</dt><dd>프로토버퍼가 각 필드 앞에 붙이는 "필드 번호와 타입" 바이트, 그리고 중첩 메시지나 bytes 앞에 붙는 길이 값이다. 영상의 빨간 칸이 이것이다.</dd>
+<dt>커스텀 직렬화</dt><dd>클라와 서버가 필드 순서와 크기를 미리 약속하고 값만 이어 붙이는 방식이다. 태그가 없어 작지만 형식이 바뀌면 양쪽을 같이 고쳐야 한다.</dd>
+<dt>비트 패킹</dt><dd>값의 범위에 맞게 바이트나 비트 단위로 필드 크기를 줄여 빈틈없이 채우는 것이다. 상태 값처럼 몇 가지뿐인 값에 4바이트를 쓰지 않는 식이다.</dd>
+<dt>양자화</dt><dd>연속된 실수 값을 정해진 단계 수로 반올림해 정수로 저장하는 것이다. 방향을 64단계(6비트)로, 좌표를 셀 기준 14비트로 줄이는 것이 그 예이며 정밀도를 일부 포기한다.</dd>
+<dt>AOI (Area of Interest)</dt><dd>한 플레이어가 볼 수 있는 주변 범위다. 서버는 AOI 안의 대상에게만 이동을 보내며, 8B 예시는 캐릭터 ID 대신 AOI 안의 슬롯 번호를 쓴다.</dd>
+<dt>브로드캐스트</dt><dd>한 캐릭터의 상태 변화를 그 캐릭터를 보는 모든 클라에게 각각 보내는 것이다. 보는 사람이 50명이면 같은 내용이 50번 나가므로 서버 송신의 대부분을 차지한다.</dd>
+<dt>동접 (CCU)</dt><dd>같은 시점에 접속해 있는 유저 수다. 영상의 예시는 5,000명이다.</dd>
+<dt>갱신 빈도 (Hz)</dt><dd>1초에 몇 번 상태를 보내는지다. 이동 10Hz는 100ms마다 한 번 위치를 보낸다는 뜻이다.</dd>
+<dt>Δt</dt><dd>기준 시각과의 시간 차이다. 절대 시각 대신 작은 차이 값만 보내 바이트를 줄인다.</dd>
+<dt>대역폭 병목</dt><dd>서버 대수가 CPU나 메모리보다 네트워크 송신량 한도에서 먼저 정해지는 상황이다. 이때만 바이트 절감이 서버 대수 절감으로 바로 이어진다.</dd>
+<dt>N² 트래픽 (보스존)</dt><dd>N명이 한곳에 모여 서로를 모두 보면 각자 N명에게 받고 N명에게 보내져 전체 트래픽이 N²에 비례한다. 그래서 바이트를 줄인 효과가 수용 인원에는 제곱근으로 나타난다.</dd>
+<dt>MSS</dt><dd>패킷 하나에 실을 수 있는 최대 페이로드 크기다. 일반적인 이더넷 환경의 TCP에서 1,460B가 흔한 값이며, 영상은 이를 예시로 쓴다.</dd>
+<dt>pps (packets per second)</dt><dd>초당 처리하는 패킷 수다. 같은 바이트라도 패킷 수가 많으면 헤더와 커널·NIC 처리 비용이 늘어난다.</dd>
+<dt>스키마 진화</dt><dd>이미 배포된 클라와 서버가 섞여 있어도 메시지에 필드를 추가하거나 빼면서 호환을 유지하는 것이다. 프로토버퍼를 쓰는 주된 이유다.</dd>
+</dl>
+</section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  One Byte Stack — 바닥부터 쌓아 올리기 (build it up from the smallest unit), wide cut.
+//  A bit is a cell that literally reads 0 or 1. Eight of them are a byte, bytes stack into an entry (34/24/19/8 B, the real
+//  bytes of one example movement), and one selected byte is copied × 50 viewers → × 10 Hz → × 5,000 CCU → × 86,400 s → × 30 days
+//  until it is a city of data (6.48 TB/month). Later chapters reuse the same units: towers of month-slices, racks, packets.
+//  Look: a hex editor / packet dissector — graphite ground, a faint hex dump behind, field colours like a dissector,
+//  selection yellow for the byte we follow, monospace units and operators. Facts, numbers and chapter timing follow ../one-byte/.
+//  Every frame is a pure function of t.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1920, H = 1080, DURATION = 97.5;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+// Roles: sel = the byte we follow / operators (hex-editor selection) · tag = protobuf tag · length · id / pos / dir / state / time = fields
+//        save = what shrinks · other = non-movement traffic · combat / chat = other outbound traffic
+const C = {
+  bg: '#0b0d11', panel: '#12161d', line: '#252b36', text: '#ecebe6', dim: '#9097a3', faint: '#5d6470',
+  sel: '#ffd84d', tag: '#ff5d5d', id: '#f0a04b', pos: '#4cc3d9', dir: '#9ad15a', state: '#c39bff', time: '#8a96a8',
+  save: '#5fe0a8', other: '#3d4450', combat: '#e07fb0', chat: '#6b7280', empty: '#171b22', rack: '#2a303b', grey: '#b9b3a6',
+};
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const hash = n => rng(n * 7919 + 13)();
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── story numbers (same model as ../one-byte) ────────────────
+// 5,000 CCU · 50 viewers · 10Hz → 1 byte of movement = 6.48TB/month; movement = 60% of outbound at 24B
+const CCU = 5000, VIEW = 50, HZ = 10, TB_PER_BYTE = 6.48;
+const OTHER_TB = 24 * TB_PER_BYTE / .6 * .4;   // non-movement outbound, fixed (103.68 TB)
+const totalTB = b => b * TB_PER_BYTE + OTHER_TB;
+function bytesFmt(b) { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1000 && i < u.length - 1) { b /= 1000; i++; } return (b >= 100 || i === 0 ? Math.round(b) : b.toFixed(1)) + ' ' + u[i]; }
+const money = tb => '$' + (tb * .05).toFixed(1) + 'k~' + (tb * .09).toFixed(1) + 'k';
+const servers = b => Math.ceil(25 * totalTB(b) / totalTB(34) - 1e-9);
+
+// ── the real bytes of one example movement, four encodings ───
+const varint = v => { const out = []; v = BigInt(v); do { let b = Number(v & 0x7Fn); v >>= 7n; if (v) b |= 0x80; out.push(b); } while (v); return out; };
+const f32 = v => { const d = new DataView(new ArrayBuffer(4)); d.setFloat32(0, v, true); return [0, 1, 2, 3].map(i => d.getUint8(i)); };
+const uint = (v, n) => Array.from({ length: n }, (_, i) => Number((BigInt(v) >> BigInt(8 * i)) & 0xFFn));
+const VAL = { id: 100042, x: 1203.37, y: 845.62, z: 12.85, dir: 271.35, st: 2, ms: 1760000000123, ms32: 123456789, dt: 100 };
+const dir16 = Math.round(VAL.dir / 360 * 65536) & 0xFFFF;
+function encode(parts) { const b = [], f = []; for (const [arr, key] of parts) for (const v of arr) { b.push(v); f.push(key); } return { b, f }; }
+function packBits(fields) { const bits = [], keys = []; for (const [v, n, key] of fields) for (let i = n - 1; i >= 0; i--) { bits.push((v >> i) & 1); keys.push(key); } return { bits, keys }; }
+const BITS8F = (slot, x, y, z, d, s, dt) => [[slot, 12, 'id'], [x, 14, 'pos'], [y, 14, 'pos'], [z, 8, 'pos'], [d, 6, 'dir'], [s, 4, 'state'], [dt, 6, 'time']];
+const E34 = encode([[[0x0A, 32], 'tag'], [[0x08], 'tag'], [varint(VAL.id), 'id'], [[0x15], 'tag'], [f32(VAL.x), 'pos'], [[0x1D], 'tag'], [f32(VAL.y), 'pos'],
+  [[0x25], 'tag'], [f32(VAL.z), 'pos'], [[0x28], 'tag'], [varint(Math.round(VAL.dir * 1000)), 'dir'], [[0x30], 'tag'], [varint(VAL.st), 'state'], [[0x38], 'tag'], [varint(VAL.ms), 'time']]);
+const E24 = encode([[uint(VAL.id, 4), 'id'], [f32(VAL.x), 'pos'], [f32(VAL.y), 'pos'], [f32(VAL.z), 'pos'], [uint(dir16, 2), 'dir'], [uint(VAL.st, 2), 'state'], [uint(VAL.ms32, 4), 'time']]);
+const E19 = encode([[uint(VAL.id, 3), 'id'], [f32(VAL.x), 'pos'], [f32(VAL.y), 'pos'], [f32(VAL.z), 'pos'], [uint(dir16, 2), 'dir'], [uint(VAL.st, 1), 'state'], [uint(VAL.dt, 1), 'time']]);
+const P8 = packBits(BITS8F(37, 9215, 3380, 96, 48, 2, 10));
+function bitsToBytes(bits) { const out = []; for (let i = 0; i < bits.length; i += 8) { let v = 0; for (let j = 0; j < 8; j++) v = v << 1 | bits[i + j]; out.push(v); } return out; }
+function majority(keys) { const c = {}; keys.forEach(k => c[k] = (c[k] || 0) + 1); return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; }
+const E8 = { b: bitsToBytes(P8.bits), f: Array.from({ length: 8 }, (_, r) => majority(P8.keys.slice(r * 8, r * 8 + 8))), bitKeys: P8.keys };
+const ENC = [[34, '프로토버퍼 기본', E34], [24, '커스텀 기본', E24], [19, '커스텀 비트 패킹', E19], [8, '이동 전용 극단 양자화', E8]];
+ENC.forEach(([b, , e]) => console.assert(e.b.length === b, 'encoding size', b, e.b.length));
+const SEED_ROW = 4;                                   // the 24B entry's first x byte: the byte we follow
+const SEED_BYTE = E24.b[SEED_ROW];
+const byteBits = v => Array.from({ length: 8 }, (_, j) => (v >> (7 - j)) & 1);
+const hex2 = v => v.toString(16).toUpperCase().padStart(2, '0');
+
+// ── timeline ─────────────────────────────────────────────────
+const HEAD = [
+  [5.0, 15.0, '01', '같은 이동 정보, 네 가지 크기', '프로토버퍼 34B · 커스텀 24B · 비트 패킹 19B · 극단 양자화 8B'],
+  [15.0, 28.0, '02', '1바이트에 붙는 곱하기', '보는 사람 × 갱신 빈도 × 동접 × 시간'],
+  [28.0, 40.0, '03', '왜 브로드캐스트가 대부분인가', '서버는 1을 받고 50을 내보낸다'],
+  [40.0, 54.0, '04', '크기별 총량', '송신 트래픽 · 비용 · 유저 데이터'],
+  [54.0, 68.0, '05', '서버와 수용 인원', '대역폭이 병목일 때 · 일반 필드는 선형, 보스존은 제곱근'],
+  [68.0, 79.0, '06', '패킷 하나에 몇 명', '작을수록 한 패킷에 더 많이'],
+  [79.0, 92.0, '07', '그럼 프로토버퍼는?', '형식보다 바이트 수가 비용을 정한다'],
+];
+const OUTRO_T = DURATION - 5.5;
+// chain steps (02): 1 byte, ×50, ×10, ×5,000, ×86,400, ×30 — instances appear at these times
+const ST = [15.4, 16.9, 18.4, 19.9, 21.4, 22.9];
+
+// ── three.js setup ───────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(C.bg);
+const camera = new THREE.PerspectiveCamera(32, W / H, .1, 1000);
+scene.add(camera);
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .45, .45, .78);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// shared uniforms
+const U = { uT: { value: 0 }, uFog: { value: new THREE.Color(C.bg) }, uFogNear: { value: 100 }, uFogFar: { value: 1000 }, uL: { value: new THREE.Vector3(-.38, 1, .62).normalize() } };
+
+// glyph atlas: "0" | "1" (alpha only); redrawn once fonts are in
+const glyphCanvas = document.createElement('canvas'); glyphCanvas.width = 256; glyphCanvas.height = 128;
+const glyphTex = new THREE.CanvasTexture(glyphCanvas); glyphTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+function drawGlyphs() {
+  const g = glyphCanvas.getContext('2d'); g.clearRect(0, 0, 256, 128);
+  g.fillStyle = '#fff'; g.font = `800 112px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('0', 64, 70); g.fillText('1', 192, 70); glyphTex.needsUpdate = true;
+}
+drawGlyphs();
+
+// ── cell material: instanced boxes that read as bits (0/1 glyph) or as aggregates (grid of what they contain) ──
+const CELL_VS = `
+attribute vec3 aCol; attribute vec4 aInfo; attribute vec3 aGrid;
+uniform float uT, uDur, uDrop;
+varying vec3 vCol, vLocal, vN, vGrid; varying float vBit, vGlow, vIdx, vDist;
+void main() {
+  float k = clamp((uT - aInfo.y) / uDur, 0., 1.);
+  float e = 1. - pow(1. - k, 3.);
+  vec4 wp = modelMatrix * instanceMatrix * vec4(position * max(e, 1e-4), 1.);
+  wp.y += (1. - e) * uDrop;
+  vLocal = position + .5; vN = normal; vGrid = aGrid; vCol = aCol; vBit = aInfo.x; vGlow = aInfo.z; vIdx = aInfo.w;
+  vec4 mv = viewMatrix * wp; vDist = -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`;
+const CELL_FS = `
+uniform sampler2D uGlyph; uniform float uOpacity, uGlowK, uHi, uHiK, uFogNear, uFogFar; uniform vec3 uFog, uL;
+varying vec3 vCol, vLocal, vN, vGrid; varying float vBit, vGlow, vIdx, vDist;
+void main() {
+  vec3 n = normalize(vN);
+  vec2 uv; vec2 gc;
+  if (abs(n.x) > .5) { uv = vLocal.zy; gc = vGrid.zy; }
+  else if (abs(n.y) > .5) { uv = vec2(vLocal.x, 1. - vLocal.z); gc = vGrid.xz; }
+  else { uv = vLocal.xy; gc = vGrid.xy; }
+  vec3 base = vCol;
+  if (vBit > -.5 && vBit < .5) base *= .36;
+  float lit = .46 + .54 * max(dot(n, uL), 0.) + (n.y > .5 ? .1 : 0.);
+  vec3 col = base * lit;
+  vec2 ed = min(uv, 1. - uv); float edge = min(ed.x, ed.y);
+  col *= mix(.5, 1., smoothstep(0., max(.05, fwidth(edge) * 1.5), edge));
+  if (gc.x > 1.5 || gc.y > 1.5) {
+    vec2 q = uv * gc; vec2 fw = fwidth(q);
+    vec2 gd = abs(fract(q - .5) - .5) / max(fw, vec2(1e-4));
+    float line = 1. - min(min(gd.x, gd.y), 1.);
+    float vis = 1. - smoothstep(.22, .45, max(fw.x, fw.y));
+    col *= 1. - .5 * line * vis;
+  }
+  if (vBit > -.5 && (n.z > .5 || n.y > .5)) {
+    vec2 g = (uv - .5) / .78 + .5;
+    if (g.x > 0. && g.x < 1. && g.y > 0. && g.y < 1.) {
+      float a = texture2D(uGlyph, vec2((g.x + vBit) * .5, g.y)).a;
+      vec3 gcol = vBit > .5 ? vec3(.008) : min(base * 2.6, vec3(1.));
+      col = mix(col, gcol, a * .92);
+    }
+  }
+  if (vIdx >= uHi) col *= mix(1., .2, uHiK);
+  col += vCol * vGlow * uGlowK;
+  col = mix(col, uFog, smoothstep(uFogNear, uFogFar, vDist));
+  gl_FragColor = vec4(col, uOpacity);
+}`;
+function cellMat({ dur = .45, drop = 0, glowK = 1 } = {}) {
+  return new THREE.ShaderMaterial({
+    vertexShader: CELL_VS, fragmentShader: CELL_FS,
+    uniforms: { uT: U.uT, uFog: U.uFog, uFogNear: U.uFogNear, uFogFar: U.uFogFar, uL: U.uL, uGlyph: { value: glyphTex },
+      uDur: { value: dur }, uDrop: { value: drop }, uOpacity: { value: 1 }, uGlowK: { value: glowK }, uHi: { value: 1e9 }, uHiK: { value: 0 } },
+  });
+}
+const BOX = new THREE.BoxGeometry(1, 1, 1);
+const _o = new THREE.Object3D(), _c = new THREE.Color();
+// items: { x, y, z, sx, sy, sz, col, bit (-1 none), t0, glow, idx, gx, gy, gz }  (sx.. default s)
+function cells(parent, items, opt = {}) {
+  const n = Math.max(1, items.length), geo = BOX.clone();
+  const col = new Float32Array(n * 3), info = new Float32Array(n * 4), grid = new Float32Array(n * 3);
+  const im = new THREE.InstancedMesh(geo, cellMat(opt), n);
+  items.forEach((it, i) => {
+    const s = it.s ?? .86;
+    _o.position.set(it.x, it.y, it.z); _o.scale.set(it.sx ?? s, it.sy ?? s, it.sz ?? s); _o.updateMatrix(); im.setMatrixAt(i, _o.matrix);
+    _c.set(it.col); const m = it.mul ?? 1; col[i * 3] = _c.r * m; col[i * 3 + 1] = _c.g * m; col[i * 3 + 2] = _c.b * m;
+    info[i * 4] = it.bit ?? -1; info[i * 4 + 1] = it.t0 ?? -1; info[i * 4 + 2] = it.glow ?? 0; info[i * 4 + 3] = it.idx ?? -1;
+    grid[i * 3] = it.gx ?? 1; grid[i * 3 + 1] = it.gy ?? 1; grid[i * 3 + 2] = it.gz ?? 1;
+  });
+  if (!items.length) { _o.scale.set(0, 0, 0); _o.updateMatrix(); im.setMatrixAt(0, _o.matrix); }
+  geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(col, 3));
+  geo.setAttribute('aInfo', new THREE.InstancedBufferAttribute(info, 4));
+  geo.setAttribute('aGrid', new THREE.InstancedBufferAttribute(grid, 3));
+  im.frustumCulled = false;
+  parent.add(im);
+  return im;
+}
+// visibility registry: [object3d, t => alpha]
+const VIS = [];
+function vis(obj, fn) { VIS.push([obj, fn]); return obj; }
+function applyVis(t) {
+  for (const [obj, fn] of VIS) {
+    const a = clamp(fn(t)); obj.visible = a > .002;
+    if (!obj.visible) continue;
+    obj.traverse(o => { const m = o.material; if (!m || !m.uniforms || !m.uniforms.uOpacity) return; m.uniforms.uOpacity.value = a; m.transparent = a < .999; m.depthWrite = a > .6; });
+  }
+}
+const group = (x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); scene.add(g); return g; };
+
+// ── ground: a log-scaled grid (the grid spacing follows the camera, so scale changes read on the floor) ──
+const floorMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { uD: { value: 100 }, uCam: { value: new THREE.Vector3() }, uBg: { value: new THREE.Color('#0d1015') }, uLine: { value: new THREE.Color('#252c38') }, uOpacity: { value: 1 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform float uD, uOpacity; uniform vec3 uCam, uBg, uLine; varying vec3 vW;
+    float gridA(vec2 p, float s) { vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / max(fwidth(q), vec2(1e-5)); return 1. - min(min(g.x, g.y), 1.); }
+    void main() {
+      float lg = log(uD * .05) / log(10.); float s1 = pow(10., floor(lg)); float f = fract(lg);
+      float a = gridA(vW.xz, s1) * (1. - f) * .7 + gridA(vW.xz, s1 * 10.);
+      float dist = length(vW - uCam); float fog = smoothstep(uD * .9, uD * 3.6, dist);
+      gl_FragColor = vec4(mix(uBg, uLine, clamp(a, 0., 1.)), (1. - fog) * uOpacity);
+    }`,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.renderOrder = -1; floor.frustumCulled = false; scene.add(floor);
+
+// ── backdrop: a faint hex dump behind everything (screen-space quad) ──
+const hexCanvas = document.createElement('canvas'); hexCanvas.width = 2048; hexCanvas.height = 1152;
+const hexTex = new THREE.CanvasTexture(hexCanvas); hexTex.colorSpace = THREE.SRGBColorSpace; hexTex.wrapS = hexTex.wrapT = THREE.RepeatWrapping;
+function drawHex() {
+  const g = hexCanvas.getContext('2d'), r = rng(42);
+  g.fillStyle = C.bg; g.fillRect(0, 0, 2048, 1152);
+  g.font = `500 22px ${MONO}`; g.textBaseline = 'top';
+  for (let row = 0; row < 36; row++) {
+    const y = row * 32 + 6;
+    g.fillStyle = '#1a1f28'; g.fillText((row * 16 + 0x4a0).toString(16).padStart(8, '0'), 24, y);
+    let line = ''; for (let i = 0; i < 16; i++) line += hex2(Math.floor(r() * 256)) + (i === 7 ? '  ' : ' ');
+    g.fillStyle = '#151a22'; g.fillText(line, 190, y); g.fillText(line.split(' ').reverse().join(' '), 1080, y);
+  }
+  hexTex.needsUpdate = true;
+}
+drawHex();
+const back = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: { uTex: { value: hexTex }, uOff: { value: 0 }, uK: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, .9999, 1.); }`,
+  fragmentShader: `uniform sampler2D uTex; uniform float uOff, uK; varying vec2 vUv;
+    void main(){ vec3 c = texture2D(uTex, vec2(vUv.x, vUv.y + uOff)).rgb; float v = smoothstep(1.25, .25, length((vUv - .5) * vec2(1.6, 1.))); gl_FragColor = vec4(c * mix(.55, 1., v) * uK, 1.); }`,
+}));
+back.renderOrder = -2; back.frustumCulled = false; scene.add(back);
+
+// ═════════════════════════════════════════════════════════════
+//  S1 · four encodings as stacks of bytes (one row = one byte = 8 bit cells)   + the selected byte
+// ═════════════════════════════════════════════════════════════
+const COLX = [-36, -12, 12, 36];
+const COLT = i => 5.3 + i * 1.4;
+const S1 = group();
+{
+  const items = [];
+  ENC.forEach(([b, , e], i) => {
+    for (let r = 0; r < b; r++) {
+      if (i === 1 && r === SEED_ROW) continue;
+      const bits = byteBits(e.b[r]);
+      for (let j = 0; j < 8; j++) items.push({ x: COLX[i] - 3.5 + j, y: r + .5, z: 0, col: C[i === 3 ? e.bitKeys[r * 8 + j] : e.f[r]], bit: bits[j], t0: COLT(i) + .1 + r * (1 / b) });
+    }
+  });
+  cells(S1, items, { dur: .35, drop: 3 });
+  vis(S1, t => 1 - eio(p(t, 15.0, .8)));
+}
+// the selected byte: lives in the 24B stack during 01, then is picked out and copied in 02
+const B = new THREE.Vector3(60, 0, 0);                 // where the chain is built (min corner)
+const SEEDPOS0 = new THREE.Vector3(COLX[1] - 4, SEED_ROW, -.5);
+const SEED = group();
+cells(SEED, byteBits(SEED_BYTE).map((bit, j) => ({ x: j + .5, y: .5, z: .5, col: C.sel, bit, t0: .5 + j * .09, glow: .32 })), { dur: .3, drop: 0 });
+vis(SEED, t => t < 22.6 ? 1 : 0);
+
+// ═════════════════════════════════════════════════════════════
+//  S2 · the chain, physically: byte → plate (×50) → block (×10) → field of blocks (×5,000) → 24-floor building (×86,400) → city (×30)
+// ═════════════════════════════════════════════════════════════
+const S2a = group(B.x, B.y, B.z), S2b = group(B.x, B.y, B.z), S2c = group(B.x, B.y, B.z), S2d = group(B.x, B.y, B.z);
+// L1 + L2: real copies of the same 8 bits
+{
+  const items = [], bits = byteBits(SEED_BYTE);
+  for (let ly = 0; ly < 10; ly++) for (let k = 0; k < 50; k++) {
+    if (!ly && !k) continue;
+    const bx = k % 5, bz = Math.floor(k / 5);
+    const t0 = ly ? ST[2] + ly * .075 + k * .0016 : ST[1] + k * .014;
+    for (let j = 0; j < 8; j++) items.push({ x: bx * 9 + j + .5, y: ly + .5, z: .5 - bz, col: C.pos, mul: ly ? .9 : 1, bit: bits[j], t0 });
+  }
+  cells(S2a, items, { dur: .35, drop: 0 });
+}
+vis(S2a, t => t >= ST[1] - .1 && t < 22.6 ? 1 : 0);
+// L3: 5,000 blocks (10 × 20 × 25); block 0 is the detailed one
+const BLK = { sx: 44, sy: 10, sz: 10, px: 48, py: 13, pz: 13 };
+const ZF = (k, pz, sz) => 1 - k * pz - sz / 2;          // z centre of the k-th unit, growing away from the camera
+const L3 = { nx: 10, ny: 20, nz: 25 }, U3 = { sx: (L3.nx - 1) * BLK.px + BLK.sx, sy: (L3.ny - 1) * BLK.py + BLK.sy, sz: (L3.nz - 1) * BLK.pz + BLK.sz };
+{
+  const items = [];
+  for (let j = 0; j < L3.ny; j++) for (let i = 0; i < L3.nx; i++) for (let k = 0; k < L3.nz; k++) {
+    if (!i && !j && !k) continue;
+    items.push({ x: i * BLK.px + BLK.sx / 2, y: j * BLK.py + BLK.sy / 2, z: ZF(k, BLK.pz, BLK.sz), sx: BLK.sx, sy: BLK.sy, sz: BLK.sz,
+      col: C.pos, mul: .7 + .18 * hash(i * 31 + j * 7 + k), gx: 5, gy: 10, gz: 10, t0: ST[3] + .25 + (i + j + k) / (L3.nx + L3.ny + L3.nz) * 1.0 });
+  }
+  cells(S2b, items, { dur: .35, drop: 0 });
+}
+vis(S2b, t => t >= ST[3] - .1 && t < 24.8 ? 1 : 0);
+const SEED3 = group(B.x, B.y, B.z);
+cells(SEED3, [{ x: BLK.sx / 2, y: BLK.sy / 2, z: ZF(0, 0, BLK.sz), sx: BLK.sx, sy: BLK.sy, sz: BLK.sz, col: C.sel, glow: .3, gx: 5, gy: 10, gz: 10 }]);
+vis(SEED3, t => t >= 22.6 && t < 24.8 ? 1 : 0);
+// L4: 86,400 = 60 × 60 (seconds of an hour, a wall) × 24 (hours, front to back) of the 5,000-block unit
+const P4 = { px: U3.sx + 24, py: U3.sy + 18, pz: U3.sz + 22 }, L4 = { nx: 60, ny: 60, nz: 24 };
+const U4 = { sx: (L4.nx - 1) * P4.px + U3.sx, sy: (L4.ny - 1) * P4.py + U3.sy, sz: (L4.nz - 1) * P4.pz + U3.sz };
+{
+  const n = L4.nx * L4.ny * L4.nz, geo = BOX.clone();
+  const col = new Float32Array(n * 3), info = new Float32Array(n * 4), grid = new Float32Array(n * 3);
+  const im = new THREE.InstancedMesh(geo, cellMat({ dur: .35 }), n); let q = 0;
+  _c.set(C.pos);
+  for (let f = 0; f < L4.ny; f++) for (let i = 0; i < L4.nx; i++) for (let k = 0; k < L4.nz; k++) {
+    const first = !i && !f && !k;
+    _o.position.set(i * P4.px + U3.sx / 2, f * P4.py + U3.sy / 2, ZF(k, P4.pz, U3.sz));
+    _o.scale.set(first ? 0 : U3.sx, first ? 0 : U3.sy, first ? 0 : U3.sz); _o.updateMatrix(); im.setMatrixAt(q, _o.matrix);
+    const m = .6 + .22 * hash(f * 977 + i * 61 + k) + (f % 2 ? .05 : 0);
+    col[q * 3] = _c.r * m; col[q * 3 + 1] = _c.g * m; col[q * 3 + 2] = _c.b * m;
+    info[q * 4] = -1; info[q * 4 + 1] = ST[4] + f / L4.ny * .75 + k * .012 + i * .0015; info[q * 4 + 3] = -1;
+    grid[q * 3] = 10; grid[q * 3 + 1] = 20; grid[q * 3 + 2] = 25; q++;
+  }
+  geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(col, 3));
+  geo.setAttribute('aInfo', new THREE.InstancedBufferAttribute(info, 4));
+  geo.setAttribute('aGrid', new THREE.InstancedBufferAttribute(grid, 3));
+  im.frustumCulled = false; S2c.add(im);
+}
+const OUTRO_A = t => eo(p(t, OUTRO_T + 1.7, 1.0)) * .5;
+vis(S2c, t => t >= ST[4] - .1 && t < 28.6 ? 1 - eio(p(t, 26.9, .5)) : OUTRO_A(t));
+const SEED4 = group(B.x, B.y, B.z);
+cells(SEED4, [{ x: U3.sx / 2, y: U3.sy / 2, z: ZF(0, 0, U3.sz), sx: U3.sx, sy: U3.sy, sz: U3.sz, col: C.sel, glow: .5, gx: 10, gy: 20, gz: 25 }]);
+vis(SEED4, t => t >= 24.8 && t < 28.6 ? 1 - eio(p(t, 26.9, .5)) : OUTRO_A(t) / .5);
+// L5: 30 days, 6 × 5 city blocks; building 0 is the detailed one
+const P5 = { px: U4.sx + 5000, pz: U4.sz + 9000 };
+const CITY = { sx: 5 * P5.px + U4.sx, sz: 4 * P5.pz + U4.sz };
+{
+  const items = [];
+  for (let i = 0; i < 6; i++) for (let k = 0; k < 5; k++) {
+    if (!i && !k) continue;
+    items.push({ x: i * P5.px + U4.sx / 2, y: U4.sy / 2, z: ZF(k, P5.pz, U4.sz), sx: U4.sx, sy: U4.sy, sz: U4.sz, col: C.pos, mul: .55 + .12 * hash(i * 5 + k),
+      gx: 60, gy: 60, gz: 24, t0: ST[5] + (i + k) / 9 * .8 });
+  }
+  cells(S2d, items, { dur: .4, drop: 0 });
+}
+vis(S2d, t => t >= ST[5] - .1 && t < 28.6 ? 1 - eio(p(t, 26.9, .5)) : OUTRO_A(t));
+
+// ═════════════════════════════════════════════════════════════
+//  S3 · one player: send 1, receive 50 · server outbound composition
+// ═════════════════════════════════════════════════════════════
+const O3 = new THREE.Vector3(-120, 0, 0);
+const S3 = group(O3.x, O3.y, O3.z);
+{
+  const items = [];
+  // one entry (24B) = a brick whose face shows its 24 bytes (6 × 4); one layer = 10 entries = one second at 10Hz
+  for (let i = 0; i < 10; i++) items.push({ x: 13 + i + .5, y: .3, z: 0, sx: .92, sy: .52, sz: .92, col: C.sel, gx: 6, gy: 4, t0: 28.2 + i * .04, glow: .15 });
+  for (let r = 0; r < 50; r++) for (let i = 0; i < 10; i++) items.push({ x: i + .5, y: r * .6 + .3, z: 0, sx: .92, sy: .52, sz: .92, col: C.pos, mul: r % 2 ? .62 : .82, gx: 6, gy: 4, t0: 29.2 + r * .024 + i * .002 });
+  // server outbound tower: 60 / 25 / 15 (0.3 per %)
+  items.push({ x: 42, y: 9, z: 0, sx: 10, sy: 17.9, sz: 10, s: 1, col: C.pos, mul: .85, gx: 1, gy: 24, gz: 1, t0: 31.0 });
+  items.push({ x: 42, y: 21.75, z: 0, sx: 10, sy: 7.4, sz: 10, col: C.combat, mul: .8, t0: 31.3 });
+  items.push({ x: 42, y: 27.75, z: 0, sx: 10, sy: 4.4, sz: 10, col: C.chat, t0: 31.6 });
+  cells(S3, items, { dur: .4, drop: 4 });
+}
+vis(S3, t => win(t, 27.9, 40.4, .4));
+const S3L = group();                                   // the one byte layer (1/24 of movement) that slides out
+cells(S3L, [{ x: 0, y: 0, z: 0, sx: 10.3, sy: .75, sz: 10.3, col: C.sel, glow: .35, gx: 1, gy: 1, gz: 1, t0: 32.6 }], { dur: .3 });
+vis(S3L, t => win(t, 32.5, 40.4, .4));
+const S3Lpos = t => new THREE.Vector3(O3.x + 42 + 2.5 * eio(p(t, 33.0, .7)), 3.375, 0);
+
+// ═════════════════════════════════════════════════════════════
+//  S4 · totals by size: towers of month-slices (one slice = one byte of movement = the 02 city, 6.48 TB/월)
+// ═════════════════════════════════════════════════════════════
+const O4 = new THREE.Vector3(120, 0, 0), SL = .6, BASE_N = OTHER_TB / TB_PER_BYTE;   // 16 slices of non-movement
+const S4 = group(O4.x, O4.y, O4.z);
+const TOWX = i => i * 28;
+{
+  const items = [];
+  ENC.forEach(([b, , e], i) => {
+    const t0 = 40.6 + i * .6;
+    items.push({ x: TOWX(i), y: BASE_N * SL / 2, z: 0, sx: 10, sy: BASE_N * SL - .06, sz: 10, col: C.other, gx: 6, gy: BASE_N, gz: 5, t0 });
+    for (let s = 0; s < b; s++) items.push({ x: TOWX(i), y: BASE_N * SL + s * SL + SL / 2, z: 0, sx: 10, sy: SL - .07, sz: 10, col: C[e.f[s]], mul: .92, gx: 6, gy: 1, gz: 5, t0: t0 + .15 + s * .016 });
+  });
+  cells(S4, items, { dur: .32, drop: 7 });
+}
+vis(S4, t => win(t, 40.0, 54.4, .6));
+const towerTop = i => BASE_N * SL + ENC[i][0] * SL;
+
+// ═════════════════════════════════════════════════════════════
+//  S5 · servers (racks of 25 units, bandwidth-bound) · boss zone volume N² × bytes
+// ═════════════════════════════════════════════════════════════
+const O5 = new THREE.Vector3(320, 0, 0);
+const S5 = group(O5.x, O5.y, O5.z);
+const RACKX = i => i * 13.5;
+{
+  const items = [];
+  ENC.forEach(([b], i) => {
+    const n = servers(b), t0 = 54.6 + i * .6;
+    for (const sx of [-5.5, 5.5]) items.push({ x: RACKX(i) + sx, y: 12.4, z: 3.8, sx: .5, sy: 24.8, sz: .5, col: C.rack, t0 });
+    for (let s = 0; s < 25; s++) items.push({ x: RACKX(i), y: .55 + s * .96, z: 0, sx: 10, sy: .8, sz: 7, col: s < n ? C.pos : '#1d4a3d', mul: s < n ? .9 : 1, gx: 14, gy: 1, gz: 1, t0: t0 + .1 + s * .018, glow: 0 });
+  });
+  cells(S5, items, { dur: .3, drop: 3 });
+}
+vis(S5, t => win(t, 54.0, 68.4, .6));
+const BOSS = [[34, 10, C.grey, 66], [8, 10 * Math.sqrt(34 / 8), C.save, 92]];
+const BOSS_Z = 4;   // [bytes, side (N), colour, x]
+const S5b = group(O5.x, O5.y, O5.z);
+cells(S5b, BOSS.map(([b, side, col, x], i) => ({ x, y: b * .3 / 2, z: BOSS_Z, sx: side, sy: b * .3, sz: side, col, mul: .85, gx: side, gy: 1, gz: side, t0: 57.8 + i * .6 })), { dur: .5, drop: 4 });
+vis(S5b, t => win(t, 57.6, 68.4, .6));
+
+// ═════════════════════════════════════════════════════════════
+//  S6 · one packet (1,460 B example) filled with entries
+// ═════════════════════════════════════════════════════════════
+const O6 = new THREE.Vector3(520, 0, 0), MSS = 1460, PW = 32, PROWS = Math.ceil(MSS / PW);
+const S6 = group(O6.x, O6.y, O6.z);
+const PLX = i => i * 38;
+function packetCells(items, x0, y0, z0, b, e, first, count, t0, dur) {
+  for (let q = 0; q < count; q++) for (let r = 0; r < b; r++) {
+    const j = q * b + r, c = j % PW, row = Math.floor(j / PW), k = first + q;
+    items.push({ x: x0 + c + .5, y: y0 + PROWS - row - .5, z: z0, s: .88, col: C[e.f[r]], mul: k % 2 ? .6 : 1, idx: k, t0: t0 + q / count * dur });
+  }
+}
+function packetFrame(items, x0, y0, z0, t0) {
+  const full = Math.floor(MSS / PW), rest = MSS - full * PW;
+  items.push({ x: x0 + PW / 2, y: y0 + PROWS - full / 2, z: z0 - .55, sx: PW, sy: full, sz: .2, col: C.empty, gx: PW, gy: full, gz: 1, t0 });
+  items.push({ x: x0 + rest / 2, y: y0 + .5, z: z0 - .55, sx: rest, sy: 1, sz: .2, col: C.empty, gx: rest, gy: 1, gz: 1, t0 });
+}
+let S6mats = [];
+{
+  const items = [];
+  ENC.forEach(([b, , e], i) => { const t0 = 68.6 + i * .7; packetFrame(items, PLX(i), 0, 0, t0 - .2); packetCells(items, PLX(i), 0, 0, b, e, 0, Math.floor(MSS / b), t0, 1.2); });
+  S6mats.push(cells(S6, items, { dur: .25, drop: 0 }).material);
+}
+vis(S6, t => win(t, 68.0, 79.4, .6));
+// the second packet that 60 × 34B needs (42 entries fit in the first, 18 spill over)
+const S6b = group(O6.x - 13, O6.y, O6.z - 7);
+{
+  const items = []; packetFrame(items, 0, 0, 0, 72.3); packetCells(items, 0, 0, 0, 34, E34, 42, 18, 72.5, .6);
+  S6mats.push(cells(S6b, items, { dur: .25 }).material);
+}
+vis(S6b, t => win(t, 72.2, 79.4, .5));
+
+// ═════════════════════════════════════════════════════════════
+//  S7 · movement in one protobuf bytes field: tag · length (3B) + 8B × 50
+// ═════════════════════════════════════════════════════════════
+const O7 = new THREE.Vector3(720, 0, 0);
+const S7 = group(O7.x, O7.y, O7.z);
+const BYTESHDR = [0x1A, ...varint(400)];             // field 3, wire type 2 (length-delimited), length 400 → 3 bytes
+console.assert(BYTESHDR.length === 3);
+const S7COLX = k => 11 + (k % 25) * 9.6, S7ROWY = k => Math.floor(k / 25) ? 0 : 10;
+{
+  const items = [], r = rng(99);
+  BYTESHDR.forEach((v, row) => byteBits(v).forEach((bit, j) => items.push({ x: j + .5, y: 10 + 7 - row + .5, z: 0, col: C.tag, bit, t0: 81.8 + row * .08 })));
+  for (let k = 0; k < 50; k++) {
+    const pk = packBits(BITS8F(k + 1, Math.floor(r() * 16384), Math.floor(r() * 16384), Math.floor(r() * 256), Math.floor(r() * 64), Math.floor(r() * 16), Math.floor(r() * 64)));
+    for (let row = 0; row < 8; row++) for (let j = 0; j < 8; j++)
+      items.push({ x: S7COLX(k) + j + .5, y: S7ROWY(k) + 7 - row + .5, z: 0, col: C[pk.keys[row * 8 + j]], bit: pk.bits[row * 8 + j], t0: 82.1 + k * .028 + row * .01 });
+  }
+  cells(S7, items, { dur: .3, drop: 2 });
+}
+vis(S7, t => win(t, 79.0, 92.6, .6));
+
+// ═════════════════════════════════════════════════════════════
+//  camera: keys [t, target x, y, z, distance, yaw°, pitch°, screen offset x, y]; monotone cubic per channel, distance in log space
+// ═════════════════════════════════════════════════════════════
+const U3C = [B.x + U3.sx / 2, U3.sy / 2, 1 - U3.sz / 2], U4C = [B.x + U4.sx / 2, U4.sy / 2, 1 - U4.sz / 2];
+const CITYC = [B.x + CITY.sx / 2, U4.sy / 2, 1 - CITY.sz / 2];
+const KEYS = [
+  [0.0, COLX[1], 4.5, 0, 21, 16, 12, 0, 250],
+  [4.0, COLX[1], 4.5, 0, 25, 20, 14, 0, 250],
+  [6.2, -1, 16, 0, 140, 7, 9, -270, 20],
+  [14.6, 0, 16, 0, 144, 10, 10, -270, 20],
+  [16.1, B.x + 4, .5, .5, 23, 30, 24, 270, 150],
+  [16.9, B.x + 4, .5, .5, 25, 32, 24, 270, 150],
+  [17.9, B.x + 22, 1, -4, 74, 34, 28, 270, 150],
+  [18.9, B.x + 22, 5, -4, 96, 36, 25, 270, 150, 1],
+  [20.4, ...U3C, 1500, 38, 22, 270, 140, 1],
+  [21.9, ...U4C, 78000, 40, 20, 270, 130, 1],
+  [23.4, ...CITYC, 380000, 40, 24, 430, 110, 1],
+  [27.0, ...CITYC, 400000, 46, 26, 430, 110, 1],
+  [28.7, O3.x + 20, 15, 0, 118, 6, 8, 0, 50, 1],
+  [39.4, O3.x + 20, 15, 0, 121, 10, 9, 0, 50],
+  [41.2, O4.x + 42, 15, 0, 182, 7, 10, -310, 90],
+  [53.4, O4.x + 42, 15, 0, 186, 11, 11, -310, 90],
+  [55.2, O5.x + 48, 11, 0, 142, 8, 12, 0, 40],
+  [67.4, O5.x + 48, 11, 0, 146, 12, 13, 0, 40],
+  [69.2, O6.x + 73, 23, 0, 236, 7, 6, 120, 20],
+  [78.4, O6.x + 73, 23, 0, 240, 11, 7, 120, 20],
+  [80.2, O7.x + 125, 9, 0, 285, 5, 9, 0, 160],
+  [91.6, O7.x + 125, 9, 0, 290, 8, 10, 0, 160, 1],
+  [94.2, ...CITYC, 330000, 44, 26, 0, 0, 1],
+  [97.5, ...CITYC, 350000, 52, 28, 0, 0],
+];
+function spline(xs, ys) {
+  const n = xs.length, d = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * d[i]; m[i + 1] = k * b * d[i]; }
+  }
+  return x => {
+    if (x <= xs[0]) return ys[0]; if (x >= xs[n - 1]) return ys[n - 1];
+    let i = 0; while (x > xs[i + 1]) i++;
+    const h = xs[i + 1] - xs[i], u = (x - xs[i]) / h, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * h * m[i + 1];
+  };
+}
+const KT = KEYS.map(k => k[0]);
+const CH = [1, 2, 3, 4, 5, 6, 7, 8].map(c => spline(KT, KEYS.map(k => c === 4 ? Math.log(k[4]) : k[c])));
+const _v = new THREE.Vector3();
+function camAt(t) {
+  let [tx, ty, tz, ld, yaw0, pitch0, ox, oy] = CH.map(f => f(t));
+  const d = Math.exp(ld);
+  let i = 0; while (i < KEYS.length - 2 && t > KEYS[i + 1][0]) i++;
+  const A = KEYS[i], Z = KEYS[i + 1], r = Z[4] / A[4];
+  if (t > A[0] && t < Z[0] && A[9] && Z[9]) {             // a scale jump: move the target with the distance, not with time
+    const f = clamp((d - A[4]) / (Z[4] - A[4]));
+    tx = lerp(A[1], Z[1], f); ty = lerp(A[2], Z[2], f); tz = lerp(A[3], Z[3], f);
+  }
+  return camFrom(t, tx, ty, tz, d, yaw0, pitch0, ox, oy);
+}
+function camFrom(t, tx, ty, tz, d, yaw0, pitch0, ox, oy) {
+  const yaw = (yaw0 + 1.4 * Math.sin(t * .21)) * Math.PI / 180, pitch = (pitch0 + .5 * Math.sin(t * .17)) * Math.PI / 180;
+  return { T: new THREE.Vector3(tx, ty, tz), d, dir: new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)), ox, oy };
+}
+function proj(x, y, z) { _v.set(x, y, z).project(camera); return [(_v.x + 1) / 2 * W, (1 - _v.y) / 2 * H, _v.z < 1]; }
+
+// ═════════════════════════════════════════════════════════════
+//  2D overlay helpers
+// ═════════════════════════════════════════════════════════════
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+// mono text that contains Hangul is drawn in runs: Hangul (with the spaces between Hangul words) in the sans face, the rest in mono
+const HANGUL_RUN = /[\u3131-\uD79D·]+(?:\s+[\u3131-\uD79D·]+)*/g;
+function runs(s, mono) {
+  if (!mono || !/[\u3131-\uD79D]/.test(s)) return [[s, mono]];
+  const out = []; let last = 0;
+  for (const m of s.matchAll(HANGUL_RUN)) { if (m.index > last) out.push([s.slice(last, m.index), true]); out.push([m[0], false]); last = m.index + m[0].length; }
+  if (last < s.length) out.push([s.slice(last), true]);
+  return out;
+}
+function tw(s, size, weight = 500, mono = false) { let w = 0; for (const [r, m] of runs(s, mono)) { font(size, weight, m); w += ctx.measureText(r).width; } return w; }
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = C.text, align = 'left', base = 'alphabetic', alpha = 1, mono = false, ls = 0, shadow = true } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  ctx.fillStyle = color; ctx.textBaseline = base;
+  if (ls) ctx.letterSpacing = ls + 'px';
+  if (shadow) { ctx.shadowColor = 'rgba(5,6,9,.9)'; ctx.shadowBlur = 14; }
+  const rs = runs(s, mono);
+  if (rs.length === 1) { font(size, weight, mono); ctx.textAlign = align; ctx.fillText(s, x, y); }
+  else {
+    let cx = x - (align === 'center' ? tw(s, size, weight, mono) / 2 : align === 'right' ? tw(s, size, weight, mono) : 0);
+    ctx.textAlign = 'left';
+    for (const [r, m] of rs) { font(size, weight, m); ctx.fillText(r, cx, y); cx += ctx.measureText(r).width; }
+  }
+  ctx.restore();
+}
+function box2(x, y, w, h, o = {}) {
+  const { fill = 'rgba(14,17,23,.82)', stroke = C.line, alpha = 1, r = 6, lw = 1.5 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function swatch(x, y, s, col, a = 1) { ctx.save(); ctx.globalAlpha *= a; ctx.fillStyle = col; ctx.fillRect(x, y - s, s, s); ctx.restore(); }
+// a dissector-style leader line from a 3D anchor to a label
+function leader(ax, ay, bx, by, col, a = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a * .8; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  ctx.fillStyle = col; ctx.fillRect(ax - 4, ay - 4, 8, 8); ctx.restore();
+}
+function vignette() {
+  const g = ctx.createRadialGradient(W / 2, H * .5, H * .35, W / 2, H * .5, H * 1.05);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.5)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// header: [01/07] offset tag + title + subtitle
+function headers(t) {
+  for (const [s, e, n, title, sub] of HEAD) {
+    const a = win(t, s, e, .4); if (a <= 0) continue;
+    {
+      const k = eo(p(t, s + .05, .7)), k2 = eo(p(t, s + .3, .7));
+      ctx.save(); ctx.globalAlpha = a;
+      const tag = `${n}/07`; font(26, 700, true); const w = ctx.measureText(tag).width + 26;
+      ctx.save(); ctx.globalAlpha *= k; ctx.fillStyle = C.sel; ctx.fillRect(120 - (1 - k) * 30, 84, w, 44); ctx.restore();
+      txt(tag, 133 - (1 - k) * 30, 116, { size: 26, weight: 800, mono: true, color: C.bg, alpha: k, shadow: false });
+      txt(title, 120 + w + 22 - (1 - k) * 30, 124, { size: 54, weight: 800, alpha: k });
+      txt(sub, 122, 178, { size: 30, weight: 500, color: C.dim, alpha: k2 });
+      ctx.restore();
+    }
+  }
+}
+// bottom: a byte ruler (one cell per second), chapter labels above
+function progress(t) {
+  const x0 = 120, x1 = 1800, y = 1046, n = Math.ceil(DURATION), cw = (x1 - x0) / n;
+  const a = clamp(Math.min(t - HEAD[0][0] + .4, DURATION - .6 - t) * 2) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  for (let i = 0; i < n; i++) {
+    const on = i < t, cur = i <= t && t < i + 1;
+    ctx.fillStyle = cur ? C.sel : on ? 'rgba(236,235,230,.42)' : 'rgba(148,163,184,.12)';
+    ctx.fillRect(x0 + i * cw + 1, y, cw - 2, 8);
+  }
+  HEAD.forEach((h, i) => {
+    const x = x0 + (x1 - x0) * h[0] / DURATION, nx = i + 1 < HEAD.length ? x0 + (x1 - x0) * HEAD[i + 1][0] / DURATION : x1;
+    let lab = h[2] + ' ' + h[3];
+    while (lab.length > 2 && tw(lab, 16, 600) > nx - x - 14) lab = lab.slice(0, -1);
+    if (lab !== h[2] + ' ' + h[3]) lab = lab.length > 4 ? lab.slice(0, -1).trimEnd() + '…' : h[2];
+    txt(lab, x + 2, y - 10, { size: 16, weight: 600, color: t >= h[0] ? C.dim : C.faint, shadow: false });
+  });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  INTRO (0 – 5.2)
+// ═════════════════════════════════════════════════════════════
+function ovIntro(t) {
+  const a = win(t, 0, 5.2, .6); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  txt('1 bit → 1 byte → × 50 → × 10 → × 5,000 → × 86,400 → × 30', W / 2, 250, { size: 26, weight: 600, color: C.dim, align: 'center', mono: true, alpha: eo(p(t, .2, .8)) });
+  const k1 = eo(p(t, .45, .8)), k2 = eo(p(t, .85, .8));
+  ctx.save(); ctx.globalAlpha *= k1; font(104, 800); ctx.textAlign = 'center';
+  const l1 = ['이동 ', '패킷, ', '바이트를'], w1 = l1.map(s => ctx.measureText(s).width); let x = W / 2 - w1.reduce((s, v) => s + v, 0) / 2;
+  l1.forEach((s, i) => { txt(s, x + w1[i] / 2, 400 + (1 - k1) * 40, { size: 104, weight: 800, align: 'center', color: i === 2 ? C.sel : C.text }); x += w1[i]; });
+  ctx.restore();
+  txt('줄이면 무슨 일이?', W / 2, 530 + (1 - k2) * 40, { size: 104, weight: 800, align: 'center', alpha: k2 });
+  txt('수천 명이 플레이하는 MMO에서 바이트가 몇 번 곱해지고, 줄이면 무엇이 얼마나 달라지는지', W / 2, 615, { size: 30, color: C.dim, align: 'center', alpha: eo(p(t, 1.7, .8)) });
+  // the byte under the title
+  const kb = eo(p(t, 1.5, .6));
+  const [lx, ly] = proj(COLX[1] - 4, 4, .5), [rx] = proj(COLX[1] + 4, 4, .5);
+  txt('8 bit = 1 byte', lx, ly + 70, { size: 30, weight: 700, mono: true, color: C.dim, alpha: kb });
+  txt('0x' + hex2(SEED_BYTE), rx, ly + 70, { size: 30, weight: 800, mono: true, color: C.sel, align: 'right', alpha: kb });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  01 · four sizes, as stacks of bytes · dissector panel
+// ═════════════════════════════════════════════════════════════
+const LEGEND = [['tag', '태그 · 길이'], ['id', 'ID · 슬롯'], ['pos', 'x · y · z'], ['dir', '방향'], ['state', '상태'], ['time', '시각 · Δt']];
+const DISSECT = [
+  [['tag', '래퍼 (태그 · 길이)', '2B'], ['id', 'ID', '태그 1B + 3B'], ['pos', 'x · y · z', '(태그 1B + 4B) × 3'], ['dir', '방향', '태그 1B + 3B'], ['state', '상태', '태그 1B + 1B'], ['time', '시각', '태그 1B + 6B']],
+  [['id', 'ID', '4B'], ['pos', 'x · y · z', '4B × 3'], ['dir', '방향', '2B'], ['state', '상태', '2B'], ['time', '시각', '4B']],
+  [['id', 'ID', '3B'], ['pos', 'x · y · z', '4B × 3'], ['dir', '방향', '2B'], ['state', '상태', '1B'], ['time', 'Δt', '1B']],
+  [['id', '슬롯', '12b'], ['pos', 'x', '14b'], ['pos', 'y', '14b'], ['pos', 'z', '8b'], ['dir', '방향', '6b'], ['state', '상태', '4b'], ['time', 'Δt', '6b']],
+];
+function ov01(t) {
+  const [S, E] = HEAD[0]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  // legend
+  let lx = 120; const kl = eo(p(u, .2, .5));
+  LEGEND.forEach(([k, lab]) => { swatch(lx, 252, 22, C[k], kl); txt(lab, lx + 32, 252, { size: 28, weight: 600, color: C.text, alpha: kl }); lx += 32 + tw(lab, 28, 600) + 40; });
+  // labels under each stack
+  const baseY = Math.max(...COLX.map(x => proj(x, 0, 4)[1]));
+  ENC.forEach(([b, name], i) => {
+    const k = eo(p(u, .3 + i * 1.4, .5)); if (k <= 0) return;
+    const [x] = proj(COLX[i], 0, 4), y = baseY;
+    txt(b + 'B', x, y + 92, { size: 90, weight: 800, mono: true, align: 'center', color: i === 3 ? C.save : C.text, alpha: k });
+    txt(name, x, y + 136, { size: 28, weight: 600, align: 'center', color: C.dim, alpha: k });
+  });
+  // dissector panel (right): the stack that was built last
+  const cur = Math.min(3, Math.max(0, Math.floor((u - .3) / 1.4)));
+  const kp = eo(p(u, .5, .5)), px = 1330, py = 300, pw = 470;
+  box2(px, py, pw, 470, { alpha: kp });
+  ENC.forEach(([b, name], i) => {
+    const ka = (i === cur ? 1 : 0) * eo(p(u, .45 + i * 1.4, .4)); if (ka <= 0) return;
+    ctx.save(); ctx.globalAlpha *= ka * kp;
+    txt(`▾ ${name}`, px + 24, py + 50, { size: 28, weight: 800 });
+    txt(b + ' bytes', px + pw - 24, py + 50, { size: 28, weight: 800, mono: true, align: 'right', color: i === 3 ? C.save : C.sel });
+    DISSECT[i].forEach(([k, lab, sz], r) => {
+      const y = py + 104 + r * 44;
+      swatch(px + 28, y, 20, C[k]); txt(lab, px + 62, y, { size: 28, weight: 600 }); txt(sz, px + pw - 24, y, { size: 28, weight: 600, mono: true, align: 'right', color: C.dim });
+    });
+    if (i === 0) txt('빨간 칸 = 프로토버퍼 필드 태그 · 길이', px + 24, py + 440, { size: 28, weight: 700, color: C.tag, alpha: eo(p(u, 2, .4)) });
+    if (i === 3) {
+      const kn = eo(p(u, 5, .4));
+      txt('AOI 슬롯 번호 · 셀 기준 상대 좌표', px + 24, py + 420, { size: 28, color: C.dim, alpha: kn });
+      txt('양자화 · 방향 64단계', px + 24, py + 456, { size: 28, color: C.dim, alpha: kn });
+    }
+    ctx.restore();
+  });
+  const kn = eo(p(u, 5, .4));
+  txt('8B: 이동만 극단적으로 다듬은 예', px + 24, py + 520, { size: 28, weight: 700, color: C.save, alpha: kn * kp });
+  txt('같은 이동 정보가 34B에서 8B까지 — 76% 차이', 120, 990, { size: 40, weight: 800, color: C.save, alpha: eo(p(u, 6.4, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  02 · the multiplication tape
+// ═════════════════════════════════════════════════════════════
+const CHAIN = [
+  ['1 바이트', '줄인 크기', 1, ''],
+  ['× 50', '한 명의 이동을 보는 사람 수', 50, ''],
+  ['× 10', '초당 이동 갱신 (10Hz)', 500, '/s'],
+  ['× 5,000', '동시접속', 2.5e6, '/s'],
+  ['× 86,400', '하루 (초)', 2.16e11, '/일'],
+  ['× 30', '한 달', 6.48e12, '/월'],
+];
+const CHAIN_SHAPE = ['비트 8칸 = 1바이트', '바이트 50개 = 판 한 장', '판 10장 = 블록 하나 (1초 분량)', '블록 5,000개 = 10 × 20 × 25', '60 × 60 × 24시간 = 건물 한 동 (하루)', '30동 = 한 달'];
+const chainUnit = (i, t) => i && eo(p(t, ST[i] + .1, .9)) < .5 ? CHAIN[i - 1][3] : CHAIN[i][3];
+const chainVal = (i, t) => { const v = CHAIN[i][2]; if (!i) return v; const pv = CHAIN[i - 1][2], e = eo(p(t, ST[i] + .1, .9)); return pv * Math.pow(v / pv, e); };
+function ov02(t) {
+  const [S, E] = HEAD[1]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  box2(100, 226, 760, 640, { alpha: eo(p(u, .7, .5)) });
+  let curI = -1;
+  CHAIN.forEach(([op, desc, val, unit], i) => {
+    const k = eo(p(t, ST[i], .5)); if (k <= 0) return; curI = i;
+    const y = 290 + i * 100, last = i === CHAIN.length - 1;
+    txt(op, 130, y, { size: 42, weight: 800, mono: true, color: i ? C.sel : C.text, alpha: k });
+    txt(desc, 130, y + 38, { size: 28, color: C.dim, alpha: k });
+    txt(bytesFmt(val) + unit, 830, y, { size: 42, weight: 800, mono: true, align: 'right', color: last ? C.sel : C.text, alpha: k });
+    if (i === 3) txt('= 20 Mbps', 830, y + 38, { size: 28, weight: 700, mono: true, align: 'right', color: C.pos, alpha: eo(p(t, ST[3] + .8, .4)) });
+    if (i) { ctx.save(); ctx.globalAlpha *= k * .5; ctx.fillStyle = C.line; ctx.fillRect(130, y - 62, 700, 1.5); ctx.restore(); }
+  });
+  // running total (big) + what the current layer is made of
+  if (curI >= 0) {
+    const [, , val, unit] = CHAIN[curI], kk = eo(p(t, ST[curI], .4));
+    if (curI && kk < 1) { const [, , pv, pu] = CHAIN[curI - 1]; txt(bytesFmt(pv) + pu, 1800, 330 - kk * 50, { size: 120, weight: 800, mono: true, align: 'right', alpha: 1 - kk }); }
+    txt(bytesFmt(val) + unit, 1800, 330 + (1 - kk) * 50, { size: 120, weight: 800, mono: true, align: 'right', color: curI === 5 ? C.sel : C.text, alpha: kk });
+    txt(CHAIN_SHAPE[curI], 1800, 382, { size: 30, weight: 600, align: 'right', color: C.dim, alpha: kk });
+  }
+  // the selection marker: where the original byte is, at every scale
+  const km = eo(p(t, ST[3] + .5, .5)) * (1 - eo(p(t, 27.0, .4)));
+  if (km > 0) {
+    const sc = t < 22.6 ? [B.x + 4, .5, .5] : t < 24.8 ? [B.x + BLK.sx / 2, BLK.sy / 2, ZF(0, 0, BLK.sz)] : [B.x + U3.sx / 2, U3.sy / 2, ZF(0, 0, U3.sz)];
+    const [mx, my] = proj(...sc), r = 22;
+    ctx.save(); ctx.globalAlpha *= km; ctx.strokeStyle = C.sel; ctx.lineWidth = 3;
+    for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(mx + dx * r, my + dy * (r - 9)); ctx.lineTo(mx + dx * r, my + dy * r); ctx.lineTo(mx + dx * (r - 9), my + dy * r); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(mx + r, my - r); ctx.lineTo(mx + r + 40, my - r - 40); ctx.lineTo(mx + r + 60, my - r - 40); ctx.stroke(); ctx.restore();
+    txt('처음의 1바이트 (0x' + hex2(SEED_BYTE) + ')', mx + r + 68, my - r - 30, { size: 28, weight: 700, color: C.sel, alpha: km });
+  }
+  txt('1바이트가 한 달에 6.5TB의 송신 트래픽이 된다 (동접 5,000 24시간 유지 가정)', W / 2, 990, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 8.4, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  03 · why broadcast dominates
+// ═════════════════════════════════════════════════════════════
+function ov03(t) {
+  const [S, E] = HEAD[2]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .3, .6));
+  txt('플레이어 한 명의 이동 트래픽', 120, 262, { size: 32, weight: 800, alpha: k });
+  // what I send: one layer
+  const [sx, sy] = proj(O3.x + 18, .6, 0), ks = eo(p(u, .8, .5));
+  txt('보내는 양 (내 이동)', sx, sy - 104, { size: 28, weight: 700, color: C.sel, align: 'center', alpha: ks });
+  txt(bytesFmt(240) + '/s', sx, sy - 52, { size: 44, weight: 800, mono: true, align: 'center', alpha: ks });
+  // what I receive: fifty layers
+  const [wx, wy] = proj(O3.x - .6, 22, 0), kr = eo(p(u, 1.8, .6));
+  txt('받는 양 (보이는 50명의 이동)', wx, wy, { size: 28, weight: 700, color: C.pos, align: 'right', alpha: kr });
+  txt(bytesFmt(240 * VIEW) + '/s', wx, wy + 96, { size: 96, weight: 800, mono: true, align: 'right', alpha: kr });
+  txt('한 층 = 24B × 10Hz · 50명 = 50층', wx, wy + 142, { size: 28, color: C.dim, align: 'right', alpha: kr });
+  txt('서버 입장: 받는 것 1, 내보내는 것 50', 120, 890, { size: 32, weight: 800, color: C.sel, alpha: eo(p(u, 2.6, .5)) });
+  // composition tower
+  const [tx] = proj(O3.x + 42, 30, 0);
+  txt('서버 송신 트래픽 구성 (예시)', tx, 262, { size: 32, weight: 800, align: 'center', alpha: eo(p(u, 2.8, .5)) });
+  [['이동 브로드캐스트', 60, C.pos, 14.5], ['전투 · 이펙트', 25, C.combat, 21.75], ['채팅 · 기타', 15, C.chat, 27.75]].forEach(([lab, pct, col, yy], i) => {
+    const kk = eo(p(u, 3 + i * .3, .5)); const [lx, ly] = proj(O3.x + 47, yy, 5);
+    txt(pct + '%', lx + 22, ly + 4, { size: 44, weight: 800, mono: true, alpha: kk });
+    txt(lab, lx + 22 + tw(pct + '%', 44, 800, true) + 14, ly + 2, { size: 28, color: col === C.chat ? C.dim : col, alpha: kk });
+  });
+  const kz = eo(p(u, 4.6, .6)), L = S3Lpos(t), [bx, by] = proj(L.x + 5.2, L.y, 5.2);
+  txt('그중 1/24 = 1바이트', bx + 22, by - 36, { size: 30, weight: 800, color: C.sel, alpha: kz });
+  const k25 = eo(p(u, 5.4, .5));
+  txt('≈ 전체 송신의', bx + 22, by + 4, { size: 28, color: C.dim, alpha: k25 });
+  txt('2.5%', bx + 22, by + 94, { size: 96, weight: 800, mono: true, color: C.sel, alpha: k25 });
+  txt('1바이트 = 전체 송신의 약 2.5%. 하나는 작아도 여러 바이트를 줄이면 그만큼 쌓인다', W / 2, 948, { size: 32, weight: 800, align: 'center', alpha: eo(p(u, 7, .6)) });
+  txt('브로드캐스트는 보는 사람 수만큼 복제되므로, 줄인 바이트도 그만큼 복제되어 줄어든다', W / 2, 994, { size: 28, color: C.dim, align: 'center', alpha: eo(p(u, 7.8, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  04 · totals by size
+// ═════════════════════════════════════════════════════════════
+function ov04(t) {
+  const [S, E] = HEAD[3]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .2, .6)), max = totalTB(34);
+  txt('서버 전체 송신 / 월', 120, 262, { size: 32, weight: 800, alpha: k });
+  const kl = eo(p(u, 1.2, .5));
+  swatch(120, 304, 22, C.pos, kl); txt('한 층 = 이동 1바이트 = 월 6.48TB (02의 도시 하나)', 154, 304, { size: 28, color: C.dim, alpha: kl });
+  swatch(120, 346, 22, C.other, kl); txt('이동 외 송신 (고정)', 154, 346, { size: 28, color: C.dim, alpha: kl });
+  const baseY = Math.max(...ENC.map((_, i) => proj(O4.x + TOWX(i), 0, 5)[1]));
+  ENC.forEach(([b], i) => {
+    const kk = eo(p(u, .6 + i * .6, .7)), tb = totalTB(b);
+    const [x] = proj(O4.x + TOWX(i), 0, 5), y = baseY;
+    txt(b + 'B', x, y + 52, { size: 44, weight: 800, mono: true, align: 'center', color: i === 3 ? C.save : C.text, alpha: eo(p(u, .9 + i * .6, .5)) });
+    const [tx, ty] = proj(O4.x + TOWX(i), towerTop(i), -5);
+    txt(Math.round(tb * kk) + 'TB', tx, ty - 22, { size: 48, weight: 800, mono: true, align: 'center', alpha: kk });
+    txt(money(tb) + '/월', x, y + 92, { size: 28, mono: true, align: 'center', color: C.dim, alpha: kk });
+  });
+  const kd = eo(p(u, 3.4, .5)), px = 1250, py = 236;
+  box2(px, py, 550, 610, { alpha: kd, stroke: rgba(C.save, .5) });
+  txt('34B → 8B 이면', px + 30, py + 56, { size: 32, weight: 800, color: C.save, alpha: kd });
+  const save = totalTB(34) - totalTB(8);
+  const ks = eo(p(u, 3.8, .5));
+  txt('−' + Math.round(save) + 'TB', px + 30, py + 166, { size: 110, weight: 800, mono: true, color: C.save, alpha: ks });
+  txt('송신 트래픽 / 월 (−' + Math.round(save / totalTB(34) * 100) + '%)', px + 30, py + 210, { size: 28, weight: 600, alpha: ks });
+  [['송신 비용', '−' + money(save) + '/월'],
+   ['플레이어 1명 받는 이동 데이터', bytesFmt(34 * VIEW * HZ) + '/s → ' + bytesFmt(8 * VIEW * HZ) + '/s'],
+   ['모바일 이동 데이터 / 시간', bytesFmt(34 * VIEW * HZ * 3600) + ' → ' + bytesFmt(8 * VIEW * HZ * 3600)]].forEach(([l, v], i) => {
+    const kk = eo(p(u, 4.3 + i * .5, .5)); if (kk <= 0) return;
+    const y = py + 290 + i * 108;
+    txt(l, px + 30, y, { size: 28, color: C.dim, alpha: kk });
+    txt(v, px + 30, y + 46, { size: 38, weight: 800, mono: true, color: C.save, alpha: kk });
+  });
+  txt('바이트를 줄이면 서버 송신 · 비용 · 유저 데이터가 함께 줄어든다', W / 2, 948, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 6.4, .6)) });
+  txt('이동 외 송신(전투 · 채팅 등)은 그대로 둔 계산', W / 2, 994, { size: 28, color: C.faint, align: 'center', alpha: eo(p(u, 7, .5)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  05 · servers and capacity
+// ═════════════════════════════════════════════════════════════
+function ov05(t) {
+  const [S, E] = HEAD[4]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .2, .6));
+  txt('필요한 서버 (34B 기준 25대, 대역폭 병목 가정 · 예시)', 120, 262, { size: 30, weight: 800, color: C.pos, alpha: k });
+  const baseY = Math.max(...ENC.map((_, i) => proj(O5.x + RACKX(i), 0, 4)[1]));
+  ENC.forEach(([b], i) => {
+    const kk = eo(p(u, .6 + i * .6, .5)); if (kk <= 0) return;
+    const n = servers(b), [x] = proj(O5.x + RACKX(i), 0, 4), y = baseY;
+    txt(b + 'B', x, y + 56, { size: 44, weight: 800, mono: true, align: 'center', color: i === 3 ? C.save : C.text, alpha: kk });
+    txt(n + '대', x, y + 108, { size: 48, weight: 800, mono: true, align: 'center', color: C.pos, alpha: kk });
+  });
+  const ks = eo(p(u, 3.4, .5)), px = 1060, py = 230;
+  txt('같은 장비로 더 받는 인원', px, py + 32, { size: 32, weight: 800, alpha: ks });
+  [['일반 필드 동접', b => totalTB(34) / totalTB(b)], ['보스존 수용 (N²)', b => Math.sqrt(34 / b)]].forEach(([lab, fn], r) => {
+    txt(lab, px, py + 88 + r * 92, { size: 28, weight: 700, color: C.dim, alpha: ks });
+    ENC.slice(1).forEach(([b], i) => { const kk = eo(p(u, 3.8 + r * .8 + i * .2, .4)); txt(b + 'B ×' + fn(b).toFixed(2), px + i * 250, py + 134 + r * 92, { size: 36, weight: 800, mono: true, color: i === 2 ? C.save : C.text, alpha: kk }); });
+  });
+  BOSS.forEach(([b, side], i) => {
+    const kk = eo(p(u, 3.8 + i * .6, .5)), [x, y] = proj(O5.x + BOSS[i][3], 0, BOSS_Z + side / 2);
+    txt(i ? '8B · 한 변 2.06N' : '34B · 한 변 N', x, y + 42, { size: 30, weight: 800, mono: true, align: 'center', color: i ? C.save : C.text, alpha: kk });
+  });
+  txt('보스존 트래픽 = N² × 바이트 → 같은 부피 = 같은 트래픽', px, py + 280, { size: 28, color: C.dim, alpha: eo(p(u, 5.0, .5)) });
+  txt('CPU가 병목이면 효과는 작다', px, py + 324, { size: 30, weight: 800, color: C.id, alpha: eo(p(u, 5.6, .5)) });
+  txt('34B → 8B: 서버 13대 · 월 $9.1k(대당 $700 예시) — 단, 대역폭이 병목일 때', W / 2, 948, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 6.4, .6)) });
+  txt('보스존은 트래픽이 인원의 제곱이라 바이트가 1/4이 되면 수용 인원은 2배 (이동 트래픽만 따질 때)', W / 2, 994, { size: 28, color: C.dim, align: 'center', alpha: eo(p(u, 7, .5)) });
+  // key number over the racks
+  const kn = eo(p(u, 6.0, .5)), [rx, ry] = proj(O5.x + RACKX(3), 25, 3.5);
+  txt('−' + (servers(34) - servers(8)) + '대', rx, ry - 20, { size: 96, weight: 800, mono: true, align: 'center', color: C.save, alpha: kn });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  06 · how many fit in one packet
+// ═════════════════════════════════════════════════════════════
+function ov06(t) {
+  const [S, E] = HEAD[5]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .2, .6));
+  txt('패킷 하나(최대 1,460B 예시)에 담기는 캐릭터 이동 정보', 120, 262, { size: 32, weight: 800, alpha: k });
+  txt('한 칸 = 1바이트 · 한 줄 = 32바이트 · 같은 색 덩어리 = 한 명분', 120, 302, { size: 28, color: C.dim, alpha: k });
+  ENC.forEach(([b], i) => {
+    const kk = eo(p(u, .6 + i * .7, .4)); if (kk <= 0) return;
+    const n = Math.floor(MSS / b), fill = eo(p(u, .6 + i * .7, 1.2)), [x, y] = proj(O6.x + PLX(i) + PW / 2, 0, 0);
+    const [, yt] = proj(O6.x + PLX(i) + PW / 2, PROWS, 0);
+    txt(b + 'B', x, yt - 18, { size: 44, weight: 800, mono: true, align: 'center', color: i === 3 ? C.save : C.text, alpha: kk });
+    txt(Math.floor(n * fill) + '명', x, y + 100, { size: 90, weight: 800, mono: true, align: 'center', color: i === 3 ? C.save : C.text, alpha: kk });
+  });
+  const k60 = eo(p(u, 4.4, .6));
+  const [qx, qy] = proj(O6.x - 13, PROWS / 2, -7);
+  txt('60명 × 34B', qx - 18, qy - 20, { size: 28, weight: 800, mono: true, color: C.tag, align: 'right', alpha: k60 });
+  txt('= 2,040B', qx - 18, qy + 18, { size: 28, weight: 800, mono: true, color: C.tag, align: 'right', alpha: k60 });
+  txt('→ 패킷 2개', qx - 18, qy + 56, { size: 28, weight: 800, color: C.tag, align: 'right', alpha: k60 });
+  txt('혼잡 지역에서 60명이 보이면: 34B는 패킷 2개, 24B · 19B · 8B는 1개', W / 2, 948, { size: 34, weight: 800, align: 'center', alpha: eo(p(u, 4.4, .6)) });
+  txt('패킷 수가 줄면 헤더 · pps · 커널 처리도 함께 준다', W / 2, 994, { size: 28, color: C.dim, align: 'center', alpha: eo(p(u, 5, .5)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  07 · what about protobuf?
+// ═════════════════════════════════════════════════════════════
+function ov07(t) {
+  const [S, E] = HEAD[6]; const a = win(t, S, E, .5); if (a <= 0) return;
+  const u = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(u, .2, .6));
+  box2(100, 222, 860, 300, { alpha: k });
+  txt('같은 수준끼리 비교하면', 130, 274, { size: 32, weight: 800, alpha: k });
+  [['기본끼리', '커스텀 24B  vs  프로토 34B', '+25%'], ['튜닝끼리', '커스텀 19B  vs  프로토 26B', '+20%']].forEach(([l, c, d], i) => {
+    const kk = eo(p(u, .6 + i * .6, .5)), y = 340 + i * 76;
+    txt(l, 130, y, { size: 28, weight: 700, color: C.dim, alpha: kk });
+    txt(c, 270, y, { size: 32, weight: 800, mono: true, alpha: kk });
+    txt(d, 930, y, { size: 40, weight: 800, mono: true, color: C.tag, align: 'right', alpha: kk });
+    txt('서버 송신', 930 - tw(d, 40, 800, true) - 14, y, { size: 28, weight: 700, color: C.tag, align: 'right', alpha: kk });
+  });
+  txt('엔트리별 메시지로 담으면 태그 · 길이가 남는다', 130, 494, { size: 28, color: C.tag, alpha: eo(p(u, 2, .5)) });
+  // bullets (right)
+  [['나머지 메시지는 프로토버퍼 그대로', '스키마 진화 · 코드 생성(클라 · 서버 · 봇 동기화) · 디버깅'], ['뜨거운 경로만 바이트를 깎는다', '이동 · 전투 브로드캐스트가 트래픽의 대부분'],
+   ['형식보다 바이트 수가 비용을 정한다', '프로토버퍼냐 커스텀이냐보다 몇 바이트를 보내느냐']].forEach(([ti, de], i) => {
+    const kk = eo(p(u, 4.2 + i * .45, .5)); if (kk <= 0) return;
+    const y = 262 + i * 92;
+    swatch(1010, y - 4, 16, C.save, kk);
+    txt(ti, 1040, y, { size: 30, weight: 800, alpha: kk });
+    txt(de, 1040, y + 36, { size: 28, color: C.dim, alpha: kk });
+  });
+  // the bytes field row
+  const kb = eo(p(u, 2.8, .5));
+  const [hx, hy] = proj(O7.x, 18, 0);
+  txt('이동만 bytes 필드에 담으면', 120, 574, { size: 32, weight: 800, color: C.save, alpha: kb });
+  txt('태그 · 길이 3B', hx, hy - 14, { size: 28, weight: 700, color: C.tag, alpha: kb });
+  const [ex, ey] = proj(O7.x + 11 + 24 * 9.6 + 8, 0, 0);
+  txt('8B × 50명 = 400B', ex, ey + 46, { size: 30, weight: 700, mono: true, color: C.save, align: 'right', alpha: eo(p(u, 3.2, .5)) });
+  const kr = eo(p(u, 3.6, .5));
+  txt('→ 캐릭터당', 120, 888, { size: 32, weight: 700, alpha: kr });
+  txt('≈ 8.06B', 330, 900, { size: 96, weight: 800, mono: true, color: C.save, alpha: kr });
+  txt('— 커스텀과 같은 크기', 330 + tw('≈ 8.06B', 96, 800, true) + 24, 888, { size: 32, weight: 700, alpha: kr });
+  txt('편의는 대부분의 메시지에, 바이트 다이어트는 이동에', 1800, 990, { size: 34, weight: 800, align: 'right', alpha: eo(p(u, 7, .6)) });
+  ctx.restore();
+}
+
+// ═════════════════════════════════════════════════════════════
+//  END CARD (last 5.5 s): a dump of what we stacked up
+// ═════════════════════════════════════════════════════════════
+const OUTRO = [
+  ['0x00', '1바이트', '월 6.5TB', C.sel], ['0x01', '34B → 8B', '송신 −52%', C.save], ['0x02', '서버', '25대 → 12대*', C.pos],
+  ['0x03', '보스존', '수용 ×2', C.state], ['0x04', '프로토버퍼', '이동만 bytes로', C.tag],
+];
+function endCard(t) {
+  const S = OUTRO_T; const a = win(t, S, DURATION + .2, .6); if (a <= 0) return;
+  const v = t - S; ctx.save(); ctx.globalAlpha = a;
+  const k = eo(p(v, .3, .6));
+  ctx.save(); ctx.globalAlpha *= k * .8; ctx.fillStyle = 'rgba(8,10,13,.72)'; ctx.fillRect(0, 0, W, H); ctx.restore();
+  txt('ONE BYTE STACK · 0x00 – 0x04', 560, 230, { size: 26, weight: 700, mono: true, color: C.dim, alpha: k });
+  OUTRO.forEach(([off, lab, val, col], i) => {
+    const kk = eo(p(v, .4 + i * .25, .45)); if (kk <= 0) return;
+    const y = 300 + i * 68;
+    txt(off, 560, y, { size: 32, weight: 700, mono: true, color: C.faint, alpha: kk });
+    swatch(680, y - 4, 22, col, kk);
+    txt(lab, 724, y, { size: 36, weight: 800, alpha: kk });
+    txt(val, 1360, y, { size: 36, weight: 800, mono: true, align: 'right', color: col, alpha: kk });
+  });
+  const kt = eo(p(v, 1.8, .6));
+  font(96, 800); const parts = [['1바이트도 ', C.sel], ['곱하면 ', C.text], ['월 6.5TB.', C.sel]];
+  const ws = parts.map(([s]) => ctx.measureText(s).width); let x = W / 2 - ws.reduce((s, w) => s + w, 0) / 2;
+  parts.forEach(([s, col], i) => { txt(s, x, 790 + (1 - kt) * 30, { size: 96, weight: 800, color: col, alpha: kt }); x += ws[i]; });
+  txt('예시: 동접 5,000 · 보는 사람 50 · 10Hz · 이동이 송신의 60% (24B 기준) · *대역폭이 병목일 때', W / 2, 870, { size: 28, color: C.dim, align: 'center', alpha: eo(p(v, 2.6, .8)) });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  t = clamp(t, 0, DURATION);
+  U.uT.value = t;
+  const c = camAt(t);
+  SEED.position.lerpVectors(SEEDPOS0, B, eio(p(t, 15.0, 1.0)));
+  SEED.position.y += Math.sin(Math.PI * eio(p(t, 15.0, 1.0))) * 6;
+  S3L.position.copy(S3Lpos(t));
+  const hiK = eo(p(t, 72.4, .6)); for (const m of S6mats) { m.uniforms.uHi.value = 60; m.uniforms.uHiK.value = hiK; }
+  applyVis(t);
+  camera.position.copy(c.T).addScaledVector(c.dir, c.d); camera.up.set(0, 1, 0); camera.lookAt(c.T);
+  camera.near = c.d * .02; camera.far = c.d * 60;
+  camera.setViewOffset(W, H, -c.ox, -c.oy, W, H);
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  U.uFogNear.value = c.d * 1.5; U.uFogFar.value = c.d * 6;
+  floor.position.set(c.T.x, 0, c.T.z); floor.scale.set(c.d * 40, c.d * 40, 1);
+  floorMat.uniforms.uD.value = c.d; floorMat.uniforms.uCam.value.copy(camera.position);
+  back.material.uniforms.uOff.value = (t * .004) % 1;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  vignette();
+  ovIntro(t); ov01(t); ov02(t); ov03(t); ov04(t); ov05(t); ov06(t); ov07(t);
+  headers(t); progress(t);
+  endCard(t);
+  const fo = p(t, DURATION - .5, .5); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  drawGlyphs(); drawHex();
+  renderAt(0);
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEAD.map(h => [h[0], h[2], h[3]]), [OUTRO_T, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 25.5;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
