@@ -1,5 +1,6 @@
 // Render a canvas animation page to MP4.
 // Usage: node scripts/render.mjs <page.html> <out.mp4> [--fps 30] [--crf 18] [--from s --to s] [--stills 3,10,20]
+//   --query k=v&k2=v2 adds URL params; --size 1080x1350 sets the viewport.
 //   --from/--to render one segment (frames [from*fps, to*fps)); join segments with scripts/render-chunked.sh.
 //   The page must expose window.ready (Promise), window.renderAt(t) and window.DURATION.
 import { createRequire } from 'node:module';
@@ -19,21 +20,23 @@ const fps = Number(flag('--fps', 30));
 const stills = flag('--stills', null);
 const crf = flag('--crf', '18');
 const from = Number(flag('--from', 0)), to = flag('--to', null);
+const query = flag('--query', '');  // extra URL params, e.g. --query layout=tall
+const size = flag('--size', '1920x1080').split('x').map(Number);
 const [page, out] = args;
 if (!page || !out) { console.error('usage: render.mjs <page.html> <out.mp4> [--fps 30] [--stills t1,t2]'); process.exit(1); }
 
 const root = process.cwd();
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.woff2': 'font/woff2', '.css': 'text/css', '.png': 'image/png' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.woff2': 'font/woff2', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.mp4': 'video/mp4' };
 const server = http.createServer((req, res) => {
   const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
   if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
   fs.createReadStream(file).pipe(res);
 }).listen(0);
-const url = `http://127.0.0.1:${server.address().port}/${path.relative(root, path.resolve(page))}?render`;
+const url = `http://127.0.0.1:${server.address().port}/${path.relative(root, path.resolve(page))}?render${query ? '&' + query : ''}`;
 
 const browser = await chromium.launch();
-const tab = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+const tab = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 tab.on('console', m => m.type() !== 'log' && console.log('[page]', m.text()));
 tab.on('pageerror', e => { console.error('[page error]', e); process.exitCode = 1; });
 await tab.goto(url);
