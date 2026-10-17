@@ -65,19 +65,23 @@
 | 사라진 패킷 하나가 전부를 멈춘다 | 0:55 | Fast Retransmit vs RTO, HOL 블로킹, ss -ti · nstat 확인, 줄이는 법 | [세로 영상](https://jungrok5.github.io/motion-graphics/tcp-retransmission-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/tcp-retransmission-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/tcp-retransmission/) |
 | Nagle과 TCP_NODELAY | 0:56 | Nagle 보류 규칙, delayed ACK +60ms, 손실 시 RTO 245ms vs 75ms, NODELAY + 틱 배칭 | [세로 영상](https://jungrok5.github.io/motion-graphics/nagle-nodelay-shorts/) · [MP4](https://jungrok5.github.io/motion-graphics/out/nagle-nodelay-shorts.mp4) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
 
-## 스타일 실험
+## 설명 방식 실험
 
-같은 주제를 다른 그림체로 다시 만든 20초 안팎의 영상입니다. 3D(WebGL, three.js)로 그려 브라우저에서 실시간으로 재생되고,
-가로(PC)와 세로(모바일) 페이지가 따로 있습니다. 수치와 내용은 검수를 마친 본편과 같습니다.
-스타일별 만드는 법은 스킬의 [`styles/`](.claude/skills/tech-motion-explainer/styles/)에 정리했습니다.
+같은 주제를 다른 **설명 방식**으로 다시 만든 실험입니다. 방식마다 가장 잘 맞는 주제를 골랐고, 그림체는 레퍼런스가 아니라
+그 주제의 실제 세계에서 가져왔습니다. 가로(PC)는 본편 전체 내용(같은 장 · 수치 · 설명 · 용어집), 세로(모바일)는 20초 요약이며,
+3D(three.js)나 2D 캔버스로 브라우저에서 실시간 재생됩니다. 방식별 원칙과 고르는 법은 스킬의 [`styles/`](.claude/skills/tech-motion-explainer/styles/)에 있습니다.
 
-| 스타일 | 주제 | 보기 |
-|---|---|---|
-| 빛 입자 | 내 스킬 하나가 상대 화면에 뜨기까지 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-glow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-glow/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-glow.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
-| 3D 유리 패널 | 내 스킬 하나가 상대 화면에 뜨기까지 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/skill-journey-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/skill-journey-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/skill-journey-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/skill-journey/) |
-| 빛 입자 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glow/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glow.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
-| 3D 유리 패널 | 보스가 뜨면 렉이 생기는 이유 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-glass-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-glass/) · [세로 MP4](https://jungrok5.github.io/motion-graphics/out/boss-lag-glass.mp4) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
-| 연속 줌인 | 이동 패킷 하나를 끝까지 따라가기 (데이터센터 → DRAM 셀) | [가로 (PC)](https://jungrok5.github.io/motion-graphics/packet-zoom/) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
+| 설명 방식 | 주제 | 그림체 출처 | 보기 |
+|---|---|---|---|
+| 흐름을 빛으로 | 보스가 뜨면 왜 렉이 걸릴까? | 게임 존 지도 · 운영 지표 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/boss-lag-flow-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/boss-lag-flow/) · [본편](https://jungrok5.github.io/motion-graphics/boss-lag/) |
+| 실물을 공간에 | 패킷 정의 하나로, 개발부터 라이브까지 | 에디터 · 터미널 · 대시보드 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline-artifacts-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline-artifacts/) · [본편](https://jungrok5.github.io/motion-graphics/proto-bot-pipeline/) |
+| 분해해 들어가기 | 서버 안의 50ms, 무슨 일이 일어날까? | 프로파일러 타임라인 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/server-tick-inside-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/server-tick-inside/) · [본편](https://jungrok5.github.io/motion-graphics/server-tick/) |
+| 게임 화면 재현 | 앞으로 달렸는데, 왜 뒤로 끌려갈까? | 게임 화면 + 넷코드 디버그 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/rubber-banding-ingame-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/rubber-banding-ingame/) · [본편](https://jungrok5.github.io/motion-graphics/rubber-banding/) |
+| 직접 조작해 보기 | 50ms와 RTT, 렉은 어디서 생길까? | 타이밍 분석기 + 슬라이더 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/tick-and-rtt-explore-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/tick-and-rtt-explore/) · [본편](https://jungrok5.github.io/motion-graphics/tick-and-rtt/) |
+| 바닥부터 쌓기 | 이동 패킷, 바이트를 줄이면 무슨 일이? | 헥스 덤프 · 비트 격자 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/one-byte-stack-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/one-byte-stack/) · [본편](https://jungrok5.github.io/motion-graphics/one-byte/) |
+| 그려 가며 설명 | Nagle과 TCP_NODELAY | 회의실 화이트보드 | [가로 (PC)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board-wide/) · [세로 (모바일)](https://jungrok5.github.io/motion-graphics/nagle-nodelay-board/) · [본편](https://jungrok5.github.io/motion-graphics/nagle-nodelay/) |
+
+레퍼런스 겉모습을 너무 따라 한 첫 시도 5편(빛 입자 · 유리 패널 · 연속 줌인)은 갤러리 아래 "초기 샘플"에 기법 참고용으로 남겨 두었습니다.
 
 ## 한 주제의 세 페이지
 
