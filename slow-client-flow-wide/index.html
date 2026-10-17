@@ -922,7 +922,7 @@ function bufLabels(t, which, a, o = {}) {
   const Lb = {
     aq: ['서버 앱 송신 큐', '세션별 · 메모리', SRV, false, () => (Math.min(XG.aqS, F ? F.aq.left : XG.aqS) + XG.aqE) / 2],
     ks: ['서버 커널 송신 버퍼', 'SO_SNDBUF · Send-Q', KER, true, () => (XG.ksS + XG.ksE) / 2],
-    kr: ['클라 커널 수신 버퍼', 'SO_RCVBUF · Recv-Q', KER, true, () => (XG.krS + XG.krE) / 2],
+    kr: ['클라 커널 수신 버퍼', 'SO_RCVBUF · 클라 Recv-Q', KER, true, () => (XG.krS + XG.krE) / 2],
     cq: ['클라 수신 큐', '앱 메모리', CLI, false, () => (XG.cqS + XG.cqE) / 2],
   };
   which.forEach((w, i) => {

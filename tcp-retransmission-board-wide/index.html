@@ -592,7 +592,7 @@ function sSeqAck(t) {
     arrowS('c1a7', X(tr + .65), yR, X(tr + 1.25), yS, clamp((u - tr - .65) / .6), INK.b, { lw: 3.5, dash: [14, 10] });
     if (u > tr + .65) say('ACK 7', X(tr + .65), yR + 44, u, tr + .65, { size: 28, weight: 800, mono: true, align: 'center', color: INK.b });
     sticky(1390, 684, 400, 230, clamp((u - 5.1) / .35), { rot: -.025 }, () => {
-      txt('같은 ACK가', 28, 50, { size: 30, weight: 700, color: PINK.dim });
+      txt('중복 ACK가', 28, 50, { size: 30, weight: 700, color: PINK.dim });
       txt('× 3', 24, 168, { size: 120, weight: 800, color: PINK.b });
       txt('타이머 없이 바로 재전송', 28, 210, { size: 28, weight: 700, color: PINK.g });
     });

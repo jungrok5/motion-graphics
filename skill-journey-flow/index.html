@@ -817,7 +817,7 @@ function sTags(t) {
   // my PC
   { const a = win(t, 2.7, 4.3, .3); tag(2, a, { name: '예측 실행 → 내 화면', col: ME, up: 120, size: 36 }); }
   // the network hops
-  [[7, '공유기 · 와이파이', '2ms', 4.3], [9, '인터넷 백본', '16ms', 5.3], [10, 'IDC 방화벽', '23ms', 5.8]].forEach(([i, name, ms, t0]) => tag(i, win(t, t0, 7.0, .3), { name, ms, col: SIG, up: 66, size: 34 }));
+  [[7, '공유기 · 와이파이', '12ms', 4.3], [9, '인터넷 백본', '26ms', 5.3], [10, 'IDC 방화벽', '33ms', 5.8]].forEach(([i, name, ms, t0]) => tag(i, win(t, t0, 7.0, .3), { name, ms, col: SIG, up: 66, size: 34 }));
   // the server
   tag(15, win(t, 7.4, 9.0, .3), { name: '존 메시지 큐', ms: '0~50ms', col: AMB, up: 110 });
   tag(17, win(t, 8.9, 10.6, .3), { name: '틱 처리', ms: '~12ms', col: GOLD, up: 110 });
