@@ -1,0 +1,1121 @@
+<meta charset="utf-8">
+<title>Unreal Threads Inside Vertical</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #111214; --surface: #1a1b1e; --line: #34363b; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #3d9bff; --live: #ffcf3a; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(17,18,20,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(61,155,255,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(61,155,255,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="게임 화면 한 프레임을 멈추고 열어 스레드 레인을 보고, 보스전 GPU 부하로 프레임이 67ms가 될 때 화면까지의 지연이 어떻게 늘어나는지 보여주는 3D 세로 영상"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../ue-client-threads-inside-wide/">전체 영상 (PC)</a><a href="../ue-client-threads/">2D 원본 영상</a><a href="../ue-client-threads/article.html">설명</a><a href="../ue-client-threads/terms.html">용어집</a></nav>
+</div>
+<!-- Vertical cuts have no notes of their own; the source text lives in ../ue-client-threads/index.html. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  Unreal Threads Inside — 분해해 들어가기 (open it up), vertical ~20 s cut of ../ue-client-threads-inside-wide/ (same engine and scene).
+//  The game on screen → freeze one frame → the frame is a block; lift its image off and the thread lanes are inside
+//  (Recv · Game · Send · Render · RHI · GPU, like an Unreal Insights timing view) → into the game thread's tick,
+//  where the receive queue is drained → back out: what changes when the GPU makes the frame long.
+//  Facts, numbers and chapter timing follow ../ue-client-threads/ (DURATION 112.5, 8 chapters).
+//  Look: the engine's own world — a grey world-grid test map with mannequins, and Insights-style timing tracks
+//  (track headers, nested timer scopes stacked as a flame, frame markers, a frame-time bar chart, `stat fps` read-out).
+//  Levels: L0 = the capture timeline (1 unit = 1 ms along x), L1 = the game world of frame F1 (1 unit = 1 m),
+//  L2 = inside F2's packet-apply scope (1 unit = 0.05 ms). Every frame the world is re-rooted on the camera's level.
+//  Every frame is a pure function of t.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1080, H = 1920, DURATION = 21;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+// Roles: game = game thread (apply = its packet-apply scope, packets), render, rhi, gpu, recv / send = custom socket module threads,
+//        net = network one-way, srv = server, red = waiting · stalled (only), ok / warn = frame-time bands (Insights frames track)
+const C = {
+  bg: '#111214', panel: '#1a1b1e', line: '#34363b', text: '#ececec', dim: '#a3a6ad', faint: '#62666e',
+  game: '#3d9bff', apply: '#ffcf3a', render: '#ff5fa8', rhi: '#b28cff', gpu: '#ff923a', recv: '#2fd6a0', send: '#b5e83a',
+  pkt: '#ffcf3a', net: '#8f9bff', srv: '#8d96a3', red: '#ff4545', ok: '#52d273', warn: '#ffcf3a',
+  input: '#79bbff', world: '#2f80dc', handoff: '#a9d3ff',
+};
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const ss = u => u * u * u * (u * (u * 6 - 15) + 10);
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const hash = n => rng(n * 7919 + 13)();
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ── timeline (same chapters and timing as ../ue-client-threads) ──
+const HEAD = [
+  [5.0, 18.0, '01', '언리얼 클라의 스레드', '게임 · 렌더 · GPU, 그리고 자체 소켓 모듈의 리시브 · 센드 스레드'],
+  [18.0, 30.0, '02', '프레임과 FPS', '클라의 한 프레임 = 게임 스레드의 한 틱'],
+  [30.0, 43.0, '03', '패킷을 받을 때', '리시브 스레드 → 수신 큐 → 게임 스레드 틱'],
+  [43.0, 56.0, '04', '패킷을 보낼 때', '입력 → 게임 스레드 틱 → 송신 큐 → 센드 스레드'],
+  [56.0, 69.0, '05', '도착에서 화면까지', '틱이 끝날 때까지 기다리고, 렌더 · GPU를 거친다'],
+  [69.0, 82.0, '06', '보스전: 게임 스레드도 기다린다', 'GPU가 밀리면 렌더 스레드가, 렌더가 밀리면 게임 스레드가'],
+  [82.0, 95.0, '07', '히치: GC · 동기 로딩', '게임 스레드가 멈춘 동안 쌓이고, 풀리면 몰아서'],
+  [95.0, 107.0, '08', '줄이는 방법', '적용은 빠르게, 밀려도 최신 상태로, 멈춤은 짧게'],
+];
+const END = DURATION - 5.5;
+
+// ── story numbers (same as the 2D video) ─────────────────────
+const FR = 1000 / 60, F15 = 1000 / 15;
+const CF = [FR, FR, FR, 1000 / 30, F15, 1000 / 30, FR, FR, FR, FR];   // 02: client frame times, boss effects in the middle
+const RECV_AT = [.15, .42, .7, .95, 1.3, 1.55, 1.85, 2.2, 2.5, 2.75, 3.1, 3.4, 3.62, 3.9, 4.3, 4.55, 4.8, 5.2, 5.45, 5.8, 6.1, 6.4, 6.7, 7.05, 7.3, 7.6];
+const HS = 100, HE = 250;                                              // 07: hitch from 100 to 250 ms
+function hitchQueue(tt) {                                              // in: 8 per ms (boss fight) · out: 200 per tick at 60fps = 12 per ms
+  if (tt < HS) return 0; if (tt < HE) return Math.round((tt - HS) * 8);
+  return Math.max(0, Math.round((HE - HS) * 8 - (tt - HE) * 4));
+}
+function sendTimes(fps) { const dt = 1000 / fps, out = []; let next = 100; for (let tt = dt; tt <= 600 + 1e-6; tt += dt) if (tt >= next - 1e-6) { out.push(tt); next = Math.floor(tt / 100 + 1e-6) * 100 + 100; } return out; }
+
+// ── three.js setup ───────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+const ANISO = renderer.capabilities.getMaxAnisotropy();
+const scene = new THREE.Scene();
+const BG = new THREE.Color(C.bg), SKYH = new THREE.Color('#9fb6cc');
+scene.background = BG.clone();
+scene.fog = new THREE.Fog(C.bg, 10, 100);
+const camera = new THREE.PerspectiveCamera(35, W / H, .1, 1000);
+scene.add(camera);
+const hemi = new THREE.HemisphereLight('#e6ecf4', '#1a1b1e', 1.5);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff4e6', 2.0);
+scene.add(sun, sun.target);
+const LDIR = V3(-.5, 1, .55).normalize();
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .5, .45, .82);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ── builders ─────────────────────────────────────────────────
+function canvasTex(w, h, draw, { rep = [1, 1], srgb = true } = {}) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); draw(g, w, h);
+  const tx = new THREE.CanvasTexture(c);
+  if (srgb) tx.colorSpace = THREE.SRGBColorSpace;
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rep[0], rep[1]); tx.anisotropy = ANISO;
+  return tx;
+}
+function boxAO(w, h, d, lo = .5) {
+  const g = new THREE.BoxGeometry(w, h, d); const pos = g.attributes.position; const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) { const k = lo + (1 - lo) * Math.pow(clamp((pos.getY(i) + h / 2) / h), .7); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
+}
+// dim groups: 0 = game dioramas, 1 = timeline (lanes, blocks), 2 = inside the tick
+const MATS = [[], [], []], DIMK = [1, 1, 1];
+function reg(L, m) { m.userData.base = m.color.clone(); m.userData.op = m.opacity; if (m.emissive) m.userData.emi = m.emissive.clone(); MATS[L].push(m); return m; }
+function dimLevel(L, k) {
+  if (Math.abs(k - DIMK[L]) < 1e-4) return; DIMK[L] = k; k = Math.pow(k, 2.2);
+  for (const m of MATS[L]) { m.color.copy(m.userData.base).multiplyScalar(k); if (m.userData.emi) m.emissive.copy(m.userData.emi).multiplyScalar(k); if (m.userData.fadeOp) m.opacity = m.userData.op * k; }
+}
+const M = (L, color, o = {}) => reg(L, new THREE.MeshStandardMaterial({ color, roughness: .62, metalness: .1, vertexColors: true, ...o }));
+const MP = (L, color, o = {}) => reg(L, new THREE.MeshStandardMaterial({ color, roughness: .62, metalness: .1, ...o }));
+function glowMat(L, k = .35, o = {}) {           // instance colour also glows a little (timers read as lit from within)
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .5, metalness: .05, ...o });
+  m.userData.emiK = { value: k };
+  m.onBeforeCompile = sh => { sh.uniforms.emiK = m.userData.emiK; sh.fragmentShader = 'uniform float emiK;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * emiK;'); };
+  return reg(L, m);
+}
+const basic = (L, color, o = {}) => reg(L, new THREE.MeshBasicMaterial({ color, ...o }));
+function mesh(parent, geo, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; }
+const _o = new THREE.Object3D(), _c = new THREE.Color();
+function inst(parent, geo, mat, list, colors) {
+  const im = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
+  list.forEach((it, i) => {
+    _o.position.set(it[0], it[1], it[2]); _o.rotation.set(it[6] || 0, it[7] || 0, it[8] || 0);
+    _o.scale.set(it[3] ?? 1, it[4] ?? 1, it[5] ?? 1); _o.updateMatrix(); im.setMatrixAt(i, _o.matrix);
+    if (colors) im.setColorAt(i, _c.set(colors[i]));
+  });
+  im.count = list.length; im.frustumCulled = false; parent.add(im); return im;
+}
+function dynInst(parent, geo, mat, n) {
+  const im = new THREE.InstancedMesh(geo, mat, n);
+  for (let i = 0; i < n; i++) { im.setMatrixAt(i, new THREE.Matrix4()); im.setColorAt(i, _c.set('#ffffff')); }
+  im.count = 0; im.frustumCulled = false; parent.add(im); return im;
+}
+function setI(im, i, x, y, z, sx, sy, sz, col, ry = 0) {
+  _o.position.set(x, y, z); _o.rotation.set(0, ry, 0); _o.scale.set(Math.max(1e-4, sx), Math.max(1e-4, sy), Math.max(1e-4, sz)); _o.updateMatrix();
+  im.setMatrixAt(i, _o.matrix); if (col !== undefined) im.setColorAt(i, typeof col === 'string' ? _c.set(col) : col);
+}
+function done(im, n) { im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+const UNIT = new THREE.BoxGeometry(1, 1, 1); UNIT.translate(.5, .5, 0);      // timer block: origin at start, bottom, centred in z
+const UNITC = new THREE.BoxGeometry(1, 1, 1);
+const UNITE = new THREE.EdgesGeometry(UNIT);
+
+// ── levels ───────────────────────────────────────────────────
+const LV = [];
+function compose(pos, s) { return new THREE.Matrix4().compose(V3(...pos), new THREE.Quaternion(), V3(s, s, s)); }
+function level(name, unit, parent, local) { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); const L = { name, unit, parent, local, g }; LV.push(L); return L; }
+const S_D = .72, S2 = .05;
+// lanes (z, far → near = top → bottom of an Insights view); blocks are 3 tall, nested scopes stack on top (2 tall)
+const LZ = { net: -27, recv: -18, game: -9, send: 0, render: 9, rhi: 18, gpu: 27, g15: 12, s15: 21, srv: 0, lat60: 38, lat15: 47 };
+// each chapter lays out only the lanes it needs (Insights lets you hide tracks); blended by the chapter window
+const LMAP = [[43.2, 56.4, { g15: 12, s15: 21 }], [56.2, 69.2, { render: 0, gpu: 9, lat60: 21, lat15: 30 }], [69.3, 82.3, { render: 0, rhi: 9, gpu: 18 }]];
+function laneZ(t) { const z = { ...LZ }; for (const [s, e, m] of LMAP) { const w = win(t, s, e, .8); if (w > 0) for (const id in m) z[id] = lerp(LZ[id], m[id], w); } return z; }
+const LANE_D = 6.6, BH = 3, CH = 2;
+const DIO_Z = -33;
+// time zoom (like zooming an Insights timeline): units = (ms + XO) × XS; lanes, headers and heights keep their size
+function xsAt(t) {
+  let x = 1;
+  x = lerp(x, .55, eio(p(t, 18.6, 1.4)) * (1 - eio(p(t, 29.4, .8))));
+  x = lerp(x, .25, eio(p(t, 46.4, 1.4)) * (1 - eio(p(t, 55.8, .6))));
+  x = lerp(x, .44, eio(p(t, 61.6, 1.6)) * (1 - eio(p(t, 68.8, .6))));
+  x = lerp(x, .55, eio(p(t, 71.4, 2.2)) * (1 - eio(p(t, 81.4, .8))));
+  return lerp(x, .25, win(t, 82.3, 95.3, .7)) * xsMul(t);
+}
+const xsMul = t => lerp(1, .6, eio(p(t, 71.4, 2.2)));   // the vertical cut packs time tighter for its narrow frame
+const xoAt = t => 40 * win(t, 56.2, 69.2, .7);
+let XS = 1, XO = 0, Z = { ...LZ };
+const X = ms => (ms + XO) * XS;
+// frames layout (x0, d per frame, in ms) — a pure function of t
+function frameDur(i, t) {
+  const k2 = eio(p(t, 18.6, 1.4)) * (1 - eio(p(t, 29.3, .8)));
+  const k15 = Math.max(eio(p(t, 61.6, 1.6)) * (1 - eio(p(t, 68.7, .7))), eio(p(t, 71.4, 2.2)) * (1 - eio(p(t, 81.2, 1.0))));
+  return lerp(lerp(FR, CF[i] ?? FR, k2), F15, k15);
+}
+function frames(t) { const out = []; let x = 0; for (let i = 0; i < 10; i++) { const d = frameDur(i, t); out.push({ x0: x, d }); x += d; } return out; }
+// where each frame's game world (its picture) sits: closed on its frame block (intro) → lifted to the row behind the lanes
+const OPEN = t => eio(p(t, 5.2, 1.8));
+function dioPos(i, t) {
+  const F = frames(t)[i], o = OPEN(t), xs = xsAt(t), xo = xoAt(t);
+  const lift = Math.sin(o * Math.PI) * 9;
+  return [(F.x0 + F.d / 2 + xo) * xs, lerp(BH + 1.4 + .86, .9, o) + lift, lerp(4.5, DIO_Z, o)];
+}
+function dioScale(t) {                       // pictures shrink when the time zoom packs frames closer than a picture is wide
+  const xs = xsAt(t), F = frames(t); let m = 1e9; for (let i = 0; i < 7; i++) m = Math.min(m, F[i].d * xs);
+  return S_D * Math.min(1, m / 15.6);
+}
+const L0 = level('timeline', 1, -1, () => new THREE.Matrix4());
+const L1 = level('game', S_D, 0, t => compose(dioPos(0, t), dioScale(t)));
+const L2 = level('tick', S2, 0, t => { const F = frames(t)[1]; return compose([(F.x0 + 1.6 + xoAt(t)) * xsAt(t), 0, LZ.game], S2); });
+// once inside, F1's and F2's game-thread scopes flatten into the floor we stand on; L2 sits on the timeline floor
+const FLAT = t => 1 - .88 * win(t, 31.0, 42.4, .9);
+const l2Top = t => (BH + CH) * FLAT(t) / S2;          // top of F2's packet-apply scope, in L2 units
+
+// ═════ GAME WORLD (one diorama per frame; F1's is level L1) ═════
+const gridTex = canvasTex(256, 256, (c, w, h) => {      // engine default world grid: light grey, 1 m lines, a heavier line every 10 m
+  c.fillStyle = '#8e9093'; c.fillRect(0, 0, w, h);
+  c.fillStyle = '#7d7f83'; for (let k = 0; k < 8; k++) { c.fillRect(k * 32, 0, 2, h); c.fillRect(0, k * 32, w, 2); }
+  c.fillStyle = '#696b70'; c.fillRect(0, 0, w, 4); c.fillRect(0, 0, 4, h);
+}, { rep: [2.5, 2.5] });
+const bigGridTex = gridTex.clone(); bigGridTex.repeat.set(20, 20); bigGridTex.needsUpdate = true;
+const manGeo = (() => {
+  const body = new THREE.CapsuleGeometry(.34, .95, 6, 12); body.translate(0, .82, 0);
+  const head = new THREE.SphereGeometry(.23, 14, 10); head.translate(0, 1.82, 0);
+  const a = body.toNonIndexed(), b = head.toNonIndexed(), g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...a.attributes.position.array, ...b.attributes.position.array]), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([...a.attributes.normal.array, ...b.attributes.normal.array]), 3));
+  return g;
+})();
+const MEN = [[0, 4, '#e3e5e8'], [-4.5, -1.5, '#c9e3ff'], [3.6, -3.6, '#ffd9c2'], [5.4, 1.4, '#d8f5e2'], [-2.4, -6.2, '#efd9ff'], [-6.2, 3.4, '#fff1c2']];
+const PROPS = [[-8, 1.5, -8, 2, 3, 2], [8, 1.5, -8, 2, 3, 2], [-8, 1.5, 8, 2, 3, 2], [8, 1.5, 8, 2, 3, 2], [-3.5, .5, 1, 1, 1, 1], [-2.6, .5, 1.6, 1, 1, 1], [-3.1, 1.5, 1.3, 1, 1, 1], [6.5, .75, -6, 3, 1.5, 1.2]];
+const DIO = [];
+let SKY, BIGFLOOR;
+{
+  const slabM = M(0, '#2a2c30', { roughness: .8 }), floorM = MP(0, '#ffffff', { map: gridTex, roughness: .85 }), propM = M(0, '#a4a7ab', { roughness: .7 });
+  const edgeM = reg(0, new THREE.LineBasicMaterial({ color: '#7d8590', transparent: true, opacity: .8 })); edgeM.userData.fadeOp = true;
+  const bossM = MP(0, '#5a1a1a', { roughness: .45, emissive: '#ff3b1f', emissiveIntensity: .25 });
+  const ringM = basic(0, C.gpu, { transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const fxM = reg(0, new THREE.PointsMaterial({ color: '#ffb057', size: .5, sizeAttenuation: true, transparent: true, opacity: .95, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const slabGeo = boxAO(20, 1.2, 20, .6);
+  for (let i = 0; i < 10; i++) {
+    const g = new THREE.Group(); L0.g.add(g); g.scale.setScalar(S_D);
+    mesh(g, slabGeo, slabM, 0, -.6, 0);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(slabGeo), edgeM); e.position.y = -.6; g.add(e);
+    const fl = mesh(g, new THREE.PlaneGeometry(19.6, 19.6), floorM, 0, .01, 0); fl.rotation.x = -Math.PI / 2;
+    inst(g, boxAO(1, 1, 1, .55), propM, PROPS);
+    const men = dynInst(g, manGeo, glowMat(0, .08, { roughness: .55 }), MEN.length);
+    const boss = mesh(g, manGeo, bossM, 0, 0, -5.5); boss.scale.setScalar(3.1);
+    const ring = mesh(g, new THREE.RingGeometry(3.2, 3.6, 64), ringM, 0, .05, -5.5); ring.rotation.x = -Math.PI / 2;
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(160 * 3), 3));
+    const fx = new THREE.Points(fg, fxM); fx.frustumCulled = false; g.add(fx);
+    DIO.push({ g, men, boss, ring, fx });
+  }
+  // the sky and the open map around F1 only exist while we are inside the game
+  const sg = new THREE.SphereGeometry(70, 32, 16); const sc = new Float32Array(sg.attributes.position.count * 3);
+  const top = new THREE.Color('#3f6ea3'), hor = new THREE.Color('#a9bfd4');
+  for (let i = 0; i < sg.attributes.position.count; i++) { const k = clamp(sg.attributes.position.getY(i) / 40); _c.copy(hor).lerp(top, Math.pow(k, .7)); sc.set([_c.r, _c.g, _c.b], i * 3); }
+  sg.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+  SKY = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, transparent: true, depthWrite: false }));
+  DIO[0].g.add(SKY);
+  BIGFLOOR = mesh(DIO[0].g, new THREE.RingGeometry(10.2, 70, 64, 1), MP(0, '#ffffff', { map: bigGridTex, roughness: .9, transparent: true }), 0, -.02, 0);
+  BIGFLOOR.rotation.x = -Math.PI / 2; BIGFLOOR.material.userData.fadeOp = true;
+}
+
+// ═════ L0 · CAPTURE TIMELINE ═════════════════════════════════
+const LANE_IDS = Object.keys(LZ);
+let BEDS = {}, HDRS = {}, BLK, WAIT, PK, QP, SHEETS, LIDS, LIDE = [], WALL, TARGETS;
+const GRAPH = { z0: -26, d: 30 };           // 07: graph from z = -26 (position 0) back to z = -56 (position 1)
+{
+  const g = L0.g;
+  const gridT = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#121315'; c.fillRect(0, 0, w, h); c.fillStyle = '#1b1c1f'; c.fillRect(0, 0, w, 2); c.fillRect(0, 0, 2, h); }, { rep: [120, 120] });
+  const fm = MP(1, '#ffffff', { map: gridT, roughness: .95 });
+  const fl = mesh(g, new THREE.PlaneGeometry(3000, 3000), fm, 600, -.6, 0); fl.rotation.x = -Math.PI / 2;
+  for (const id of LANE_IDS) {
+    const bed = mesh(g, UNIT, MP(1, id === 'srv' ? '#1c1d20' : '#1d1f23', { roughness: .85 }), 0, -.45, LZ[id]);
+    const hdr = mesh(g, UNIT, MP(1, '#26282d', { roughness: .7 }), -24, -.45, LZ[id]);
+    const strip = mesh(g, UNIT, basic(1, '#ffffff'), -24, -.44, LZ[id]);
+    BEDS[id] = bed; HDRS[id] = [hdr, strip];
+  }
+  BLK = dynInst(g, UNIT, glowMat(1, .4), 900);
+  // waiting: translucent red with diagonal hatching in timeline space
+  const wm = new THREE.MeshBasicMaterial({ color: C.red, transparent: true, opacity: .55, depthWrite: false });
+  wm.onBeforeCompile = sh => {
+    sh.vertexShader = 'varying vec3 vP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef USE_INSTANCING\n vP = (instanceMatrix * vec4(position, 1.0)).xyz;\n#else\n vP = position;\n#endif');
+    sh.fragmentShader = 'varying vec3 vP;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n float hz = step(.5, fract((vP.x + vP.y * .7 + vP.z * .3) * .32));\n diffuseColor.a *= mix(.28, .75, hz);');
+  };
+  WAIT = dynInst(g, UNIT, reg(1, wm), 80);
+  PK = dynInst(g, new THREE.BoxGeometry(1.25, 1.25, 1.25), glowMat(1, .9), 260);
+  QP = dynInst(g, new THREE.BoxGeometry(1.5, 1.5, 1.5), glowMat(1, .6), 200);
+  SHEETS = dynInst(g, UNITC, basic(1, '#ffffff', { transparent: true, opacity: .55, depthWrite: false }), 40);
+  TARGETS = dynInst(g, UNITC, basic(1, C.pkt, { transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending }), 20);
+  const lm = MP(1, '#1d1f24', { roughness: .6, transparent: true, opacity: .96 }); lm.userData.fadeOp = true;
+  LIDS = dynInst(g, UNIT, lm, 10);
+  const le = reg(1, new THREE.LineBasicMaterial({ color: '#8a929e', transparent: true, opacity: .9 })); le.userData.fadeOp = true;
+  for (let i = 0; i < 10; i++) { const l = new THREE.LineSegments(UNITE, le); g.add(l); LIDE.push(l); }
+  // 07: the character-position graph lies on the floor behind the lanes (x = the same ms as the lanes, z = position)
+  WALL = new THREE.Group(); g.add(WALL);
+  const wmat = MP(1, '#18191c', { transparent: true, opacity: .96, roughness: .9 }); wmat.userData.fadeOp = true;
+  const pl = mesh(WALL, new THREE.PlaneGeometry(640, GRAPH.d + 6), wmat, 300, .05, -GRAPH.d / 2); pl.rotation.x = -Math.PI / 2;
+  const wl = reg(1, new THREE.LineBasicMaterial({ color: '#363940', transparent: true, opacity: 1 })); wl.userData.fadeOp = true;
+  const wlines = []; for (let k = 0; k <= 4; k++) wlines.push(-20, .08, -k * GRAPH.d / 4, 620, .08, -k * GRAPH.d / 4);
+  const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(wlines), 3));
+  WALL.add(new THREE.LineSegments(wg, wl));
+}
+// ═════ L2 · INSIDE THE PACKET-APPLY SCOPE OF F2's TICK ═══════
+// x = time (1 unit = 0.05 ms, 0 = the scope's start), y = 0 on top of the scope, z = same lanes (recv lane at z ≈ -240)
+const L2Z = { recv: (LZ.recv - LZ.game) / S2, tray: ((LZ.recv + LZ.game) / 2 - LZ.game) / S2 };
+const L2Y0 = 0;                                        // the timeline floor, in L2 units
+let L2B, L2P, TRAY;
+{
+  const g = L2.g;
+  L2B = dynInst(g, UNIT, glowMat(2, .4), 60);
+  L2P = dynInst(g, new THREE.BoxGeometry(13, 13, 13), glowMat(2, .9), 40);
+  TRAY = new THREE.Group(); g.add(TRAY);
+  const tm = M(2, '#2b2d32', { roughness: .6 }), te = reg(2, new THREE.LineBasicMaterial({ color: C.pkt, transparent: true, opacity: .8 }));
+  const tw0 = 84, td = 74, th = 18;
+  const parts = [[tw0, 2, td, 0, 0, 0], [2, th, td, -tw0 / 2, th / 2, 0], [2, th, td, tw0 / 2, th / 2, 0], [tw0, th, 2, 0, th / 2, -td / 2], [tw0, th, 2, 0, th / 2, td / 2]];
+  for (const [w, h, d, x, y, z] of parts) { const geo = boxAO(w, h, d, .6); mesh(TRAY, geo, tm, x, y, z); const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), te); e.position.set(x, y, z); TRAY.add(e); }
+  TRAY.position.set(-44, L2Y0, L2Z.tray);
+  // the socket: a slot the packets come through
+  const sock = mesh(g, boxAO(30, 40, 70, .5), M(2, '#2a2c31'), -205, L2Y0 + 20, L2Z.recv);
+  const se = new THREE.LineSegments(new THREE.EdgesGeometry(sock.geometry), te.clone()); se.material.color.set(C.recv); reg(2, se.material); se.position.copy(sock.position); g.add(se);
+}
+
+// ── camera path ──────────────────────────────────────────────
+// [t, level, target, distance (level units), yaw, pitch, vertical fov, view offset x, y]
+const K = [
+  [0.0, 1, [0, 1.6, 1.4], 8.4, .2, .2, 62, 0, 0],
+  [2.6, 1, [0, 1.6, 1.0], 7.4, .12, .24, 62, 0, 0],
+  [3.1, 1, [0, 1.0, 0], 16, .2, .45, 56, 0, 0],
+  [4.4, 0, [26, 2, -5], 300, .14, .8, 40, 0, 100],
+  [5.2, 0, [15, 0, -5], 236, .0, .9, 40, 0, 70],
+  [8.8, 0, [17, 0, -5], 230, -.02, .9, 40, 0, 70],
+  [9.6, 0, [15, 0, -8], 236, .0, .88, 40, 0, 70],
+  [14.4, 0, [17, 0, -8], 230, -.02, .88, 40, 0, 70],
+  [21.0, 0, [19, 0, -8], 226, -.04, .88, 40, 0, 70],
+].map(([t, L, T, d, yaw, pitch, fov, ox = 0, oy = 0]) => ({ t, L, T: V3(...T), d, fov, ox, oy, dir: V3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)) }));
+// stretches flown at a constant rate in log(distance): dives and pull-backs keep their speed through the level changes
+const CHAINS = [[2.6, 4.4]].map(([a, b]) => [K.findIndex(k => k.t === a), K.findIndex(k => k.t === b)]);
+function chain(L, t) { let m = LV[L].local(t).clone(), q = LV[L].parent; while (q >= 0) { m.premultiply(LV[q].local(t)); q = LV[q].parent; } return m; }
+function rel(a, b, t) { return chain(a, t).invert().multiply(chain(b, t)); }
+function keyIn(k, D, t) {
+  const Mx = rel(D, k.L, storyT(t));
+  return { T: k.T.clone().applyMatrix4(Mx), dir: k.dir.clone().transformDirection(Mx), up: V3(0, 1, 0).transformDirection(Mx), d: k.d * Mx.getMaxScaleOnAxis(), fov: k.fov, ox: k.ox, oy: k.oy };
+}
+function blend(a, b, u, t) {
+  const D = LV[a.L].unit < LV[b.L].unit ? a.L : b.L, A = keyIn(a, D, t), B = keyIn(b, D, t);     // root on the smaller (deeper) level
+  const d = Math.exp(lerp(Math.log(A.d), Math.log(B.d), u));
+  const w = Math.abs(Math.log(A.d / B.d)) < .15 ? 1 - u : (d - B.d) / (A.d - B.d);
+  return { R: D, T: B.T.clone().add(A.T.clone().sub(B.T).multiplyScalar(w)), dir: A.dir.clone().lerp(B.dir, u).normalize(),
+    up: A.up.clone().lerp(B.up, u).normalize(), d, fov: lerp(A.fov, B.fov, u), ox: lerp(A.ox, B.ox, u), oy: lerp(A.oy, B.oy, u) };
+}
+const logM = (k, t) => Math.log(k.d * LV[k.L].unit);   // units are fixed per level
+function camAt(t) {
+  for (const [i0, i1] of CHAINS) {
+    if (t < K[i0].t || t >= K[i1].t) continue;
+    const g = eio(p(t, K[i0].t, K[i1].t - K[i0].t));
+    const target = lerp(logM(K[i0], t), logM(K[i1], t), g);
+    for (let i = i0; i < i1; i++) {
+      const a = logM(K[i], t), b = logM(K[i + 1], t);
+      if ((target - a) * (target - b) <= 0 || i === i1 - 1) return blend(K[i], K[i + 1], clamp((target - a) / (b - a || 1)), t);
+    }
+  }
+  let i = 0; while (i < K.length - 2 && t >= K[i + 1].t) i++;
+  return blend(K[i], K[i + 1], ss(p(t, K[i].t, K[i + 1].t - K[i].t)), t);
+}
+
+// ── timeline state: lanes, timer blocks, packets (pure function of t) ──
+// block: { l: lane, x: start ms, w: length ms, col, lab, dep: 0 base / 1 nested scope, wait, a: 0..1 (grows in), hl: brightness }
+const CH_AT = t => HEAD.findIndex(h => t >= h[0] - .5 && t < h[1] + .5);
+function laneAlpha(t) {
+  const A = {}; for (const id of LANE_IDS) A[id] = 0;
+  const main = ['recv', 'game', 'send', 'render', 'rhi', 'gpu'];
+  const build = id => eo(p(t, 5.6 + main.indexOf(id) * .35, .6));
+  main.forEach(id => A[id] = build(id));
+  const w2 = win(t, 18.4, 30.2, .7), w4 = win(t, 43.2, 56.4, .8), w5 = win(t, 56.2, 69.2, .8), w6 = win(t, 69.2, 82.3, .8), w7 = win(t, 82.3, 95.3, .8);
+  // 02: server vs client; 04: two client rates; 05: packet → screen; 06: three busy lanes; 07: recv + game only
+  const off = (ids, k) => ids.forEach(id => A[id] *= 1 - k);
+  off(['send', 'rhi', 'render', 'gpu'], w2); off(['send', 'rhi'], w5 * .85);
+  off(['recv', 'render', 'rhi', 'gpu'], w4); off(['send'], w6 * .85); off(['send', 'render', 'rhi', 'gpu'], w7);
+  A.srv = w2; A.g15 = w4; A.s15 = w4; A.net = w5; A.lat60 = w5; A.lat15 = w5 * eo(p(t, 63.4, .6)); A.rhi = Math.max(A.rhi, w6 * .0);
+  if (t < 5.4) for (const id of main) A[id] = 0;
+  return A;
+}
+function laneLen(id, t) { const c = CH_AT(t); return id === 'srv' ? 260 : c === 3 || c === 6 ? 620 : c === 4 || c === 5 ? 360 : 260; }
+// the usual 60fps pattern of a frame column (lengths scale with the frame: heavier frame, longer work)
+function basePattern(B, F, t, o = {}) {
+  const { now = 1e9, a = 1, hl = -1, skipRecv = null, gameOnly = false } = o;
+  F.forEach((f, i) => {
+    const s = f.d / FR, x0 = f.x0, H = hl < 0 ? 1 : .32;
+    const vis = (x, w) => clamp((now - x) / w);
+    const add = b => { const v = vis(b.x, b.w); if (v > 0) B.push({ fi: i, ...b, w: b.w * v, a }); };
+    const lit = j => hl < 0 || hl === j ? 1 : H;
+    add({ l: 'game', x: x0 + .3, w: 10.6 * s, col: C.game, lab: i < 6 ? `F${i + 1} 틱` : '', dep: 0, hl: lit(i), f: i });
+    add({ l: 'game', x: x0 + .3, w: 1.2 * s, col: C.input, lab: '입력', dep: 1, hl: lit(i) });
+    add({ l: 'game', x: x0 + 1.6, w: 3 * s, col: C.apply, lab: '패킷 적용', dep: 1, hl: lit(i) });
+    add({ l: 'game', x: x0 + 4.8 * s, w: 4.6 * s, col: C.world, lab: '월드 틱', dep: 1, hl: lit(i) });
+    add({ l: 'game', x: x0 + 9.5 * s, w: 1.3 * s, col: C.handoff, lab: '렌더에 넘김', dep: 1, hl: lit(i) });
+    if (gameOnly) return;
+    add({ l: 'send', x: x0 + .62 * f.d, w: 1.6 * s, col: C.send, lab: '', dep: 0, hl: lit(i) });
+    if (i >= 1) add({ l: 'render', x: x0 + .8, w: 9.4 * s, col: C.render, lab: i < 7 ? `F${i} 그리기` : '', dep: 0, hl: lit(i - 1) });
+    if (i >= 2) add({ l: 'rhi', x: x0 + 1.4 * s, w: 4.2 * s, col: C.rhi, lab: i < 8 ? `F${i - 1} RHI` : '', dep: 0, hl: lit(i - 2) });
+    if (i >= 2) add({ l: 'gpu', x: x0 + 2.6 * s, w: 11.6 * s, col: C.gpu, lab: i < 8 ? `F${i - 1} GPU` : '', dep: 0, hl: lit(i - 2) });
+  });
+  const span = F[F.length - 1].x0 + F[F.length - 1].d;
+  for (const r of RECV_AT) {
+    const x = r * FR * (F[1].d / FR); if (x > span) break;
+    if (skipRecv && x > skipRecv[0] && x < skipRecv[1]) continue;
+    if (now < x) continue;
+    B.push({ l: 'recv', x, w: .9, col: C.recv, lab: '', dep: 0, a, hl: hl < 0 ? 1 : .4 });
+  }
+}
+function state(t) {
+  const S = { blocks: [], pk: [], qp: [], sheets: [], targets: [], lanes: laneAlpha(t), F: frames(t) };
+  const F = S.F, B = S.blocks;
+  if (t < 18.4) {                                       // intro · 01: four frames revealed by a playhead
+    const u = t - 5, now = t < 5.4 ? -1 : (u - 1.2) / 5 * 4 * FR;
+    basePattern(B, F.slice(0, 6), t, { now, a: win(t, 5.4, 18.6, .6), hl: t > 12.2 ? 0 : -1 });
+    S.now = now;
+  } else if (t < 30.2) {                                // 02: the client's frames stretch, the server keeps 50 ms
+    const u = t - 18, now = (u - 1.0) / 5.5 * 230, a = win(t, 18.2, 30.2, .6);
+    F.slice(0, 9).forEach((f, i) => { if (now > f.x0) B.push({ l: 'game', x: f.x0 + .3, w: Math.min(f.d - .6, now - f.x0), col: f.d > 30 ? C.red : C.game, lab: f.d > 20 ? Math.round(f.d) + 'ms' : '', dep: 0, a, hl: 1 }); });
+    for (let k = 0; k < 5; k++) { const s = k * 50; if (now > s) { B.push({ l: 'srv', x: s, w: Math.min(18, now - s), col: C.srv, lab: '18ms', dep: 0, a, hl: 1 }); if (now > s + 18) B.push({ l: 'srv', x: s + 18, w: Math.min(31.5, now - s - 18), col: '#3a3d44', lab: '쉼', dep: 0, a, hl: .8, flat: true }); } }
+    basePattern(B, F.slice(0, 9), t, { a: a * .9, now: 1e9, gameOnly: true, hl: 99 });
+    B.forEach(b => { if (b.l === 'game' && b.dep === 0 && b.hl < 1) b.skip = true; });
+    S.now = now;
+  } else if (t < 43.2) {                                // 03: inside F2's tick (the timeline stays as the context)
+    basePattern(B, F.slice(0, 6), t, { a: 1, skipRecv: [F[0].x0 + 4, F[1].x0 + 3] });
+    const inK = win(t, 31.0, 42.4, .9);
+    B.forEach(b => { if (!(b.l === 'game' && b.fi <= 1)) b.a *= 1 - inK; else b.flatK = FLAT(t); });
+  } else if (t < 56.4) {                                // 04: input → tick → send queue → send thread, 60 vs 15 fps
+    const u = t - 43, a = win(t, 43.2, 56.4, .7);
+    const s60 = sendTimes(60), s15 = sendTimes(15), rv = clamp((u - 4.6) / 3.4);
+    for (let k = 0; k < 36; k++) {
+      const x0 = k * FR; if (x0 > 600) break; const isSend = s60.some(s => Math.abs(s - x0) < .1);
+      B.push({ l: 'game', x: x0 + .3, w: 9.6, col: C.game, lab: '', dep: 0, a, hl: 1 });
+      B.push({ l: 'game', x: x0 + .3, w: 1.6, col: C.input, lab: '입력', dep: 1, a, hl: 1 });
+      B.push({ l: 'game', x: x0 + 2.0, w: 3.2, col: C.world, lab: '예측 이동', dep: 1, a, hl: 1 });
+      if (isSend) B.push({ l: 'game', x: x0 + 5.3, w: 2.6, col: C.apply, lab: '패킷 생성', dep: 1, a, hl: 1 });
+    }
+    for (let k = 0; k < 9; k++) {
+      const x0 = k * F15; if (x0 > 600) break; const isSend = s15.some(s => Math.abs(s - x0) < .1);
+      if (x0 > rv * 620 + 10 && u > 4) continue;
+      B.push({ l: 'g15', x: x0 + .3, w: 38, col: C.game, lab: k < 9 ? '틱' : '', dep: 0, a: a * eo(p(u, 4.2, .6)), hl: 1 });
+      if (isSend) B.push({ l: 'g15', x: x0 + 20, w: 9, col: C.apply, lab: '', dep: 1, a: a * eo(p(u, 4.2, .6)), hl: 1 });
+    }
+    const sv = (list, lane, w0) => list.forEach((s, i) => { if (s > rv * 620 + 10 && u > 4) return; B.push({ l: lane, x: s + w0, w: 2.2, col: C.send, lab: '', dep: 0, a: lane === 's15' ? a * eo(p(u, 4.2, .6)) : a, hl: 1 }); S.pk.push([s + w0 + 1.1, BH + .9, Z[lane], C.pkt, 1]); });
+    sv(s60, 'send', 8.2); sv(s15, 's15', 30);
+    for (let k = 1; k <= 6; k++) S.targets.push([k * 100, eo(p(u, 2.4 + k * .1, .5)) * a]);
+    // the packet of the send at 100 ms: tick → send queue → send thread → out
+    const v = ((u - .6) % 2.4) / 2.4;
+    if (u > .6 && u < 4.6) {
+      const P = [[100 + 6.6, BH + CH + 1, Z.game], [109, 1, (Z.game + Z.send) / 2], [109.4, BH + 1, Z.send], [120, BH + 1, Z.send], [160, BH + 6, Z.send]];
+      const q = alongN(P, ss(v)); S.pk.push([q[0], q[1], q[2], C.pkt, Math.sin(v * Math.PI) * 1.4 + .3]);
+    }
+  } else if (t < 69.2) {                                // 05: one packet from the wire to the screen, 60 then 15 fps
+    const u = t - 56, a = win(t, 56.2, 69.2, .7), ph15 = eio(p(t, 61.6, 1.6));
+    const f0 = F[0], arr = f0.x0 + f0.d / 2;
+    basePattern(B, F.slice(0, 7), t, { a, hl: 99 });
+    // highlight the path: tick of F2, F2's draw (column 3), F2's GPU (column 4)
+    B.forEach(b => {
+      if (b.l === 'game' && b.dep === 0 && b.f === 1) b.hl = 1;
+      if (b.l === 'game' && b.dep === 1 && Math.abs(b.x - (F[1].x0 + 1.6)) < .01) b.hl = 1;
+      if (b.l === 'render' && b.lab === 'F2 그리기') b.hl = 1;
+      if (b.l === 'gpu' && b.lab === 'F2 GPU') b.hl = 1;
+      if (b.l === 'recv' && Math.abs(b.x - arr) > 1) b.skip = true;
+    });
+    B.push({ l: 'net', x: arr - 30, w: 30, col: C.net, lab: '네트워크 30ms', dep: 0, a: a * eo(p(u, .6, .6)), hl: 1 });
+    S.pk.push([arr, BH + .9, Z.recv, C.pkt, a]);
+    S.arr = arr;
+    const seg = (lane, d, k0) => { const segs = [30, 1.5 * d, d, d], cols = [C.net, C.game, C.render, C.gpu]; let x = -30 + 0 * d; let x1 = (lane === 'lat60' ? FR : F15) / 2 - 30;
+      segs.forEach((w, i) => { const kk = clamp((u - k0 - i * .6) / .6); if (kk > 0) B.push({ l: lane, x: x1, w: w * eo(kk), col: cols[i], lab: Math.round(w) + '', dep: 0, a, hl: 1, flat: true }); x1 += w; }); };
+    seg('lat60', FR, 1.0); if (u > 7.0) seg('lat15', F15, 7.2);
+    S.ph15 = ph15;
+  } else if (t < 82.3) {                                // 06: boss — GPU 64 ms, render and game wait
+    const u = t - 69, a = win(t, 69.3, 82.3, .7), kb = eio(p(t, 71.4, 2.2)) * (1 - eio(p(t, 81.2, 1.0)));
+    F.slice(0, 6).forEach((f, i) => {
+      const gW = lerp(10.6, 12, kb), rW = lerp(9.4, 15, kb), gpW = lerp(11.6, 64, kb);
+      B.push({ l: 'game', x: f.x0 + .3, w: gW, col: C.game, lab: '틱', dep: 0, a, hl: 1 });
+      B.push({ l: 'game', x: f.x0 + 1.6, w: 2.8, col: C.apply, lab: '', dep: 1, a, hl: 1 });
+      if (kb > .05) B.push({ l: 'game', x: f.x0 + .3 + gW, w: (f.d - gW - .8), col: C.red, lab: '렌더 스레드 기다림', dep: 0, a: a * kb, wait: true });
+      B.push({ l: 'render', x: f.x0 + .3, w: rW, col: C.render, lab: '', dep: 0, a, hl: 1 });
+      if (kb > .05) B.push({ l: 'render', x: f.x0 + .3 + rW, w: (f.d - rW - .8), col: C.red, lab: 'GPU 기다림', dep: 0, a: a * kb, wait: true });
+      B.push({ l: 'rhi', x: f.x0 + .6, w: lerp(4.2, 7, kb), col: C.rhi, lab: '', dep: 0, a: a * .9, hl: 1 });
+      B.push({ l: 'gpu', x: f.x0 + .3, w: gpW, col: C.gpu, lab: kb > .5 ? '보스 이펙트 64ms' : '', dep: 0, a, hl: 1 });
+    });
+    for (let k = 0; k < 40; k++) { const x = (k + .5) * 5.2; if (x > F[5].x0 + F[5].d) break; B.push({ l: 'recv', x, w: .9, col: C.recv, lab: '', dep: 0, a, hl: 1 }); }
+    S.kb = kb;
+    // the receive queue piles up (in 8,000/s vs out 3,000/s, example)
+    const q = Math.round(kb * clamp((u - 4) / 7) * 1000); S.q6 = q; pile(S.qp, q, 25, (Z.recv + Z.game) / 2, 40);
+  } else if (t < 95.3) {                                // 07: hitch — GC / sync load 150 ms
+    const u = t - 82, a = win(t, 82.3, 95.3, .7), cur = clamp((u - 1) / 6.5) * 600; S.cur = cur;
+    for (let tt = 4; tt < Math.min(cur, 600); tt += 8) { B.push({ l: 'recv', x: tt - .5, w: 1, col: C.recv, lab: '', dep: 0, a, hl: 1 }); }
+    for (let s = 0; s < 600; s += FR) {
+      if (s >= HS - 1 && s < HE) continue;
+      const st = s < HS ? s : Math.max(s, HE); if (st >= cur) continue;
+      B.push({ l: 'game', x: st + .3, w: Math.min(FR - .6, cur - st), col: C.game, lab: '', dep: 0, a, hl: 1 });
+      if (st >= HE && hitchQueue(st) > 0 && cur > st + 2) B.push({ l: 'game', x: st + .6, w: Math.min(FR - 1.6, cur - st), col: C.apply, lab: '', dep: 1, a, hl: 1 });
+    }
+    if (cur > HS) B.push({ l: 'game', x: HS, w: Math.min(HE - HS, cur - HS), col: C.red, lab: 'GC · 동기 로딩 150ms', dep: 0, a, hl: 1, solidRed: true });
+    pile(S.qp, hitchQueue(cur), Math.min(cur, 598), (Z.recv + Z.game) / 2, 40);
+  } else {                                              // 08 · outro: the 60fps pattern again
+    basePattern(B, F.slice(0, 6), t, { a: win(t, 95.3, 107.6, .7) });
+  }
+  // frame markers (vertical sheets at frame boundaries) in the chapters that are about frames
+  const ks = Math.max(win(t, 5.6, 18.4, .6), win(t, 18.4, 30.2, .6), win(t, 30.0, 43.2, .6) * .7 * (1 - win(t, 30.6, 42.6, .6)), win(t, 56.2, 69.2, .6), win(t, 69.3, 82.3, .6), win(t, 95.3, 107.6, .6));
+  const cnt = t >= 18 && t < 30.2 ? 10 : 7;
+  if (ks > 0) for (let i = 0; i <= cnt; i++) { const x = i < F.length ? F[i].x0 : F[F.length - 1].x0 + F[F.length - 1].d; S.sheets.push([x, ks]); }
+  return S;
+}
+// a queue pile of cubes standing at x (one cube ≈ 40 packets)
+function pile(out, q, x, z, per) {
+  const n = Math.min(200, Math.ceil(q / per));
+  for (let k = 0; k < n; k++) { const layer = Math.floor(k / 9), w = k % 9; out.push([x, -1.7 + (w % 3) * 1.7, .9 + layer * 1.6, z - 1.7 + Math.floor(w / 3) * 1.7]); }
+}
+function alongN(pts, f) {
+  const segs = pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1], q[2] - pts[i][2]));
+  let d = f * segs.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < segs.length; i++) { if (d <= segs[i]) { const k = d / segs[i]; return [0, 1, 2].map(j => lerp(pts[i][j], pts[i + 1][j], k)); } d -= segs[i]; }
+  return pts[pts.length - 1];
+}
+
+// ── 03 · inside the tick (pure function of t): packets arrive, wait in the queue, and are applied at the next tick ──
+const P3 = 2.6, T3 = 31.4;
+function arrivals(c) { const r = rng(c * 97 + 5), n = 5 + Math.floor(r() * 3), out = []; for (let i = 0; i < n; i++) out.push(.04 + r() * .66); return out.sort((a, b) => a - b); }
+const HTYPES = ['이동', '이동', '스폰', '이동', 'UI', '이동', '이동', '전투'];
+function insideState(t) {
+  const u = Math.max(0, t - T3), c = Math.floor(u / P3), ph = u / P3 - c, S = { cubes: [], blocks: [], tray: 0, tick: 0, applied: 0 };
+  const TRX = -44, top = l2Top(t), slot = k => [TRX - 30 + (k % 5) * 15, L2Y0 + 8.5 + Math.floor(k / 10) * 15, L2Z.tray - 16 + (Math.floor(k / 5) % 2) * 32];
+  const hx = k => 3 + k * 7;
+  const recvX = [-170, -120];
+  // handlers applied at the start of this cycle's tick (they came in during the previous cycle)
+  const prev = c > 0 ? arrivals(c - 1) : [];
+  const land = k => .08 + k * .035;
+  prev.forEach((_, k) => {
+    const lk = clamp((ph - land(k)) / .05);
+    if (lk > 0) S.blocks.push([hx(k), top, 6.4, 40 * eo(lk), HTYPES[(k + c) % 8], ph > .86 ? 1 - (ph - .86) / .14 : 1]);
+    else { const q0 = slot(k), q1 = [hx(k) + 3.2, top + 14, 0], f = clamp((ph + .06 - land(k) + .0) / .06); S.cubes.push(lerp3(q0, q1, ss(clamp(f)))); }
+  });
+  S.applied = prev.filter((_, k) => ph > land(k)).length;
+  // this cycle's arrivals: socket → recv thread (recv · parse · enqueue) → queue
+  const arr = c >= 0 && t >= T3 ? arrivals(c) : [];
+  let inTray = 0;
+  arr.forEach((a0, k) => {
+    const e = ph - a0; if (e < 0) return;
+    let q;
+    if (e < .08) q = lerp3([-290, L2Y0 + 20, L2Z.recv], [-205, L2Y0 + 20, L2Z.recv], e / .08);
+    else if (e < .2) q = lerp3([-205, L2Y0 + 20, L2Z.recv], [-145, L2Y0 + 60, L2Z.recv], ss((e - .08) / .12));
+    else if (e < .3) q = lerp3([-145, L2Y0 + 60, L2Z.recv], slot(k), ss((e - .2) / .1));
+    else { q = slot(k); inTray++; }
+    S.cubes.push(q);
+  });
+  S.tray = inTray + prev.filter((_, k) => ph <= land(k)).length;
+  S.tick = ph < .14 ? 1 - ph / .14 : 0;
+  S.c = c; S.ph = ph;
+  // the recv thread's own scopes (busy while a packet is being parsed)
+  const busy = arr.some(a0 => ph - a0 > .08 && ph - a0 < .2);
+  S.recvBusy = busy;
+  return S;
+}
+const lerp3 = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+
+// ── animate the parts (pure function of t) ───────────────────
+const _col = new THREE.Color();
+function animate(t, R) {
+  const S = state(t), F = S.F;
+  // game dioramas: one per frame, F1 is level L1
+  const o = OPEN(t), boss = eio(p(t, 70.2, 1.4)) * (1 - eio(p(t, 81.4, .8)));
+  const showDio = Math.max(t < 18.6 ? 1 : 0, win(t, 18.4, 30.2, .6), win(t, 69.3, 82.3, .6), t > 106.6 ? 1 : 0, t > 95 ? win(t, 95.3, 107.6, .6) * 0 : 0);
+  DIO.forEach((D, i) => {
+    const vis = i === 0 ? (t < 18.6 || t > 106 || showDio > .02) : showDio > .02 && i < (t >= 69 && t < 83 ? 4 : 8);
+    D.g.visible = vis; if (!vis) return;
+    const [x, y, z] = dioPos(i, t); D.g.position.set(x, y, z);
+    const sc = i === 0 && (t < 18.6 || t > 106) ? 1 : clamp(showDio);
+    D.g.scale.setScalar(dioScale(t) * Math.max(.002, sc));
+    const g = (t < 2.9 ? t : 2.9) + F[i].x0 / 1000 * 3;          // game clock: runs, then freezes at 2.9 s
+    MEN.forEach(([mx, mz, col], k) => {
+      const ph = g * (k ? .9 : .6) + k * 1.7, r = k ? 1.4 : .6;
+      const px = mx + Math.sin(ph) * r, pz = mz + Math.cos(ph * .8) * r * .7 - (k ? 0 : g * .3);
+      setI(D.men, k, px, Math.abs(Math.sin(g * 9 + k)) * .06 * (t < 2.9 ? 1 : 0), pz, 1, 1, 1, col, Math.atan2(Math.cos(ph) * r, -Math.sin(ph * .8) * r * .56));
+    });
+    done(D.men, MEN.length);
+    D.boss.visible = D.ring.visible = D.fx.visible = boss > .01;
+    if (boss > .01) {
+      D.boss.scale.set(3.1 * boss, 3.1 * boss, 3.1 * boss);
+      D.ring.scale.setScalar(.6 + .4 * boss + .08 * Math.sin(t * 5));
+      const arr = D.fx.geometry.attributes.position.array;
+      for (let k = 0; k < 160; k++) { const h = hash(k + i * 1000), f = (t * .7 + h) % 1, an = h * 40 + t * 1.3; const rr = 1.5 + f * 6;
+        arr.set([Math.cos(an) * rr, .3 + f * 7 * hash(k * 3 + 1) * boss, -5.5 + Math.sin(an) * rr], k * 3); }
+      D.fx.geometry.attributes.position.needsUpdate = true;
+    }
+  });
+  const sk = 1 - eio(p(t, 3.1, 1.5)), skOut = eio(p(t, 108.0, 1.6));
+  const skyK = Math.max(sk, skOut);
+  SKY.visible = BIGFLOOR.visible = skyK > .01; SKY.material.opacity = skyK; BIGFLOOR.material.opacity = skyK;
+  // frame blocks (closed in the intro, they open into lanes)
+  const lidK = 1 - eio(p(t, 5.0, 1.4));
+  let n = 0;
+  LIDE.forEach(l => l.visible = false);
+  if (lidK > .01) F.slice(0, 7).forEach((f, i) => {
+    const h = BH + 1.4;
+    setI(LIDS, n, X(f.x0) + .3, 0, 4.5, f.d * XS - .6, h * lidK, 56); n++;
+    const e = LIDE[i]; e.visible = true; e.position.set(X(f.x0) + .3, 0, 4.5); e.scale.set(f.d * XS - .6, h * lidK, 56);
+  });
+  done(LIDS, n); LIDS.material.opacity = .96 * lidK;
+  // lane beds + track headers (headers stay put at the left; the time zoom only moves what is to the right of them)
+  for (const id of LANE_IDS) {
+    const a = S.lanes[id], bed = BEDS[id], [hdr, strip] = HDRS[id];
+    bed.visible = hdr.visible = strip.visible = a > .01;
+    if (a <= .01) continue;
+    const len = Math.max(20, X(laneLen(id, t)) + 2);
+    bed.position.set(-2, -.45, Z[id]); bed.scale.set(len * a, .3, LANE_D);
+    hdr.position.set(-29, -.45, Z[id]); hdr.scale.set(26.4, .5 * a, LANE_D);
+    strip.position.set(-29, -.4, Z[id]); strip.scale.set(.8, .6 * a, LANE_D); strip.material.color.set(laneCol(id));
+  }
+  // blocks
+  n = 0; let nw = 0;
+  for (const b of S.blocks) {
+    if (b.skip || b.w <= .05 || b.a <= .01) continue;
+    const la = S.lanes[b.l] ?? 1; if (la <= .01) continue;
+    const fl = b.flatK ?? 1, y = b.dep ? BH * fl : 0, h = (b.dep ? CH : b.flat ? 1.2 : BH) * b.a * la * fl;
+    const gx = Math.min(.2, b.w * XS * .15);
+    if (b.wait) { setI(WAIT, nw++, X(b.x) + gx / 2, y, Z[b.l], b.w * XS - gx, h, LANE_D - 1.6, C.red); continue; }
+    _col.set(b.col).multiplyScalar(b.hl ?? 1);
+    setI(BLK, n++, X(b.x) + gx / 2, y, Z[b.l], Math.max(.08, b.w * XS - gx), h, LANE_D - (b.dep ? 2.4 : 1.2), _col);
+  }
+  done(BLK, n); done(WAIT, nw);
+  n = 0;
+  for (const q of S.pk) setI(PK, n++, X(q[0]), q[1], q[2], q[4], q[4], q[4], q[3]);
+  // recv arrivals as packets riding on the recv lane (01, 08)
+  if (t > 5.4 && t < 18.6 || t > 95.3 && t < 107.6) for (const b of S.blocks) if (b.l === 'recv' && !b.skip && b.a > .01) setI(PK, n++, X(b.x + .45), BH + .6, Z.recv, b.a * .8, b.a * .8, b.a * .8, C.pkt);
+  done(PK, n);
+  n = 0; for (const q of S.qp) setI(QP, n++, X(q[0]) + q[1], q[2], q[3], 1, 1, 1, C.pkt); done(QP, n);
+  n = 0;
+  // frame markers: thin lines on the floor across the visible lanes, from above the first lane to below the last
+  let zTop = 1e9, zBot = -1e9; for (const id of LANE_IDS) if (S.lanes[id] > .3) { zTop = Math.min(zTop, Z[id]); zBot = Math.max(zBot, Z[id]); }
+  zTop -= LANE_D / 2 + 3; zBot += LANE_D / 2 + 1;
+  if (zBot > zTop) for (const [x, k] of S.sheets) setI(SHEETS, n++, X(x), .1, (zTop + zBot) / 2, .22, .25 * k, (zBot - zTop) * k, '#ffffff');
+  done(SHEETS, n);
+  n = 0; for (const [x, k] of S.targets) setI(TARGETS, n++, X(x), 2.2, (Z.game + Z.s15) / 2 - 1, .3, 4.4 * k, (Z.s15 - Z.game + LANE_D + 4) * k, C.pkt); done(TARGETS, n);
+  const kw = win(t, 82.3, 95.3, .7); WALL.visible = kw > .01; WALL.scale.set(XS, 1, Math.max(.002, kw)); WALL.position.set(XO * XS, 0, GRAPH.z0);
+  // 03: inside the tick
+  const in3 = t > 29.4 && t < 44;
+  L2.g.visible = in3;
+  if (in3) {
+    const I = insideState(t);
+    n = 0;
+    const add = (x, w, h, z, d, col, k = 1) => { setI(L2B, n++, x, 0, z, w, h * k, d, col); };
+    // recv thread scopes on the recv lane, the packet-apply scope's handlers on top of the scope
+    const rb = I.recvBusy ? 1 : .55;
+    _col.set(C.recv).multiplyScalar(rb); setI(L2B, n++, -170, L2Y0, L2Z.recv, 15, 50, 110, _col.clone());
+    _col.set('#8af0cf').multiplyScalar(rb); setI(L2B, n++, -155, L2Y0, L2Z.recv, 22, 50, 110, _col.clone());
+    _col.set('#5ee3b7').multiplyScalar(rb); setI(L2B, n++, -133, L2Y0, L2Z.recv, 13, 50, 110, _col.clone());
+    for (const [x, y, w, h, , a] of I.blocks) { _col.set(C.apply).multiplyScalar(.85 * a); setI(L2B, n++, x, y, 0, w, h, 80, _col.clone()); }
+    done(L2B, n);
+    n = 0; for (const q of I.cubes) setI(L2P, n++, q[0], q[1], q[2], 1, 1, 1, C.pkt); done(L2P, n);
+  }
+  // dimming: the timeline steps back while we are inside the tick, and while the game world is in front
+  dimLevel(1, 1 - .25 * win(t, 30.6, 42.6, .9));
+  dimLevel(2, 1);
+  dimLevel(0, 1 - .55 * win(t, 95.3, 106.8, .6));
+  return S;
+}
+function laneCol(id) { return { net: C.net, recv: C.recv, game: C.game, send: C.send, render: C.render, rhi: C.rhi, gpu: C.gpu, g15: C.game, s15: C.send, srv: C.srv, lat60: C.ok, lat15: C.red }[id]; }
+
+// ── 2D overlay ───────────────────────────────────────────────
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function font(sz, wt = 500, mono = false) { ctx.font = `${wt} ${sz}px ${mono ? MONO : SANS}`; }
+function txt(s, x, y, o = {}) {
+  const { size = 28, weight = 500, color = C.text, align = 'left', mono = false, alpha = 1, base = 'alphabetic', shadow = false } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; font(size, weight, mono); ctx.letterSpacing = '0px';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 10; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { font(size, weight, mono); return ctx.measureText(s).width; }
+function runs(parts, x, y, size, weight, o = {}) {
+  const { align = 'left', alpha = 1 } = o;
+  const ws = parts.map(([s, , m]) => tw(s, size, weight, m)); const tot = ws.reduce((a, b) => a + b, 0);
+  let xx = align === 'center' ? x - tot / 2 : align === 'right' ? x - tot : x;
+  parts.forEach(([s, c, m], i) => { txt(s, xx, y, { size, weight, color: c || C.text, mono: m, alpha }); xx += ws[i]; });
+  return tot;
+}
+function chip(label, x, y, color, o = {}) {
+  const { alpha = 1, size = 26, align = 'left', mono = true } = o;
+  if (alpha <= 0) return 0;
+  font(size, 700, mono);
+  const w = ctx.measureText(label).width + size * 1.1, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  rr(X, y - h / 2, w, h, 4); ctx.fillStyle = rgba(color, .16); ctx.fill(); ctx.strokeStyle = rgba(color, .8); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, X + w / 2, y + 1); ctx.restore();
+  return w;
+}
+function panel(x, y, w, h, a = 1, stroke = C.line) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; rr(x, y, w, h, 6); ctx.fillStyle = 'rgba(22,23,26,.9)'; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+}
+const _v = new THREE.Vector3();
+function projectU(pt) { _v.set(pt[0], pt[1], pt[2]).applyMatrix4(REL[0]).project(camera); return { x: (_v.x + 1) / 2 * W, y: (1 - _v.y) / 2 * H, ok: _v.z < 1 && _v.z > -1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 }; }
+let REL = [];
+function project(L, pt) {
+  if (L === 'u') return projectU(pt);
+  if (!REL[L]) return { ok: false };
+  _v.set(L === 0 ? X(pt[0]) : pt[0], pt[1], pt[2]).applyMatrix4(REL[L]).project(camera);
+  return { x: (_v.x + 1) / 2 * W, y: (1 - _v.y) / 2 * H, ok: _v.z < 1 && _v.z > -1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 };
+}
+// Insights-style tooltip: timer-colour square, title, optional sub line; leader to the anchor
+function tag(L, pt, title, sub, col, a, o = {}) {
+  if (a <= 0) return null; const q = project(L, pt); if (!q.ok) return null;
+  const { dx = 0, dy = -80, size = 30, subSize = 26, align = 'center', lead = true, mono = false } = o;
+  const w = Math.max(tw(title, size, 700, mono) + 26, sub ? tw(sub, subSize, 500) : 0) + 30;
+  const h = sub ? size + subSize + 32 : size + 24;
+  let bx = q.x + dx - (align === 'center' ? w / 2 : align === 'right' ? w : 0), by = q.y + dy - h / 2;
+  bx = clamp(bx, 24, W - 24 - w); by = clamp(by, 200, H - 130 - h);
+  ctx.save(); ctx.globalAlpha *= a;
+  if (lead) {
+    const ex = clamp(q.x, bx, bx + w), ey = q.y < by ? by : q.y > by + h ? by + h : by + h / 2;
+    ctx.strokeStyle = rgba(col, .75); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q.x, q.y, 4.5, 0, 7); ctx.fill();
+  }
+  rr(bx, by, w, h, 4); ctx.fillStyle = 'rgba(28,29,33,.93)'; ctx.fill(); ctx.strokeStyle = 'rgba(160,165,175,.3)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = col; ctx.fillRect(bx + 14, by + 14, 14, 14);
+  txt(title, bx + 40, by + size + 8, { size, weight: 700, color: C.text, mono });
+  if (sub) txt(sub, bx + 15, by + size + subSize + 20, { size: subSize, color: C.dim });
+  ctx.restore();
+  return q;
+}
+function lab(L, pt, s, col, a, o = {}) {
+  if (a <= 0) return null; const q = project(L, pt); if (!q.ok) return null;
+  const { size = 24, weight = 700, mono = true, align = 'left', dx = 0, dy = 0 } = o;
+  txt(s, q.x + dx, q.y + dy, { size, weight, mono, color: col, align, alpha: a, shadow: true });
+  return q;
+}
+// a label centred on a timer block, only if it fits between the block's projected ends
+function blockLab(b, size = 22, color = '#0f1013') {
+  if (!b.lab || b.skip || b.a < .5) return;
+  const y = (b.dep ? BH + CH : b.flat ? 1.2 : BH) + .02, z = Z[b.l] + (LANE_D - (b.dep ? 2.4 : 1.2)) / 2;
+  const q0 = project(0, [b.x, y, z]), q1 = project(0, [b.x + b.w, y, z]);
+  if (!q0.ok || !q1.ok) return;
+  const wpx = Math.abs(q1.x - q0.x), m = tw(b.lab, size, 700);
+  if (wpx < m + 12) return;
+  txt(b.lab, (q0.x + q1.x) / 2, (q0.y + q1.y) / 2 + size * .36 + 4, { size, weight: 700, color: b.wait ? '#ffd0d0' : color, align: 'center', alpha: clamp(b.a * 2 - 1), shadow: !!b.wait });
+}
+function laneName(id, name, sub, a, o = {}) {
+  if (a <= .02 || !name) return;
+  const { size = 26, col = laneCol(id) } = o;
+  const q = projectU([-27.6, .1, Z[id] + (sub ? -.4 : .9)]); if (!q.ok) return;
+  txt(name, q.x, q.y, { size, weight: 800, color: col, alpha: a, shadow: true });
+  if (sub) { const q2 = projectU([-27.6, .1, Z[id] + 2.6]); txt(sub, q2.x, q2.y, { size: 22, color: C.dim, alpha: a, shadow: true }); }
+}
+// ── vertical cut: its own clock, mapped onto the wide story's states ──
+// [vertical t, wide t] — scene states (game clock, open, lanes, boss, frame stretch) are read at the mapped wide time; the camera runs on vertical time.
+const MAP = [[0, .3], [2.6, 2.9], [4.4, 7.4], [9.0, 17.4], [9.0001, 69.6], [14.6, 79.4], [18.2, 80.4], [21, 80.6]];
+function storyT(t) { for (let i = 0; i < MAP.length - 1; i++) if (t <= MAP[i + 1][0]) return lerp(MAP[i][1], MAP[i + 1][1], clamp((t - MAP[i][0]) / (MAP[i + 1][0] - MAP[i][0]))); return MAP[MAP.length - 1][1]; }
+const HEADV = [[3.2, 9.0, '01', '한 프레임 = 한 틱'], [9.0, 14.6, '02', '보스전: 프레임이 67ms'], [14.6, 18.2, '03', '화면까지 걸리는 시간']];
+const VEND = 18.2, VX = 60, VW = 960;
+function storyFrame(t) {
+  if (t >= 69 && t < 82) return lerp(FR, F15, eio(p(t, 71.4, 2.2)) * (1 - eio(p(t, 81.2, 1))));
+  return FR + .15 * Math.sin(t * 7.3);
+}
+function vignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, W * .5, W / 2, H / 2, H * .75);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.45)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function arc(L, a3, b3, col, a, lift = 40) {
+  const q0 = project(L, a3), q1 = project(L, b3); if (!q0.ok || !q1.ok || a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.moveTo(q0.x, q0.y); ctx.quadraticCurveTo((q0.x + q1.x) / 2, Math.min(q0.y, q1.y) - lift, q1.x, q1.y); ctx.stroke();
+  ctx.setLineDash([]); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q1.x, q1.y, 5, 0, 7); ctx.fill(); ctx.restore();
+}
+// `stat fps` read-out, top right
+function vStat(t, w) {
+  const ms = storyFrame(w), fps = 1000 / ms, col = ms > 34 ? C.red : ms > 20 ? C.warn : C.ok;
+  const a = t < 18.4 ? 1 : 1 - eo(p(t, 18.2, .5)); if (a <= 0) return;
+  txt(fps.toFixed(2) + ' FPS', W - VX, 110, { size: 44, weight: 700, mono: true, color: col, align: 'right', alpha: a, shadow: true });
+  txt(ms.toFixed(2) + ' ms', W - VX, 160, { size: 36, weight: 600, mono: true, color: col, align: 'right', alpha: a, shadow: true });
+}
+// header: number tab, title (y 200–300)
+function vHeaders(t) {
+  for (const [s, e, n, title] of HEADV) {
+    const a = win(t, s, e, .35); if (a <= 0) continue;
+    const k = eo(p(t, s + .05, .6));
+    ctx.save(); ctx.globalAlpha = a;
+    const g = ctx.createLinearGradient(0, 0, 0, 440); g.addColorStop(0, 'rgba(17,18,20,.94)'); g.addColorStop(1, 'rgba(17,18,20,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 440);
+    ctx.globalAlpha = a * k;
+    rr(VX - (1 - k) * 30, 214, 84, 66, 6); ctx.fillStyle = C.game; ctx.fill();
+    txt(n, VX + 42 - (1 - k) * 30, 260, { size: 38, weight: 800, mono: true, color: '#0f1013', align: 'center' });
+    txt(title, VX + 110 - (1 - k) * 30, 272, { size: 68, weight: 800 });
+    ctx.restore();
+  }
+}
+// frames track under the header doubles as the progress bar
+function vStrip(t) {
+  const x0 = VX, x1 = VX + VW, y = 360, k = .55;
+  const a = clamp(Math.min(t - 3.0, DURATION - .6 - t) * 2) * .95; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const n = Math.round(DURATION / .1), bw = (x1 - x0) / n;
+  for (let i = 0; i < n; i++) {
+    const tt = i * .1; if (tt < 3.0) continue;
+    const ms = storyFrame(storyT(tt)), h = Math.min(40, ms * k), played = tt <= t;
+    ctx.fillStyle = played ? (ms > 34 ? C.red : ms > 20 ? C.warn : C.ok) : '#2a2c31';
+    ctx.fillRect(x0 + i * bw, y - h, Math.max(1, bw - 1.2), h);
+  }
+  ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(236,236,236,.45)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x0, y - FR * k); ctx.lineTo(x1, y - FR * k); ctx.stroke(); ctx.setLineDash([]);
+  txt('16.7ms', x1, y - FR * k - 10, { size: 24, mono: true, color: C.dim, align: 'right' });
+  ctx.restore();
+}
+// two-line caption (y 1560–1700)
+function vCaption(t, t0, t1, l1, l2) {
+  const a = win(t, t0, t1, .4); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, 1420, 0, 1760); g.addColorStop(0, 'rgba(17,18,20,0)'); g.addColorStop(.35, 'rgba(17,18,20,.92)'); g.addColorStop(1, 'rgba(17,18,20,.92)'); ctx.fillStyle = g; ctx.fillRect(0, 1420, W, 340);
+  if (Array.isArray(l1)) runs(l1, W / 2, 1600, 52, 800, { align: 'center' }); else txt(l1, W / 2, 1600, { size: 52, weight: 800, align: 'center' });
+  if (l2) { const k2 = eo(p(t, t0 + .5, .5)); txt(l2, W / 2, 1666, { size: 38, color: C.dim, align: 'center', alpha: k2 }); }
+  ctx.restore();
+}
+// short lane names on the track headers
+const VLANE = { recv: '리시브', game: '게임', send: '센드', render: '렌더', rhi: 'RHI', gpu: 'GPU' };
+function vLanes(S, a) {
+  if (a <= 0) return;
+  for (const id in VLANE) { const la = S.lanes[id] * a; if (la <= .02) continue; const q = projectU([-27.4, .1, Z[id] + 1.4]); if (q.ok) txt(VLANE[id], q.x, q.y, { size: 32, weight: 800, color: laneCol(id), alpha: la, shadow: true }); }
+}
+
+function vIntro(t) {
+  const a = win(t, 0, 3.6, .5); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, 0, 0, 900); g.addColorStop(0, 'rgba(17,18,20,.9)'); g.addColorStop(1, 'rgba(17,18,20,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 900);
+  const k1 = eo(p(t, .15, .7)), k2 = eo(p(t, .5, .7)), k3 = eo(p(t, 1.0, .7));
+  runs([['언리얼', C.game], [' 클라의', C.text]], VX, 400 + (1 - k1) * 30, 110, 800, { alpha: k1 });
+  runs([['스레드와 ', C.text], ['렉', C.red]], VX, 540 + (1 - k2) * 30, 110, 800, { alpha: k2 });
+  txt('게임 화면 한 프레임을 멈추고 열어 본다', VX, 630, { size: 44, color: C.text, alpha: k3, shadow: true });
+  ctx.restore();
+  const fz = p(t, 2.6, .2) * (1 - p(t, 2.9, .5));
+  if (fz > 0) { ctx.fillStyle = `rgba(255,255,255,${.35 * fz})`; ctx.fillRect(0, 0, W, H); }
+  const kf = win(t, 2.65, 4.6, .3);
+  if (kf > 0) chip('❚❚  프레임 F1 정지', W / 2, 760, C.text, { size: 40, align: 'center', alpha: kf, mono: false });
+}
+function v01(t, S, w) {
+  const a = win(t, 3.6, 9.0, .4); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  vLanes(S, eo(p(t, 4.0, .6)));
+  S.F.slice(0, 5).forEach((f, i) => lab(0, [f.x0 + f.d / 2, 0, Z.recv - 5.6], 'F' + (i + 1), C.text, eo(p(t, 4.6 + i * .5, .4)), { size: 32, align: 'center' }));
+  for (const r of RECV_AT) {
+    const x = r * FR, nx = Math.ceil(r) * FR + 1.6; if (x > S.now || nx > S.now || r > 4.95) continue;
+    arc(0, [x + .45, BH, Z.recv], [nx + .5, BH + CH, Z.game - 1.4], C.pkt, .85 * clamp((S.now - nx) / 6), 30);
+  }
+  ctx.restore();
+  vCaption(t, 4.6, 9.0, [['패킷이 액터를 움직이는 곳은 ', C.text], ['게임 스레드', C.game]], '받은 패킷은 다음 틱을 기다린다 — 1프레임 = 게임 스레드 한 틱');
+}
+function v02(t, S, w) {
+  const a = win(t, 9.2, 14.6, .4); if (a <= 0) return;
+  const kb = S.kb ?? 0;
+  ctx.save(); ctx.globalAlpha = a;
+  vLanes(S, 1);
+  for (const b of S.blocks) if (b.lab && b.l !== 'recv') blockLab(b, 28, '#0f1013');
+  const F = S.F;
+  if (kb > .6) lab(0, [F[1].x0 + F[1].d / 2, 0, Z.recv - 9], '1프레임 = 67ms', C.red, eo(p(w, 74.5, .5)), { size: 34, align: 'center' });
+  if ((S.q6 ?? 0) > 0) tag(0, [25, 2, (Z.recv + Z.game) / 2], '수신 큐 ' + fmt(S.q6) + '개', null, C.pkt, eo(p(w, 74, .5)), { dx: 0, dy: 330, size: 40, mono: true });
+  ctx.restore();
+  vCaption(t, 9.4, 14.6, [['GPU 64ms', C.gpu], [' → 렌더 · 게임 스레드도 기다린다', C.text]], '게임 스레드 일은 12ms인데 프레임은 67ms (15fps)');
+}
+function v03(t) {
+  const a = win(t, 14.6, 18.4, .4); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(17,18,20,.72)'; ctx.fillRect(0, 420, W, 1060);
+  const k1 = eo(p(t, 14.8, .5)), k2 = eo(p(t, 15.5, .5)), k3 = eo(p(t, 16.3, .5));
+  panel(VX, 560, VW, 720, k1);
+  txt('패킷 도착 → 화면에 보이기까지', VX + 40, 640, { size: 44, weight: 800, alpha: k1 });
+  runs([['60fps  ', C.ok, true], ['30 + 25 + 17 + 17', C.dim, true]], VX + 40, 740, 36, 700, { alpha: k1 });
+  txt('≈ 88ms', VX + VW - 40, 870, { size: 130, weight: 800, mono: true, color: C.ok, align: 'right', alpha: k1 });
+  runs([['15fps  ', C.red, true], ['30 + 100 + 67 + 67', C.dim, true]], VX + 40, 960, 36, 700, { alpha: k2 });
+  txt('≈ 263ms', VX + VW - 40, 1090, { size: 130, weight: 800, mono: true, color: C.red, align: 'right', alpha: k2 });
+  chip('FPS만으로 +175ms', VX + VW - 40, 1190, C.red, { size: 44, align: 'right', alpha: k3 });
+  txt('네트워크 30 + 틱 끝까지 + 렌더 + GPU · 평균 · 예시', VX + 40, 1250, { size: 30, color: C.dim, alpha: k3 * 0 });
+  ctx.restore();
+  vCaption(t, 15.2, 18.4, '같은 서버 · 같은 회선, FPS만 다르다', '평균 · 예시 — 몇 프레임 뒤에 그려지는지는 엔진 설정에 따라 다르다');
+}
+function vEnd(t) {
+  const a = eo(p(t, VEND, .8)); if (a <= 0) return;
+  ctx.fillStyle = `rgba(17,18,20,${.93 * a})`; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.globalAlpha = a;
+  const k1 = eo(p(t, VEND + .2, .7)), k2 = eo(p(t, VEND + .8, .7)), k3 = eo(p(t, VEND + 1.4, .7));
+  txt('받은 패킷은', W / 2, 640 + (1 - k1) * 24, { size: 96, weight: 800, align: 'center', alpha: k1 });
+  runs([['프레임', C.game], [' 단위로 적용된다.', C.text]], W / 2, 770 + (1 - k1) * 24, 96, 800, { align: 'center', alpha: k1 });
+  [[C.recv, '리시브 스레드', '받고 파싱만'], [C.pkt, '수신 큐', '다음 틱까지 대기'], [C.game, '게임 스레드', '프레임당 한도'], [C.render, '렌더 · GPU', '+1~2프레임']].forEach(([c, l, s2], i) => {
+    const y = 930 + i * 92, kk = eo(p(t, VEND + .8 + i * .15, .5));
+    ctx.save(); ctx.globalAlpha *= kk; ctx.fillStyle = c; ctx.fillRect(VX + 60, y - 34, 8, 44); ctx.restore();
+    txt(l, VX + 90, y, { size: 40, weight: 800, alpha: kk }); txt(s2, VX + 470, y, { size: 38, color: C.dim, alpha: kk });
+  });
+  txt('전체 영상', W / 2, 1400, { size: 36, weight: 700, color: C.text, align: 'center', alpha: k3 });
+  txt('jungrok5.github.io/motion-graphics/', W / 2, 1455, { size: 32, mono: true, color: C.game, align: 'center', alpha: k3 });
+  txt('ue-client-threads-inside-wide', W / 2, 1500, { size: 32, mono: true, color: C.game, align: 'center', alpha: k3 });
+  ctx.restore();
+}
+
+// ── frame ────────────────────────────────────────────────────
+function renderAt(t) {
+  t = clamp(t, 0, DURATION);
+  const w = storyT(t);
+  XS = xsAt(w); XO = xoAt(w); Z = laneZ(w);
+  const c = camAt(t), R = c.R;
+  LV.forEach((L, i) => { L.g.matrix.copy(rel(R, i, w)); L.g.matrixWorldNeedsUpdate = true; });
+  REL = LV.map((_, i) => rel(R, i, w));
+  camera.fov = c.fov; camera.near = c.d * .02; camera.far = c.d * 80;
+  camera.setViewOffset(W, H, c.ox, c.oy, W, H);
+  camera.position.copy(c.T).addScaledVector(c.dir, c.d); camera.up.copy(c.up); camera.lookAt(c.T); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  const S = animate(w, R);
+  const sky = SKY.visible ? SKY.material.opacity : 0;
+  scene.fog.color.copy(BG).lerp(SKYH, sky);
+  scene.fog.near = c.d * (R === 1 ? 3 : 1.6); scene.fog.far = c.d * (R === 1 ? 14 : 6);
+  sun.target.position.copy(c.T); sun.position.copy(c.T).addScaledVector(LDIR, c.d * 4);
+  hemi.intensity = R === 1 ? 2.0 : 1.3; sun.intensity = R === 1 ? 2.6 : 1.7;
+  bloom.strength = w > 69.5 && w < 82 ? .62 : .42;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  vignette();
+  if (t > 4.4 && t < 9.2) for (const b of S.blocks) if (b.l !== 'recv' && !b.dep) blockLab(b, 26);
+  vIntro(t); v01(t, S, w); v02(t, S, w); v03(t);
+  vHeaders(t); vStat(t, w); vStrip(t);
+  vEnd(t);
+  const fo = p(t, DURATION - .4, .4); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  renderAt(0);
+})();
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...HEADV.map(h => [h[0], h[2], h[3]]), [VEND, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 12.6;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += (now - last) / 1000 * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  // chapter deep link: index.html#ch03 opens paused at that chapter
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && HEADV.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+}
+</script>
