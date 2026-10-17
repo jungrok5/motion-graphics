@@ -1,0 +1,1277 @@
+<meta charset="utf-8">
+<title>Lag Diagnosis Artifacts Vertical</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one 16:9 stage, a slim transport bar under it, chapter chips below. Single dark look. */
+  :root {
+    --bg: #070a13; --surface: #0e1424; --line: #24304a; --fg: #e8ecf4; --dim: #8b95a7;
+    --accent: #a78bfa; --live: #34d399; --text2: #c3cad8;
+    --sans: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box; overflow-x: hidden; }
+  .player { width: min(100%, calc((100vh - 170px) * 9 / 16), 480px); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .big { position: absolute; inset: auto 0 5% 0; margin: 0 auto; width: clamp(44px, 11%, 84px); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--accent);
+    background: rgba(14,20,36,.78); color: var(--fg); display: grid; place-items: center; cursor: pointer; transition: transform .15s, opacity .2s; }
+  .big[hidden] { display: none; }
+  .big:hover { transform: scale(1.06); }
+  .big svg { width: 36%; height: 36%; margin-left: 6%; }
+  .big.replay svg { margin-left: 0; }
+  .bar { display: flex; align-items: center; gap: 14px; }
+  .btn { flex: none; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .time { flex: none; font: 500 13px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .scrub { position: relative; flex: 1; min-width: 0; height: 28px; cursor: pointer; touch-action: none; }
+  .track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+  .fill { position: absolute; left: 0; top: 12px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--live)); }
+  .tick { position: absolute; top: 8px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
+  .knob { position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chapters button { font: 600 13px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .chapters button span { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+  .chapters button:hover { color: var(--fg); }
+  .chapters button[aria-current="true"] { color: var(--fg); border-color: var(--accent); background: rgba(167,139,250,.12); }
+  .hint { font-size: 12px; color: var(--dim); margin-left: auto; }
+  @media (max-width: 600px) { .hint { display: none; } .time { font-size: 12px; } }
+  .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set a { font: 600 13px/1 var(--sans); color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+  .set a:hover { border-color: var(--accent); }
+  body.poster .set { display: none; }
+  .rate { width: auto; min-width: 56px; padding: 0 10px; font: 600 13px/1 var(--mono); }
+  /* Notes under the player: chapter-by-chapter explanation + glossary */
+  .notes { width: min(100%, 860px); margin-top: 56px; padding-bottom: 48px; font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+  .notes h2 { font-size: 22px; line-height: 1.4; margin: 48px 0 16px; text-wrap: balance; }
+  .notes h2:first-child { margin-top: 0; }
+  .notes h2 .more { font: 600 13px/1 var(--sans); color: var(--accent); margin-left: 10px; white-space: nowrap; }
+  .notes .lede { font-size: 18px; color: var(--fg); }
+  .notes p, .notes li { color: var(--text2); }
+  .notes ul { padding-left: 1.2em; }
+  .notes article { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .notes h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+  .notes h3 .n { font: 600 13px/1 var(--mono); color: var(--accent); }
+  .notes h3 button { margin-left: auto; font: 600 12px/1 var(--sans); color: var(--dim); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .notes h3 button:hover { color: var(--fg); border-color: var(--accent); }
+  .notes code { font: 500 .88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .notes .terms { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 12px 24px; margin: 0; }
+  .notes dt { font-weight: 700; }
+  .notes dd { margin: 0; color: var(--text2); }
+  @media (max-width: 600px) { .notes .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; } .notes dd { margin-bottom: 14px; } }
+  /* #poster: embed mode for gallery thumbnails — canvas only, loops */
+  body.poster { padding: 0; }
+  body.poster .player { width: 100%; }
+  body.poster .bar, body.poster .chapters, body.poster .big, body.poster .notes { display: none; }
+  body.poster .stage { border: 0; border-radius: 0; }
+</style>
+
+<div class="player">
+  <div class="stage" id="stage">
+    <canvas id="c" width="1080" height="1920" aria-label="렉 판별: 엔지니어가 여는 실제 화면을 공간에 늘어놓은 세로 3D 모션그래픽"></canvas>
+    <button class="big" id="big" aria-label="재생"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="재생"></button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="22" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="ticks"></div><div class="knob" id="knob"></div>
+    </div>
+    <div class="time" id="time">0:00 / 0:21</div>
+    <button class="btn rate" id="rate" aria-label="재생 속도 1배">1×</button>
+    <button class="btn" id="fs" aria-label="전체 화면"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="chapters" id="chapters"></div>
+  <nav class="set" aria-label="같은 주제"><a href="../lag-diagnosis-artifacts-wide/">전체 영상</a><a href="../lag-diagnosis/">2D 원본</a><a href="../lag-diagnosis/article.html">설명</a><a href="../lag-diagnosis/terms.html">용어집</a></nav>
+</div>
+<!-- Vertical cut: notes live on ../lag-diagnosis/index.html. Not shown on this page. -->
+<section class="notes" id="notes" hidden></section>
+<script type="importmap">
+{ "imports": { "three": "../assets/vendor/three/build/three.module.min.js", "three/addons/": "../assets/vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+// ─────────────────────────────────────────────────────────────
+//  렉 걸렸다. 서버 탓일까, 내 탓일까? — 실물을 공간에 늘어놓기 (9:16 mobile, ~21 s cut of ../lag-diagnosis-artifacts-wide/)
+//  The screens an engineer opens to diagnose a lag report stand on one curved on-call wall, client side → network → server:
+//  the player's report tickets, the game client with its frame-time / net-stats overlay, a ping terminal on the player's PC,
+//  a trace waterfall of one reaction, the server's Grafana-like dashboard, the server's `ss -ti` socket view and the game-logic
+//  queue, and the runbook. The camera walks them in diagnosis order; a report's timestamp flies from the ticket to the graph,
+//  pings travel from the client to the socket and into the queue, and each lag type lights up its tell-tale panels.
+//  Look comes from the subject: a game HUD perf overlay, a terminal, Grafana panels, a trace waterfall, a helpdesk ticket.
+//  The vertical cut walks the same wall in portrait close-ups: the trace, then the tell-tale panel of each lag type, then the two pings.
+//  three.js renders offscreen → drawImage onto #c → 2D header, captions, readouts and the end card on top.
+//  Every frame is a pure function of t: renderAt(v) maps vertical time v to the wide page's time t. Facts follow ../lag-diagnosis/index.html.
+// ─────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const W = 1080, H = 1920, DURATION = 21.5;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const SANS = 'Pretendard, "WenQuanYi Zen Hei", "DejaVu Sans", sans-serif';
+const MONO = '"JetBrains Mono", Pretendard, "DejaVu Sans Mono", monospace';
+
+// ── math / easing ────────────────────────────────────────────
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const p = (t, s, d) => clamp((t - s) / d);
+const eo = t => 1 - Math.pow(1 - t, 3);
+const eio = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const eback = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const win = (t, s, e, f = .45) => Math.min(eo(p(t, s, f)), 1 - eio(p(t, e - f, f)));
+const bump = (t, s, e) => win(t, s, e, .25);
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+
+// ── palette: the tools on an on-call wall ────────────────────
+// Roles (same meaning as the 2D video): cyan = client, violet = network, amber = server, green = normal, red = spiking.
+// Orange = a player's report (ticket id and its timestamp). Tool skins: game HUD, terminal, Grafana-like panels, trace view, helpdesk, markdown.
+const K = {
+  desk: '#05070b', text: '#c9d1dc', hi: '#eef2f7', dim: '#8a94a6', faint: '#5a6476',
+  client: '#38bdf8', net: '#a78bfa', server: '#fbbf24', ok: '#73bf69', red: '#f2495c', tk: '#ff9f43', pink: '#f472b6',
+  gameBg: '#0d1411', hudBg: 'rgba(4,8,11,0.86)', hudLine: 'rgba(56,189,248,0.32)',
+  graf: '#111217', gpanel: '#181b1f', gborder: '#2c3235', gtext: '#d8d9da',
+  term: '#0b0d0f', termBar: '#191c20', tkBg: '#151b25', tkBar: '#1e2634', trBg: '#0f131a', trBar: '#181e28', docBg: '#13161c', docBar: '#1c2029',
+};
+
+// ── timeline (same chapters as the 2D video) ─────────────────
+const HEAD = [
+  [5.0, 14.0, '01', '렉의 세 구간', '한 번의 반응 = 클라 + 네트워크 + 서버'],
+  [14.0, 25.0, '02', '클라렉', '내 컴퓨터가 제때 프레임을 못 그리는 경우'],
+  [25.0, 36.0, '03', '네트워크렉', '패킷이 늦게 오가거나 사라지는 경우'],
+  [36.0, 47.5, '04', '서버렉', '서버가 틱 안에 일을 못 끝내는 경우'],
+  [47.5, 58.0, '05', '핑 두 개로 가르기', '전송 핑은 커널 · 소켓의 TCP RTT, 앱 핑은 게임 로직을 거친다'],
+  [58.0, 68.0, '06', '판별 순서', '세 가지만 보면 어디가 문제인지 나온다'],
+];
+const OUT0 = 68.0;
+
+// ── the data (same values as the 2D video) ───────────────────
+const SEGS = [['입력 처리', 8, 'client'], ['업링크', 25, 'net'], ['서버 큐 + 틱', 30, 'server'], ['다운링크', 25, 'net'], ['렌더링', 16, 'client']];
+const HITCH = [[3.2, 3.9], [6.6, 7.0]];
+const frameAt = s => { for (const [a, b] of HITCH) if (s >= a && s < b) return 230 + 40 * Math.sin(s * 9); return 16 + 2.5 * Math.sin(s * 13) + 1.5 * Math.sin(s * 5.3); };
+const frameOk = s => 16 + 2.5 * Math.sin(s * 13) + 1.5 * Math.sin(s * 5.3);
+const rttAt = s => 45 + 780 * Math.exp(-(((s - 4.0) / .7) ** 2)) + 6 * Math.sin(s * 7);
+const rttOk = s => 45 + 6 * Math.sin(s * 7);
+const tickAt = s => s < 3.4 ? 26 + 6 * Math.sin(s * 11) + 3 * Math.sin(s * 4) : 120 + 45 * Math.sin(s * 3.1) + 15 * Math.sin(s * 8);
+const tickOk = s => 26 + 6 * Math.sin(s * 11) + 3 * Math.sin(s * 4);
+const hold = (u, wins) => { for (const [a, b] of wins) if (u >= a && u < b) return a; return u; };
+const PH = [
+  { t0: .4, name: '정상', col: K.ok, wire: .45, wait: .15, tp: 41, ap: 46, rtt: '41.2/2.6' },
+  { t0: 3.6, name: '네트워크렉', col: K.net, wire: 1.1, wait: .15, tp: 420, ap: 428, rtt: '420.3/38.1' },
+  { t0: 6.8, name: '서버렉', col: K.server, wire: .45, wait: 1.5, tp: 42, ap: 380, rtt: '42.1/2.9' },
+];
+const phaseAt = u => { let ph = PH[0]; for (const q of PH) if (u >= q.t0) ph = q; return ph; };
+const qDepth = u => { const ph = phaseAt(u); return ph.name === '서버렉' ? Math.min(12, 2 + Math.floor((u - ph.t0) * 7)) : 2; };
+// reports (example tickets; the timestamp is where the matching graph spikes)
+const TICKETS = [
+  { id: '#4817', l1: '보스 잡다가 화면이 통째로 멈췄어요.', l2: '버튼도 안 눌려요.', time: '21:04:12', meta: '채널 3 · 제보 1건', S: 14.0 },
+  { id: '#4821', l1: '다른 사람이 멈췄다가 순간이동해요.', l2: '제 캐릭터는 잘 움직여요.', time: '21:17:40', meta: '채널 3 · 와이파이', S: 25.0 },
+  { id: '#4826', l1: '채널 3 전체가 느려요!', l2: '스킬이 한참 뒤에 나가요.', time: '21:32:05', meta: '같은 시각 · 같은 채널 제보 여러 건', S: 36.0 },
+];
+function clockStr(base, s) { const tot = base[0] * 3600 + base[1] * 60 + base[2] + Math.floor(s); const hh = Math.floor(tot / 3600), mm = Math.floor(tot / 60) % 60, ss = tot % 60; return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; }
+
+// ── three.js setup ───────────────────────────────────────────
+const FOV = 40;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(K.desk);
+const camera = new THREE.PerspectiveCamera(FOV, W / H, .1, 600);
+scene.add(camera);
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), .5, .45, .86);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const TAN = Math.tan(FOV / 2 * Math.PI / 180);
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function canvasTex(c, mip = true) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps = mip; if (!mip) t.minFilter = THREE.LinearFilter; return t; }
+
+// ── the floor: dark operations-room tiles, a violet band where the internet is, light pools under lit screens ─────
+const NPOOL = 12;
+const floorMat = new THREE.ShaderMaterial({
+  depthWrite: false, fog: false,
+  uniforms: { uCam: { value: new THREE.Vector3() }, uPool: { value: Array.from({ length: NPOOL }, () => new THREE.Vector4()) }, uPC: { value: Array.from({ length: NPOOL }, () => new THREE.Color()) }, uNet: { value: 0 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform vec4 uPool[${NPOOL}]; uniform vec3 uPC[${NPOOL}]; uniform float uNet;
+    void main(){
+      float d = length(vW.xz - uCam.xz);
+      vec3 c = vec3(.010,.013,.019);
+      vec2 gq = abs(fract(vW.xz * .5) - .5);
+      float lw = fwidth(vW.x * .5) * 1.2 + .004;
+      float grid = 1. - smoothstep(0., lw, .5 - max(gq.x, gq.y));
+      c += vec3(.020,.028,.042) * grid * .55 * exp(-d * .02);
+      for (int i = 0; i < ${NPOOL}; i++) {
+        vec4 P = uPool[i];
+        if (P.w <= 0.) continue;
+        vec2 q = (vW.xz - P.xy) / vec2(P.z, P.z * .5);
+        c += uPC[i] * exp(-dot(q,q)) * P.w * .085;
+      }
+      float band = smoothstep(-8.5, -6.5, vW.x) * smoothstep(2.5, .5, vW.x) * smoothstep(11., 4., vW.z) * smoothstep(-7., -2., vW.z);
+      c += vec3(.050,.032,.095) * band * uNet;
+      float fade = exp(-d * .011);
+      c = mix(vec3(.007,.009,.013), c, clamp(fade * 1.4, 0., 1.));
+      gl_FragColor = vec4(c, 1.);
+    }`,
+});
+floorMat.extensions = { derivatives: true };
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.position.set(10, 0, 0); floor.renderOrder = 0;
+scene.add(floor);
+
+const shadowTex = (() => { const c = mkCanvas(256, 128), g = c.getContext('2d'); const gr = g.createRadialGradient(128, 64, 0, 128, 64, 128); gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.setTransform(1, 0, 0, .5, 0, 32); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c); })();
+const reflAlpha = (() => { const c = mkCanvas(4, 256), g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#000'); gr.addColorStop(.55, '#000'); gr.addColorStop(1, '#5a5a5a'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); return new THREE.CanvasTexture(c); })();
+const glowTex = (() => { const c = mkCanvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.2, 'rgba(255,255,255,.8)'); gr.addColorStop(.5, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+
+// ── canvas drawing kit (design px; 100 design px = 1 world unit) ─────
+const TS = 1.5;
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function gt(g, s, x, y, o = {}) {
+  const { size = 28, weight = 500, color = K.text, align = 'left', mono = false, alpha = 1, base = 'alphabetic', ls = 0 } = o;
+  if (alpha <= 0) return;
+  g.save(); g.globalAlpha *= alpha; g.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  g.fillStyle = color; g.textAlign = align; g.textBaseline = base; if (ls) g.letterSpacing = ls + 'px'; g.fillText(s, x, y); g.restore();
+}
+function mw(g, s, size, weight = 500, mono = false) { g.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return g.measureText(s).width; }
+function gdot(g, x, y, r, col, a = 1) { g.save(); g.globalAlpha *= a; g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = col; g.fill(); g.restore(); }
+function gchip(g, label, x, y, col, o = {}) {
+  const { size = 24, align = 'left', fillA = .16, alpha = 1, mono = true, weight = 700, r = 8 } = o;
+  if (alpha <= 0) return 0;
+  const w = mw(g, label, size, weight, mono) + size * 1.1, h = size * 1.6;
+  const X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  g.save(); g.globalAlpha *= alpha; rr(g, X, y - h / 2, w, h, r); g.fillStyle = rgba(col, fillA); g.fill(); g.lineWidth = 1.8; g.strokeStyle = rgba(col, .8); g.stroke();
+  gt(g, label, X + w / 2, y + size * .36, { size, weight, color: col, align: 'center', mono }); g.restore();
+  return w;
+}
+function dashLine(g, x0, y0, x1, y1, col, lw = 2, dash = [8, 8]) { g.save(); g.setLineDash(dash); g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.restore(); }
+// window chrome: one bar per tool, role dot + title + sub on the left, an optional right label
+const TB = 60;
+function chrome(g, w, h, o) {
+  g.setTransform(TS, 0, 0, TS, 0, 0); g.clearRect(0, 0, w, h);
+  rr(g, 2, 2, w - 4, h - 4, o.r ?? 12); g.fillStyle = o.bg; g.fill();
+  g.save(); rr(g, 2, 2, w - 4, h - 4, o.r ?? 12); g.clip(); g.fillStyle = o.bar; g.fillRect(0, 0, w, TB); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(0, TB, w, 1.5); g.restore();
+  let x = 26;
+  if (o.title) {
+    gdot(g, x + 7, TB / 2, 7, o.title[1]); x += 24;
+    gt(g, o.title[0], x, TB / 2 + 10, { size: 29, weight: 800, color: o.title[1] }); x += mw(g, o.title[0], 29, 800) + 16;
+  }
+  if (o.sub) gt(g, o.sub, x, TB / 2 + 9, { size: 25, color: K.dim });
+  if (o.right) gt(g, o.right, w - 24, TB / 2 + 9, { size: 24, mono: true, color: K.dim, align: 'right' });
+  g.save(); rr(g, 2, 2, w - 4, h - 4, o.r ?? 12); g.lineWidth = o.lw || 2; g.strokeStyle = o.stroke || 'rgba(255,255,255,0.14)'; g.stroke(); g.restore();
+}
+// a small time-series graph: bars or a line, a dashed budget line, clock labels, and the report cursor
+function series(g, o) {
+  const { x0, x1, y0, y1, maxV, fn, now, span = 10, kind = 'bar', col, hot, budget, budgetLabel, base, cursor, grid = [0, maxV / 2, maxV], lab = 22 } = o;
+  const X = s => lerp(x0, x1, s / span), Y = v => lerp(y0, y1, Math.min(v, maxV) / maxV);
+  g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.08)';
+  grid.forEach(v => { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); gt(g, String(v), x0 - 12, Y(v) + 8, { size: lab, mono: true, color: K.faint, align: 'right' }); });
+  if (base) [0, 3, 6, 9].forEach(s => gt(g, clockStr(base, s), X(s), y0 + 34, { size: lab, mono: true, color: K.dim, align: s ? 'center' : 'left' }));
+  if (kind === 'bar') {
+    const bw = (x1 - x0) / (span / .1), n = Math.floor(now / .1 + 1e-6);
+    for (let i = 0; i <= n && i < span / .1; i++) { const v = fn(i * .1), h = hot(v); g.fillStyle = h ? K.red : col; g.fillRect(x0 + i * bw + 1, Y(v), Math.max(1, bw - 2), y0 - Y(v)); }
+  } else if (now > 0) {
+    g.beginPath(); for (let s = 0; s <= now + 1e-6; s += .05) { const yy = Y(fn(s)); s ? g.lineTo(X(s), yy) : g.moveTo(X(s), yy); }
+    g.strokeStyle = col; g.lineWidth = 3.5; g.stroke();
+    const v = fn(now); gdot(g, X(now), Y(v), 7, hot(v) ? K.red : col);
+  }
+  if (budget !== undefined) {
+    dashLine(g, x0, Y(budget), x1, Y(budget), rgba(K.ok, .9), 2.5);
+    const bl = mw(g, budgetLabel, 24, 700, true);
+    g.fillStyle = 'rgba(8,10,12,0.9)'; g.fillRect(x1 - bl - 12, Y(budget) - 34, bl + 12, 28);
+    gt(g, budgetLabel, x1 - 4, Y(budget) - 12, { size: 24, weight: 700, mono: true, color: K.ok, align: 'right' });
+  }
+  if (cursor && cursor.k > 0) {
+    const cx = X(cursor.s);
+    g.save(); g.globalAlpha *= cursor.k; dashLine(g, cx, y1 - 6, cx, y0, K.tk, 3, [6, 6]);
+    gchip(g, '제보 ' + cursor.label, cx, y1 - 26, K.tk, { size: 22, align: cursor.align || 'center', fillA: .25 }); g.restore();
+  }
+  return { X, Y };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  ARTIFACTS
+// ═════════════════════════════════════════════════════════════
+// FT · the game client with its perf / net overlay
+const FTW = 1600, FTH = 1000;
+const FT_A = { x: 20, y: 76, w: 760, h: 410 }, FT_B = { x: 820, y: 76, w: 760, h: 410 }, FT_FPS = { x: 20, y: 790, w: 470, h: 190 };
+const FT_CHAT = { x: 512, y: 862, w: 560, h: 118 }, FT_BTN = { x: 1388, y: 840, w: 192, h: 140 };
+const graphA = { x0: FT_A.x + 78, x1: FT_A.x + FT_A.w - 26, y0: FT_A.y + FT_A.h - 62, y1: FT_A.y + 168 };
+const graphB = { x0: FT_B.x + 92, x1: FT_B.x + FT_B.w - 26, y0: FT_B.y + FT_B.h - 62, y1: FT_B.y + 168 };
+function ftMode(t) { if (t >= 13.6 && t < 25) return ['client', t - 14]; if (t >= 25 && t < 36) return ['net', t - 25]; return ['idle', t]; }
+const meX = s => 820 + 210 * Math.sin(s * .9), meY = s => 720 + 26 * Math.sin(s * 1.8);
+const otherX = s => 900 + 230 * Math.sin(s * .75);
+const OTHER_Y = 600;
+function otherShown(mode, u, t) { if (mode !== 'net') return otherX(t); return u >= 3.2 && u < 4.9 ? otherX(3.2) : otherX(u); }
+const DECOR = (() => { const r = rng(11), a = []; for (let i = 0; i < 46; i++) a.push({ x: r() * 1600, y: 80 + r() * 920, s: 6 + r() * 22, c: r() }); return a; })();
+function drawFT(g, t) {
+  const w = FTW, h = FTH, [mode, u] = ftMode(t);
+  const ts = mode === 'client' ? hold(u, HITCH) : mode === 'net' ? u : t;
+  const frozen = mode === 'client' && ts !== u;
+  const base = mode === 'net' ? [21, 17, 36] : mode === 'client' ? [21, 4, 9] : [21, 40, 0];
+  const now = mode === 'idle' ? 10 : clamp(u, 0, 10);
+  chrome(g, w, h, { bg: K.gameBg, bar: '#0a0f0d', title: ['게임 클라이언트', K.client], sub: '채널 3 · 보스 필드', right: clockStr(base, mode === 'idle' ? (t % 50) : now), stroke: rgba(K.client, .5) });
+  // the game scene (under the overlay)
+  g.save(); g.beginPath(); g.rect(4, TB + 1.5, w - 8, h - TB - 6); g.clip();
+  const gr = g.createLinearGradient(0, TB, 0, h); gr.addColorStop(0, '#0f1a15'); gr.addColorStop(1, '#16251c'); g.fillStyle = gr; g.fillRect(0, TB, w, h);
+  g.strokeStyle = 'rgba(160,220,180,0.06)'; g.lineWidth = 1.5;
+  for (let x = 0; x < w; x += 80) { g.beginPath(); g.moveTo(x, TB); g.lineTo(x, h); g.stroke(); }
+  for (let y = TB + 40; y < h; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  for (const d of DECOR) { g.fillStyle = d.c < .5 ? 'rgba(90,140,90,0.16)' : 'rgba(120,110,80,0.14)'; g.beginPath(); g.ellipse(d.x, d.y, d.s * 1.6, d.s, 0, 0, 7); g.fill(); }
+  // boss + monsters
+  const bx = 1330, by = 700;
+  g.save(); g.shadowColor = 'rgba(242,73,92,0.6)'; g.shadowBlur = 30; gdot(g, bx + Math.sin(ts * .7) * 20, by, 46, '#5b1a22'); g.restore();
+  gdot(g, bx + Math.sin(ts * .7) * 20, by, 34, '#a8323e');
+  gt(g, '보스', bx + Math.sin(ts * .7) * 20, by - 64, { size: 26, weight: 800, color: '#ff8a96', align: 'center' });
+  for (let i = 0; i < 5; i++) {
+    const a = ts * (1 + i * .2) + i * 1.3, mx = 900 + i * 110 + Math.cos(a) * 40, my = 560 + (i % 2) * 150 + Math.sin(a) * 28;
+    gdot(g, mx, my, 14, '#7c8794'); g.fillStyle = '#2a2f36'; g.fillRect(mx - 20, my - 30, 40, 6); g.fillStyle = '#e05260'; g.fillRect(mx - 20, my - 30, 40 * (.4 + .5 * ((i * 37) % 10) / 10), 6);
+  }
+  // other player (net mode: freezes, then teleports)
+  const ox = otherShown(mode, u, t);
+  g.save(); g.shadowColor = K.pink; g.shadowBlur = 24; gdot(g, ox, OTHER_Y, 18, K.pink); g.restore();
+  gt(g, '다른 플레이어', ox, OTHER_Y - 34, { size: 24, weight: 700, color: K.pink, align: 'center' });
+  if (mode === 'net') {
+    const kb = p(u, 4.9, .6); if (kb > 0 && kb < 1) { g.save(); g.globalAlpha = 1 - kb; g.strokeStyle = K.pink; g.lineWidth = 4; g.beginPath(); g.arc(otherX(4.9), OTHER_Y, 20 + 60 * eo(kb), 0, 7); g.stroke(); g.restore(); }
+    const kg = Math.min(eo(p(u, 4.9, .3)), 1 - eo(p(u, 6.6, .4)));
+    if (kg > 0) { g.save(); g.globalAlpha = kg * .6; dashLine(g, otherX(3.2), OTHER_Y + 30, otherX(4.9), OTHER_Y + 30, K.red, 3, [10, 8]); g.restore(); }
+  }
+  // me
+  const mx = meX(ts), my = meY(ts);
+  g.save(); g.shadowColor = K.client; g.shadowBlur = 26; gdot(g, mx, my, 19, K.client); g.restore();
+  g.save(); g.strokeStyle = rgba(K.client, .5); g.lineWidth = 3; g.beginPath(); g.ellipse(mx, my + 22, 34, 12, 0, 0, 7); g.stroke(); g.restore();
+  gt(g, '나', mx, my - 32, { size: 26, weight: 800, color: K.client, align: 'center' });
+  if (frozen) { g.fillStyle = 'rgba(242,73,92,0.10)'; g.fillRect(0, TB, w, h); }
+  g.restore();
+  // overlay A · frame time
+  const hud = (b, col) => { rr(g, b.x, b.y, b.w, b.h, 12); g.fillStyle = K.hudBg; g.fill(); g.lineWidth = 2; g.strokeStyle = col; g.stroke(); };
+  hud(FT_A, K.hudLine);
+  gt(g, '프레임타임', FT_A.x + 26, FT_A.y + 50, { size: 32, weight: 800, color: K.hi });
+  gt(g, 'ms', FT_A.x + 26 + mw(g, '프레임타임 ', 32, 800), FT_A.y + 50, { size: 24, color: K.dim, mono: true });
+  const fA = mode === 'client' ? frameAt : frameOk, vA = fA(now), hotA = vA > 25;
+  gt(g, Math.round(vA) + 'ms', FT_A.x + FT_A.w - 26, FT_A.y + 128, { size: 96, weight: 800, mono: true, color: hotA ? K.red : K.ok, align: 'right' });
+  const kc = mode === 'client' ? eo(p(u, 1.75, .4)) : 0;
+  series(g, { ...graphA, maxV: 300, fn: fA, now, col: K.client, hot: v => v > 25, budget: 16.7, budgetLabel: '60fps = 16.7ms', base, cursor: { k: kc, s: 3.2, label: TICKETS[0].time } });
+  // overlay B · network
+  hud(FT_B, K.hudLine);
+  gt(g, '네트워크', FT_B.x + 26, FT_B.y + 50, { size: 32, weight: 800, color: K.hi });
+  gt(g, 'RTT ms', FT_B.x + 26 + mw(g, '네트워크 ', 32, 800), FT_B.y + 50, { size: 24, color: K.dim, mono: true });
+  const fB = mode === 'net' ? rttAt : rttOk, vB = fB(now), spike = mode === 'net' && u >= 3.2 && u < 4.9;
+  gt(g, Math.round(vB) + 'ms', FT_B.x + FT_B.w - 26, FT_B.y + 128, { size: 96, weight: 800, mono: true, color: vB > 200 ? K.red : K.ok, align: 'right' });
+  gchip(g, spike ? '손실 12%' : '손실 0%', FT_B.x + 26, FT_B.y + 100, spike ? K.red : K.ok, { size: 24 });
+  const kn = mode === 'net' ? eo(p(u, 1.75, .4)) : 0;
+  series(g, { ...graphB, maxV: 1000, fn: fB, now, kind: 'line', col: K.net, hot: v => v > 200, base: mode === 'net' ? base : [21, 4, 9], cursor: { k: kn, s: 4.0, label: TICKETS[1].time } });
+  // FPS readout (with the ping next to it, as such overlays show)
+  hud(FT_FPS, frozen ? rgba(K.red, .7) : K.hudLine);
+  gt(g, 'FPS', FT_FPS.x + 26, FT_FPS.y + 50, { size: 30, weight: 700, color: K.dim, mono: true });
+  gt(g, frozen ? '4' : '60', FT_FPS.x + 22, FT_FPS.y + 172, { size: 150, weight: 800, mono: true, color: frozen ? K.red : K.ok });
+  const pingV = Math.round(vB);
+  gt(g, '핑', FT_FPS.x + FT_FPS.w - 26, FT_FPS.y + 50, { size: 28, weight: 700, color: K.dim, align: 'right' });
+  gt(g, pingV + 'ms', FT_FPS.x + FT_FPS.w - 26, FT_FPS.y + 104, { size: 44, weight: 800, mono: true, color: pingV > 200 ? K.red : K.ok, align: 'right' });
+  gt(g, pingV > 200 ? '튐' : '정상', FT_FPS.x + FT_FPS.w - 26, FT_FPS.y + 150, { size: 28, weight: 700, color: pingV > 200 ? K.red : K.ok, align: 'right' });
+  // party chat
+  hud(FT_CHAT, 'rgba(255,255,255,0.12)');
+  gt(g, '[파티] 레온: 보스 곧 나와요', FT_CHAT.x + 22, FT_CHAT.y + 46, { size: 28, color: '#9fe3b7' });
+  const kchat = mode === 'client' ? eo(p(u, 3.9, .4)) : 0;
+  gt(g, '[파티] 미르: 나는 멀쩡한데?', FT_CHAT.x + 22, FT_CHAT.y + 92, { size: 28, weight: 700, color: '#9fe3b7', alpha: kchat });
+  // attack button
+  const pulse = mode === 'net' && (u % 1.4) < .25;
+  rr(g, FT_BTN.x, FT_BTN.y, FT_BTN.w, FT_BTN.h, 20); g.fillStyle = pulse ? rgba(K.client, .55) : rgba(K.client, .16); g.fill(); g.lineWidth = 2.5; g.strokeStyle = rgba(K.client, .8); g.stroke();
+  gt(g, '공격', FT_BTN.x + FT_BTN.w / 2, FT_BTN.y + 86, { size: 40, weight: 800, color: K.hi, align: 'center' });
+  if (mode === 'net') gchip(g, 'UI 즉시 반응', FT_BTN.x + FT_BTN.w, FT_BTN.y - 30, K.ok, { size: 24, align: 'right', alpha: eo(p(u, .6, .4)) });
+  if (frozen) gchip(g, '화면 · UI · 입력 전부 멈칫', 1000, 790, K.red, { size: 34, align: 'center', fillA: .3, mono: false, weight: 800 });
+  if (mode === 'net') gchip(g, '순간이동 · 러버밴딩', otherX(4.9), OTHER_Y + 72, K.red, { size: 30, align: 'center', fillA: .3, mono: false, weight: 800, alpha: Math.min(eo(p(u, 4.9, .3)), 1 - eo(p(u, 6.6, .4))) });
+}
+
+// TR · trace waterfall of one reaction
+const TRW = 1600, TRH = 800;
+const TR_X0 = 560, TR_X1 = 1540, TR_MAX = 104;
+const trRowY = i => 330 + i * 78;
+function drawTR(g, t) {
+  const w = TRW, h = TRH, u = t - 5;
+  chrome(g, w, h, { bg: K.trBg, bar: K.trBar, title: ['Trace', K.net], sub: 'skill_cast · 한 번의 반응', right: 'trace 7f3a91' });
+  const total = SEGS.reduce((s, x) => s + x[1], 0);
+  let shown = 0; SEGS.forEach(([, ms], i) => { if (u >= 1.5 + i * .45 + .25) shown += ms; });
+  gt(g, '키 입력 → 결과가 보이기까지', 34, TB + 92, { size: 40, weight: 800, color: K.hi });
+  gt(g, '구간마다 걸린 시간 (ms)', 34, TB + 140, { size: 28, color: K.dim });
+  const done = u >= 3.8;
+  gt(g, (done ? '= ' : '') + shown + 'ms', w - 34, TB + 150, { size: 124, weight: 800, mono: true, color: done ? K.hi : K.dim, align: 'right', alpha: u > 1.4 ? 1 : .35 });
+  // ruler
+  const X = ms => lerp(TR_X0, TR_X1, ms / TR_MAX);
+  g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1.5;
+  [0, 25, 50, 75, 100].forEach(v => { g.beginPath(); g.moveTo(X(v), 262); g.lineTo(X(v), trRowY(4) + 30); g.stroke(); gt(g, v + '', X(v), 250, { size: 24, mono: true, color: K.faint, align: 'center' }); });
+  gt(g, '서비스 · 구간', 34, 250, { size: 24, color: K.faint });
+  let acc = 0;
+  const roleCol = { client: K.client, net: K.net, server: K.server }, roleName = { client: 'Client', net: 'Network', server: 'Server' };
+  const groupAt = { client: 4.4, net: 4.8, server: 5.2 };
+  SEGS.forEach(([lab, ms, role], i) => {
+    const y = trRowY(i), col = roleCol[role], kk = eo(p(u, 1.5 + i * .45, .5)), kg = eo(p(u, groupAt[role], .5));
+    if (kg > 0) { g.fillStyle = rgba(col, .09 * kg); g.fillRect(14, y - 30, w - 28, 66); }
+    gchip(g, roleName[role], 34, y + 4, col, { size: 24, fillA: .1 + .3 * kg, alpha: .45 + .55 * Math.max(kk, kg) });
+    gt(g, lab, 222, y + 14, { size: 34, weight: 800, color: K.hi, alpha: .35 + .65 * kk });
+    if (kk > 0) {
+      const x0 = X(acc), bw = (X(acc + ms) - x0) * kk;
+      rr(g, x0, y - 22, Math.max(4, bw), 50, 6); g.fillStyle = rgba(col, .42); g.fill(); g.lineWidth = 2; g.strokeStyle = col; g.stroke();
+      const lw = mw(g, ms + 'ms', 32, 800, true), inside = x0 + bw + 14 + lw > w - 24;
+      gt(g, ms + 'ms', inside ? x0 + bw - 12 : x0 + bw + 14, y + 15, { size: 32, weight: 800, mono: true, color: inside ? K.hi : col, alpha: kk, align: inside ? 'right' : 'left' });
+    }
+    acc += ms;
+  });
+  // group sums
+  const sums = [['클라', SEGS[0][1] + SEGS[4][1], K.client, 4.4], ['네트워크', SEGS[1][1] + SEGS[3][1], K.net, 4.8], ['서버', SEGS[2][1], K.server, 5.2]];
+  let cx = 34;
+  gt(g, '구간별 합', cx, h - 36, { size: 28, weight: 700, color: K.dim, alpha: eo(p(u, 4.3, .4)) }); cx += 160;
+  sums.forEach(([lab, v, col, at]) => { cx += gchip(g, `${lab} ${v}ms`, cx, h - 46, col, { size: 30, alpha: eo(p(u, at, .5)), fillA: .2 }) + 18; });
+  if (u < 0) gt(g, `합계 ${total}ms`, w - 34, h - 36, { size: 26, mono: true, color: K.faint, align: 'right' });
+}
+
+// NT · a terminal on the player's PC: ping to the game server
+const NTW = 1000, NTH = 560;
+const PING = (() => {   // seq 1..25; 12..25 are the last 14 samples (0.4 s apart over ch03 local time 0..5.2); 3 lost in the spike
+  const rows = [];
+  for (let seq = 1; seq <= 25; seq++) {
+    const s = (seq - 12) * .4, lost = [21, 23, 24].includes(seq);
+    const v = seq < 12 ? 45 + 5 * Math.sin(seq * 2.3) : rttAt(s);
+    rows.push({ seq, s, lost, v });
+  }
+  const rec = rows.filter(r => !r.lost).map(r => r.v);
+  return { rows, min: Math.min(...rec), max: Math.max(...rec), avg: rec.reduce((a, b) => a + b, 0) / rec.length };
+})();
+const NT_STOP = 5.4;
+function drawNT(g, t) {
+  const w = NTW, h = NTH, u = t - 25;
+  chrome(g, w, h, { bg: K.term, bar: K.termBar, title: ['내 PC', K.client], sub: '터미널 · ping', right: 'zsh' });
+  const lines = [['$ ping game-kr-03', 'cmd']];
+  for (const r of PING.rows) {
+    if (r.s > Math.min(u, NT_STOP - .1) && r.seq >= 12) break;
+    lines.push(r.lost ? [`Request timeout for icmp_seq ${r.seq}`, 'lost'] : [`icmp_seq=${r.seq}  time=${r.v.toFixed(1)} ms`, r.v > 200 ? 'hot' : 'ok']);
+  }
+  if (u >= NT_STOP) {
+    lines.push(['^C', 'cmd'], ['--- game-kr-03 ping statistics ---', 'dim'], ['25 packets transmitted, 22 received, 12% packet loss', 'sum'],
+      [`rtt min/avg/max = ${PING.min.toFixed(1)}/${PING.avg.toFixed(1)}/${PING.max.toFixed(1)} ms`, 'sum2']);
+  }
+  const vis = lines.slice(-10), y0 = TB + 50, lh = 46;
+  vis.forEach(([s, kind], i) => {
+    const yy = y0 + i * lh;
+    const col = kind === 'cmd' ? K.hi : kind === 'lost' ? K.red : kind === 'hot' ? '#ff8f9b' : kind === 'dim' ? K.dim : kind === 'sum' ? K.tk : kind === 'sum2' ? K.hi : '#a9b3bf';
+    gt(g, s, 28, yy, { size: 30, mono: true, color: col, weight: kind === 'sum' || kind === 'lost' ? 700 : 500 });
+  });
+  if (u < NT_STOP || Math.floor(t * 2) % 2 === 0) { const last = vis.length; if (u >= NT_STOP) { g.fillStyle = K.hi; g.fillRect(28, y0 + last * lh - 26, 16, 32); } }
+}
+
+// SD · the server dashboard (Grafana-like)
+const SDW = 1700, SDH = 1000;
+const SD_P1 = { x: 16, y: 76, w: 1100, h: 474 }, SD_P2 = { x: 1132, y: 76, w: 552, h: 230 }, SD_P3 = { x: 1132, y: 320, w: 552, h: 230 };
+const SD_P4 = { x: 16, y: 566, w: 1100, h: 418 }, SD_P5 = { x: 1132, y: 566, w: 552, h: 202 }, SD_P6 = { x: 1132, y: 782, w: 552, h: 202 };
+const graphSD = { x0: SD_P1.x + 80, x1: SD_P1.x + SD_P1.w - 28, y0: SD_P1.y + SD_P1.h - 62, y1: SD_P1.y + 168 };
+function sdMode(t) { if (t >= 35.6 && t < 47.5) return ['ch4', t - 36]; if (t >= 47.5 && t < 58) return ['ch5', t - 47.5]; return ['idle', t]; }
+function dpanel(g, b, title, o = {}) {
+  rr(g, b.x, b.y, b.w, b.h, 6); g.fillStyle = o.fill || K.gpanel; g.fill(); g.lineWidth = o.lw || 1.5; g.strokeStyle = o.stroke || K.gborder; g.stroke();
+  if (title) gt(g, title, b.x + 22, b.y + 46, { size: 30, weight: 700, color: K.gtext });
+}
+function drawSD(g, t) {
+  const w = SDW, h = SDH, [mode, u] = sdMode(t);
+  const lagAt = mode === 'ch4' ? 3.4 : mode === 'ch5' ? 6.8 : 99;
+  const fn = mode === 'ch4' ? tickAt : mode === 'ch5' ? (s => s < 6.8 ? tickOk(s) : 120 + 45 * Math.sin(s * 3.1) + 15 * Math.sin(s * 8)) : tickOk;
+  const now = mode === 'idle' ? 10 : clamp(u, 0, 10), lag = now >= lagAt;
+  const base = mode === 'ch4' ? [21, 32, 2] : [21, 40, 0];
+  chrome(g, w, h, { bg: K.graf, bar: '#16181d', title: ['game-server', K.server], sub: '대시보드 · 채널 3', right: mode === 'ch4' ? `${clockStr(base, 0)} – ${clockStr(base, 10)}` : 'last 10s', stroke: rgba(K.server, .5) });
+  // P1 tick time
+  dpanel(g, SD_P1, '서버 틱 처리시간 (ms)', { stroke: lag ? rgba(K.red, .7) : K.gborder });
+  const v = fn(now);
+  gt(g, Math.round(v) + 'ms', SD_P1.x + SD_P1.w - 28, SD_P1.y + 132, { size: 110, weight: 800, mono: true, color: v > 75 ? K.red : K.ok, align: 'right' });
+  const kc = mode === 'ch4' ? eo(p(u, 1.75, .4)) : 0;
+  series(g, { ...graphSD, maxV: 200, fn, now, col: K.server, hot: v => v > 75, budget: 50, budgetLabel: '20Hz 예산 = 50ms', base: mode === 'ch4' ? base : null, cursor: { k: kc, s: 3.4, label: TICKETS[2].time } });
+  // P2 tick rate
+  dpanel(g, SD_P2, '틱레이트', { stroke: lag ? rgba(K.red, .7) : K.gborder });
+  gt(g, lag ? '8Hz' : '20Hz', SD_P2.x + SD_P2.w - 26, SD_P2.y + 196, { size: 140, weight: 800, mono: true, color: lag ? K.red : K.ok, align: 'right' });
+  if (lag) gt(g, '20Hz →', SD_P2.x + 24, SD_P2.y + 96, { size: 30, weight: 700, mono: true, color: K.red });
+  // P3 work queue
+  const depth = lag ? Math.min(48, 2 + Math.floor((now - lagAt) * 9)) : 2;
+  dpanel(g, SD_P3, '작업 큐', { stroke: lag ? rgba(K.red, .7) : K.gborder });
+  gt(g, depth + '건', SD_P3.x + SD_P3.w - 26, SD_P3.y + 120, { size: 76, weight: 800, mono: true, color: lag ? K.red : K.ok, align: 'right' });
+  for (let i = 0; i < Math.min(depth, 24); i++) { g.fillStyle = lag ? rgba(K.server, .75) : rgba(K.server, .5); rr(g, SD_P3.x + 24 + i * 21, SD_P3.y + 160, 16, 44, 3); g.fill(); }
+  // P4 channel grid
+  dpanel(g, SD_P4, '채널 3 · 24명', { stroke: lag ? rgba(K.red, .7) : K.gborder });
+  gt(g, '플레이어별 반응 지연', SD_P4.x + SD_P4.w - 24, SD_P4.y + 44, { size: 24, color: K.dim, align: 'right' });
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) {
+    const i = r * 6 + c, x = SD_P4.x + 130 + c * 170, y = SD_P4.y + 110 + r * 66;
+    const late = lag && now >= lagAt + (i % 5) * .03;
+    gdot(g, x, y, 21, late ? K.red : K.ok, late ? 1 : .85);
+    if (late && Math.floor(t * 3 + i) % 2 === 0) gt(g, '!', x + 30, y - 6, { size: 30, weight: 800, color: K.red });
+  }
+  gchip(g, lag ? '전원 동시에 반응 지연' : '전원 정상', SD_P4.x + SD_P4.w / 2, SD_P4.y + SD_P4.h - 40, lag ? K.red : K.ok, { size: 30, align: 'center', mono: false, weight: 800, fillA: .2 });
+  // P5 / P6 client-side numbers, still normal
+  dpanel(g, SD_P5, '클라 FPS (p50)');
+  gt(g, '60', SD_P5.x + SD_P5.w - 26, SD_P5.y + 170, { size: 110, weight: 800, mono: true, color: K.ok, align: 'right' });
+  dpanel(g, SD_P6, '전송 핑 (p50)');
+  gt(g, '42ms', SD_P6.x + SD_P6.w - 26, SD_P6.y + 170, { size: 110, weight: 800, mono: true, color: K.ok, align: 'right' });
+}
+
+// SS · the server's socket view (kernel TCP RTT)
+const SSW = 820, SSH = 440;
+function drawSS(g, t) {
+  const w = SSW, h = SSH, u = t - 47.5, ph = phaseAt(Math.max(u, 0)), hot = ph.tp > 150;
+  chrome(g, w, h, { bg: K.term, bar: K.termBar, title: ['소켓', K.net], sub: '서버 · 커널', right: 'ss -ti', stroke: rgba(K.net, .6) });
+  gt(g, '$ ss -ti dst 203.0.113.24', 26, TB + 48, { size: 27, mono: true, color: K.hi });
+  gt(g, 'ESTAB 0 0 10.0.3.7:7000 203.0.113.24:51734', 26, TB + 90, { size: 25, mono: true, color: '#a9b3bf' });
+  const pre = '  cubic rtt:';
+  gt(g, pre, 26, TB + 132, { size: 27, mono: true, color: '#a9b3bf' });
+  gt(g, ph.rtt, 26 + mw(g, pre, 27, 500, true), TB + 132, { size: 27, mono: true, weight: 800, color: hot ? K.red : K.ok });
+  g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(0, TB + 160, w, 1.5);
+  gt(g, '전송 핑', 26, h - 76, { size: 34, weight: 800, color: K.net });
+  gt(g, 'TCP RTT · 앱 루프와 무관', 26, h - 32, { size: 26, color: K.dim });
+  gt(g, ph.tp + 'ms', w - 26, h - 36, { size: 96, weight: 800, mono: true, color: hot ? K.red : K.ok, align: 'right' });
+}
+
+// QP · the game-logic queue in front of the tick
+const QPW = 900, QPH = 440;
+const QP_LANE = { x: 34, y: 196, w: 640, h: 96 }, QP_TICK = { x: 700, y: 186, w: 172, h: 116 };
+const qTailX = d => QP_LANE.x + QP_LANE.w - 10 - d * 46 - 26;
+function drawQP(g, t) {
+  const w = QPW, h = QPH, u = Math.max(0, t - 47.5), ph = phaseAt(u), d = qDepth(u), lag = ph.name === '서버렉';
+  chrome(g, w, h, { bg: K.graf, bar: '#16181d', title: ['게임 로직 큐 → 틱', K.server], sub: '', right: 'game-server', stroke: rgba(lag ? K.red : K.server, .6) });
+  gt(g, `대기 ${d}건`, 34, TB + 64, { size: 34, weight: 800, mono: true, color: lag ? K.red : K.hi });
+  gt(g, '먼저 온 작업부터 틱이 처리', w - 30, TB + 64, { size: 26, color: K.dim, align: 'right' });
+  rr(g, QP_LANE.x, QP_LANE.y, QP_LANE.w, QP_LANE.h, 10); g.fillStyle = 'rgba(255,255,255,0.03)'; g.fill(); g.lineWidth = 1.5; g.strokeStyle = K.gborder; g.stroke();
+  for (let j = 0; j < d; j++) { const x = QP_LANE.x + QP_LANE.w - 10 - (j + 1) * 46; rr(g, x + 4, QP_LANE.y + 14, 38, QP_LANE.h - 28, 5); g.fillStyle = rgba(K.server, lag ? .7 : .45); g.fill(); }
+  const beat = (t * 20) % 1 < .3;
+  rr(g, QP_TICK.x, QP_TICK.y, QP_TICK.w, QP_TICK.h, 12); g.fillStyle = rgba(K.server, beat && !lag ? .32 : .14); g.fill(); g.lineWidth = 2.5; g.strokeStyle = K.server; g.stroke();
+  gt(g, '틱', QP_TICK.x + QP_TICK.w / 2, QP_TICK.y + 56, { size: 38, weight: 800, color: K.server, align: 'center' });
+  gt(g, lag ? '8Hz' : '20Hz', QP_TICK.x + QP_TICK.w / 2, QP_TICK.y + 96, { size: 28, weight: 700, mono: true, color: lag ? K.red : K.dim, align: 'center' });
+  gt(g, '앱 핑은 쌓인 작업 뒤에서 기다린다', 34, h - 36, { size: 28, weight: 700, color: lag ? K.server : K.faint });
+}
+
+// TK · a player's report (helpdesk ticket)
+const TKW = 900, TKH = 300;
+function drawTK(i) {
+  return (g, t) => {
+    const T = TICKETS[i], w = TKW, h = TKH;
+    chrome(g, w, h, { bg: K.tkBg, bar: K.tkBar, title: ['문의 ' + T.id, K.tk], sub: '플레이어 제보', stroke: rgba(K.tk, .7), lw: 2.5 });
+    gchip(g, '접수', w - 26, TB / 2, K.tk, { size: 22, align: 'right', mono: false });
+    gt(g, '“' + T.l1, 30, TB + 66, { size: 36, weight: 800, color: K.hi });
+    gt(g, T.l2 + '”', 46, TB + 116, { size: 34, weight: 600, color: K.text });
+    g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(0, h - 74, w, 1.5);
+    gt(g, T.time, 30, h - 26, { size: 34, weight: 800, mono: true, color: K.tk });
+    gt(g, T.meta, 30 + mw(g, T.time + '  ', 34, 800, true), h - 28, { size: 28, color: K.dim });
+  };
+}
+
+// RB · the runbook: one table
+const RBW = 1400, RBH = 820;
+const RB_COLS = [44, 500, 720, 930, 1170];
+const RB_ROWS = [['클라렉', 1, 0, '·', ['나만']], ['네트워크렉', 0, 1, 1, ['나 · 같은 망', '(서버 회선이면 전체)']], ['서버렉', 0, 0, 1, ['채널 전체']]];
+const RB_COL = [K.client, K.net, K.server];
+const rbRowY = r => 330 + r * 128;
+function drawRB(g, t) {
+  const w = RBW, h = RBH, u = t - 58;
+  chrome(g, w, h, { bg: K.docBg, bar: K.docBar, title: ['lag-runbook.md', K.hi], sub: '렉 판별', right: 'Markdown' });
+  gt(g, '렉 판별표', 44, TB + 82, { size: 50, weight: 800, color: K.hi });
+  gt(g, '구간별 지표가 어떻게 움직이는지', 44 + mw(g, '렉 판별표  ', 50, 800), TB + 80, { size: 30, color: K.dim });
+  const kh = eo(p(u, 4.4, .5));
+  ['', '프레임타임', '전송 핑', '앱 핑', '범위'].forEach((c, i) => gt(g, c, RB_COLS[i], 236, { size: 30, weight: 700, color: K.dim, align: i ? 'center' : 'left', alpha: kh }));
+  g.save(); g.globalAlpha = kh; g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(30, 258, w - 60, 2); g.restore();
+  RB_ROWS.forEach((row, r) => {
+    const k = eo(p(u, 4.75 + r * .35, .5)); if (k <= 0) return;
+    const y = rbRowY(r);
+    g.save(); g.globalAlpha = k;
+    g.fillStyle = rgba(RB_COL[r], .07); g.fillRect(30, y - 58, w - 60, 110);
+    gt(g, row[0], RB_COLS[0], y + 12, { size: 40, weight: 800, color: RB_COL[r] });
+    [1, 2, 3].forEach(c => {
+      const v = row[c], x = RB_COLS[c];
+      if (v === 1) gt(g, '▲ 튐', x, y + 12, { size: 38, weight: 800, color: K.red, align: 'center' });
+      else if (v === 0) gt(g, '정상', x, y + 12, { size: 34, weight: 700, color: K.ok, align: 'center' });
+      else gt(g, '오를 수 있음', x, y + 10, { size: 28, color: K.dim, align: 'center' });
+    });
+    const sc = row[4];
+    gt(g, sc[0], RB_COLS[4], sc[1] ? y - 4 : y + 12, { size: 34, weight: 800, color: K.hi, align: 'center' });
+    if (sc[1]) gt(g, sc[1], RB_COLS[4], y + 36, { size: 26, color: K.dim, align: 'center' });
+    g.fillStyle = 'rgba(255,255,255,0.07)'; g.fillRect(30, y + 52, w - 60, 1.5);
+    g.restore();
+  });
+  const ko = eo(p(u, 6.2, .6));
+  if (ko > 0) {
+    g.save(); g.globalAlpha = ko;
+    g.fillStyle = rgba(K.ok, .12); g.fillRect(30, h - 132, w - 60, 96); g.fillStyle = K.ok; g.fillRect(30, h - 132, 6, 96);
+    gt(g, '보는 순서: 프레임타임 → 전송 핑 → 앱 핑 · 영향 범위', 62, h - 70, { size: 40, weight: 800, color: K.hi });
+    g.restore();
+  }
+}
+
+// ── artifact registry + 3D meshes ────────────────────────────
+// pos/yaw: a gently curved wall — client side on the left, the internet in the middle, the server on the right, the runbook last.
+const SPEC = {
+  FT: { w: FTW, h: FTH, pos: [-15, 5.8, 0], yaw: .12, col: K.client, draw: drawFT, live: [[0, 73.5]], fps: 30 },
+  TR: { w: TRW, h: TRH, pos: [1, 10.7, -2.6], yaw: 0, col: K.net, draw: drawTR, live: [[5, 11.5]] },
+  NT: { w: NTW, h: NTH, pos: [-2.8, 3.05, 2.3], yaw: .05, col: K.net, draw: drawNT, live: [[25, 36]] },
+  SD: { w: SDW, h: SDH, pos: [18.5, 7.6, -.4], yaw: -.1, col: K.server, draw: drawSD, live: [[0, 73.5]], fps: 30 },
+  SS: { w: SSW, h: SSH, pos: [5.4, 2.5, 2.6], yaw: 0, col: K.net, draw: drawSS, live: [[47.5, 58]] },
+  QP: { w: QPW, h: QPH, pos: [14.9, 2.5, 2.6], yaw: 0, col: K.server, draw: drawQP, live: [[47.5, 73.5]] },
+  RB: { w: RBW, h: RBH, pos: [36.5, 6.3, 1.0], yaw: -.13, col: K.ok, draw: drawRB, live: [[58, 65]] },
+  TK0: { w: TKW, h: TKH, pos: [0, 0, 0], yaw: 0, col: K.tk, draw: drawTK(0), live: [] },
+  TK1: { w: TKW, h: TKH, pos: [0, 0, 0], yaw: 0, col: K.tk, draw: drawTK(1), live: [] },
+  TK2: { w: TKW, h: TKH, pos: [0, 0, 0], yaw: 0, col: K.tk, draw: drawTK(2), live: [] },
+};
+const ORDER = Object.keys(SPEC);
+const RIM_M = 44;
+const rimMat = () => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uSize: { value: new THREE.Vector2() }, uM: { value: RIM_M }, uK: { value: 0 }, uC: { value: new THREE.Color() }, uS: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `varying vec2 vUv; uniform vec2 uSize; uniform float uM; uniform float uK; uniform vec3 uC; uniform float uS;
+    float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
+    void main(){
+      vec2 full = uSize + 2. * uM; vec2 p = (vUv - .5) * full;
+      float d = sdRR(p, uSize * .5 - 2., 12.);
+      float rim = exp(-abs(d) / 2.2);
+      float outer = d > 0. ? exp(-d / 18.) * .5 : 0.;
+      float sweep = exp(-pow((p.x / full.x - p.y / full.y * .4) - uS, 2.) / .004);
+      vec3 c = uC * (rim * (.7 + 1.5 * sweep) + outer);
+      gl_FragColor = vec4(c * uK, 1.);
+    }`,
+});
+const ART = {};
+for (const id of ORDER) {
+  const s = SPEC[id], ww = s.w / 100, hh = s.h / 100;
+  const c = mkCanvas(Math.round(s.w * TS), Math.round(s.h * TS)), g = c.getContext('2d');
+  const tex = canvasTex(c);
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: .02, side: THREE.FrontSide, fog: false, color: new THREE.Color(.97, .97, .97) });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), mat); mesh.renderOrder = 5; mesh.position.z = .061;
+  const slabMat = new THREE.MeshBasicMaterial({ color: 0x10141a, transparent: true, fog: false });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(ww - .06, hh - .06, .12), slabMat); slab.renderOrder = 4;
+  const rm = rimMat(); rm.uniforms.uSize.value.set(s.w, s.h);
+  const rim = new THREE.Mesh(new THREE.PlaneGeometry(ww + 2 * RIM_M / 100, hh + 2 * RIM_M / 100), rm); rim.position.z = .07; rim.renderOrder = 6;
+  grp.add(slab); grp.add(mesh); grp.add(rim);
+  scene.add(grp);
+  const reflMat = new THREE.MeshBasicMaterial({ map: tex, alphaMap: reflAlpha, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, color: new THREE.Color(.55, .58, .62) });
+  const refl = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), reflMat); refl.renderOrder = 1; scene.add(refl);
+  const shMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, fog: false });
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(ww * 1.15, 2.6), shMat); shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; scene.add(shadow);
+  ART[id] = { id, s, c, g, tex, grp, mesh, mat, slab, slabMat, rim, rm, refl, reflMat, shadow, shMat, key: null, pos: s.pos.slice(), yaw: s.yaw };
+}
+// design px on an artifact → world point (uses its current placement)
+function artPt(id, x, y, z = .07) {
+  const a = ART[id]; a.grp.updateMatrixWorld();
+  return a.grp.localToWorld(new THREE.Vector3((x / a.s.w - .5) * a.s.w / 100, (.5 - y / a.s.h) * a.s.h / 100, z));
+}
+function liveT(iv, t) {
+  if (!iv.length) return 0;
+  let last = iv[0][0];
+  for (const [a, b] of iv) { if (t < a) return last; if (t <= b) return t; last = b; }
+  return last;
+}
+
+// ── camera poses ─────────────────────────────────────────────
+// fr(): put world point c at screen (sx, sy) with s screen px per design px, looking with yaw/pitch (deg).
+function fr(c, s, sx, sy, yawDeg = 0, pitchDeg = 0) {
+  const yaw = yawDeg * Math.PI / 180, pit = pitchDeg * Math.PI / 180;
+  const dir = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pit), -Math.sin(pit), -Math.cos(yaw) * Math.cos(pit));
+  const d = H / (200 * s * TAN), ppu = s * 100;
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+  const C = new THREE.Vector3(...c);
+  const pos = C.clone().addScaledVector(dir, -d).addScaledVector(right, (W / 2 - sx) / ppu).addScaledVector(up, (sy - H / 2) / ppu);
+  return { pos, tgt: pos.clone().addScaledVector(dir, d), yaw };
+}
+const raw = (pos, tgt) => ({ pos: new THREE.Vector3(...pos), tgt: new THREE.Vector3(...tgt) });
+// a point that lands at screen (sx, sy) for a pose, at the depth where 1 design px = s screen px (for the ticket cards)
+function onPose(pose, sx, sy, s) {
+  const dir = pose.tgt.clone().sub(pose.pos).normalize();
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+  const L = H / (200 * s * TAN), half = L * TAN;
+  return pose.pos.clone().addScaledVector(dir, L).addScaledVector(right, (sx - W / 2) / (H / 2) * half).addScaledVector(up, (H / 2 - sy) / (H / 2) * half);
+}
+const S_ = SPEC, deg = r => r * 180 / Math.PI;
+const P_OV = raw([10, 21, 64], [10, 12, -6]), P_OV2 = raw([10, 20, 61], [10, 11.7, -6]);
+const P_1W = fr([2, 7.4, 0], .335, 960, 610, 0, 4), P_1W2 = fr([2, 7.4, 0], .35, 960, 610, 0, 4);
+const P_1T = fr(S_.TR.pos, .84, 960, 600, 0, 2), P_1T2 = fr(S_.TR.pos, .86, 960, 600, 0, 2);
+const P_2 = fr(S_.FT.pos, .72, 640, 610, deg(S_.FT.yaw), 2), P_2B = fr(S_.FT.pos, .74, 640, 610, deg(S_.FT.yaw) - 1, 2);
+const P_3B = fr(S_.NT.pos, .94, 640, 600, deg(S_.NT.yaw), 2), P_3B2 = fr(S_.NT.pos, .96, 640, 600, deg(S_.NT.yaw) - 1, 2);
+const P_4 = fr(S_.SD.pos, .68, 640, 610, deg(S_.SD.yaw), 2), P_4B = fr(S_.SD.pos, .7, 640, 610, deg(S_.SD.yaw) + 1, 2);
+const P_5 = fr([5.2, 2.5, 1.3], .62, 960, 418, 0, 5), P_5B = fr([5.2, 2.5, 1.3], .63, 960, 418, 0, 5);
+const P_6A = fr([3, 6, 0], .245, 1272, 610, 0, 9), P_6A2 = fr([3, 6, 0], .25, 1272, 610, 0, 9);
+const P_6B = fr(S_.RB.pos, .88, 1272, 600, deg(S_.RB.yaw), 2), P_6B2 = fr(S_.RB.pos, .9, 1272, 600, deg(S_.RB.yaw) + 1, 2);
+const P_OUT = raw([12, 30, 63], [12, 2.5, -6]), P_OUT2 = raw([12, 28.5, 60], [12, 2.5, -6]);
+// static design-px point on an artifact (from its spec placement) for framing
+function artLocal(id, x, y) {
+  const S = SPEC[id], lx = (x - S.w / 2) / 100, ly = (S.h / 2 - y) / 100;
+  return [S.pos[0] + lx * Math.cos(S.yaw), S.pos[1] + ly, S.pos[2] - lx * Math.sin(S.yaw)];
+}
+// vertical cut: [v0, v1, t0, t1] maps vertical time to the wide page's time
+const SEG = [[0, 3.4, 6.3, 10.6], [3.4, 7.6, 16.5, 20.7], [7.6, 11.8, 27.4, 31.6], [11.8, 15.8, 38.4, 42.4], [15.8, 19.4, 54.2, 57.8], [19.4, 21.5, 57.8, 57.9]];
+function srcT(v) { for (const [a, b, c, d] of SEG) if (v <= b) return lerp(c, d, clamp((v - a) / (b - a))); return SEG[SEG.length - 1][3]; }
+const VHEAD = [
+  [3.4, 7.6, '01', '클라렉', '내 컴퓨터가 제때 프레임을 못 그리는 경우'],
+  [7.6, 11.8, '02', '네트워크렉', '패킷이 늦게 오가거나 사라지는 경우'],
+  [11.8, 15.8, '03', '서버렉', '서버가 틱 안에 일을 못 끝내는 경우'],
+  [15.8, 19.4, '04', '핑 두 개로 가르기', '전송 핑은 커널 TCP RTT, 앱 핑은 게임 로직을 거친다'],
+];
+const END = 19.4;
+const V_TR = fr(artLocal('TR', 800, 420), .64, 540, 930, 0, 2), V_TR2 = fr(artLocal('TR', 800, 420), .66, 540, 930, 0, 2);
+const V_FA = fr(artLocal('FT', 400, 540), 1.2, 540, 960, deg(S_.FT.yaw), 2), V_FA2 = fr(artLocal('FT', 400, 540), 1.23, 540, 960, deg(S_.FT.yaw) - .5, 2);
+const V_FB = fr(artLocal('FT', 1110, 540), 1.2, 540, 960, deg(S_.FT.yaw), 2), V_FB2 = fr(artLocal('FT', 1110, 540), 1.23, 540, 960, deg(S_.FT.yaw) + .5, 2);
+const V_SD = fr(artLocal('SD', 566, 530), .88, 540, 960, deg(S_.SD.yaw), 2), V_SD2 = fr(artLocal('SD', 566, 530), .9, 540, 960, deg(S_.SD.yaw) + .5, 2);
+const V_SS = fr(artLocal('SS', 410, 220), 1.22, 540, 840, 0, 3), V_SS2 = fr(artLocal('SS', 410, 220), 1.24, 540, 840, 0, 3);
+const V_QP = fr(artLocal('QP', 450, 220), 1.12, 540, 840, 0, 3), V_QP2 = fr(artLocal('QP', 450, 220), 1.14, 540, 840, 0, 3);
+const V_END = fr(artLocal('SD', 300, 900), .3, 540, 1500, -6, 12);
+const CAM = [
+  [0.0, V_TR], [3.0, V_TR2], [3.9, V_FA], [7.2, V_FA2], [8.1, V_FB], [11.4, V_FB2], [12.4, V_SD], [15.4, V_SD2],
+  [16.2, V_SS], [17.3, V_SS2], [18.0, V_QP], [19.3, V_QP2], [21.5, V_END],
+];
+const CAM_T = CAM.map(k => k[0]);
+const CAM_C = ['pos', 'tgt'].flatMap(key => ['x', 'y', 'z'].map(ax => {
+  const y = CAM.map(k => k[1][key][ax]), n = y.length, d = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) d.push((y[i + 1] - y[i]) / (CAM_T[i + 1] - CAM_T[i]));
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) continue;
+    const h0 = CAM_T[i] - CAM_T[i - 1], h1 = CAM_T[i + 1] - CAM_T[i], w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+    m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+  }
+  return { y, m };
+}));
+function camAt(t) {
+  const n = CAM.length;
+  t = clamp(t, CAM_T[0], CAM_T[n - 1]);
+  let i = 0; while (i < n - 2 && t > CAM_T[i + 1]) i++;
+  const h = CAM_T[i + 1] - CAM_T[i], u = (t - CAM_T[i]) / h, u2 = u * u, u3 = u2 * u;
+  const v = CAM_C.map(({ y, m }) => y[i] * (2 * u3 - 3 * u2 + 1) + m[i] * h * (u3 - 2 * u2 + u) + y[i + 1] * (-2 * u3 + 3 * u2) + m[i + 1] * h * (u3 - u2));
+  return { pos: new THREE.Vector3(v[0], v[1], v[2]), tgt: new THREE.Vector3(v[3], v[4], v[5]) };
+}
+// ticket cards pop in front of the screen they belong to, on the right third
+const TK_POSE = [P_2, P_2, P_4].map((pose, i) => ({ pos: onPose(pose, 1500, 560, .74), yaw: pose.yaw }));
+
+// focus: the screens the current step reads stay bright, the rest of the wall dims
+const FOCUS = [[9.7, 14.0, ['TR']], [14.0, 31.0, ['FT', 'TK0', 'TK1']], [31.0, 36.0, ['NT', 'FT']], [36.0, 47.5, ['SD', 'TK2']], [47.5, 58.0, ['FT', 'SS', 'QP']], [62.6, 68.0, ['RB']]];
+function brightness(id, t) {
+  let any = 0, foc = 0;
+  for (const [a, b, ids] of FOCUS) { const w = win(t, a, b, .6); any = Math.max(any, w); if (ids.includes(id)) foc = Math.max(foc, w); }
+  return 1 - any * (1 - foc) * .66;
+}
+// ── presence and placement per artifact (pure in t) ──────────
+const OVER = t => Math.max(1 - p(t, 3.9, 1.0), eo(p(t, OUT0 + .2, 1.6)));
+function place(id, t) {
+  const S = SPEC[id]; let k = 1, rimK = 0, rimCol = S.col, pos = S.pos.slice(), yaw = S.yaw;
+  const ov = OVER(t);
+  switch (id) {
+    case 'FT': {
+      const [mode, u] = ftMode(t);
+      const hitch = mode === 'client' && hold(u, HITCH) !== u;
+      rimK = .5 * win(t, 14.1, 35.6) + 1.0 * bump(t, 6.3, 7.1) + 1.0 * bump(t, 8.2, 9.0) + .9 * bump(t, 58.2, 59.7) + .5 * win(t, 47.6, 57.8);
+      rimCol = hitch ? K.red : K.client; break;
+    }
+    case 'TR': rimK = .55 * win(t, 5.2, 13.9) + .9 * bump(t, 61.6, 63.0); break;
+    case 'NT': k = Math.max(eo(p(t, 30.6, .7)) * (1 - eo(p(t, 47.0, .6))) + eo(p(t, 58.2, .7)) * (t > 58 ? 1 : 0), ov * .9); rimK = .6 * win(t, 30.8, 35.8) + .9 * bump(t, 59.3, 60.7);
+      rimCol = t > 25 && t < 36 ? K.red : K.net; break;
+    case 'SD': {
+      const [mode, u] = sdMode(t), lag = (mode === 'ch4' && u >= 3.4) || (mode === 'ch5' && u >= 6.8);
+      rimK = .5 * win(t, 36.1, 47.3) + 1.0 * bump(t, 7.2, 8.0) + .8 * bump(t, 60.4, 61.8); rimCol = lag ? K.red : K.server; break;
+    }
+    case 'SS': k = Math.max(eo(p(t, 47.6, .7)), ov * .9); rimK = .6 * win(t, 47.8, 57.9); rimCol = phaseAt(Math.max(0, t - 47.5)).tp > 150 && t < 58 ? K.red : K.net; break;
+    case 'QP': k = Math.max(eo(p(t, 47.75, .7)), ov * .9); rimK = .6 * win(t, 47.9, 57.9) + .9 * bump(t, 60.4, 61.8); rimCol = phaseAt(Math.max(0, t - 47.5)).name === '서버렉' && t < 58 ? K.red : K.server; break;
+    case 'RB': k = Math.max(eo(p(t, 61.8, .8)), ov * .9); rimK = .6 * win(t, 62.2, 67.8); break;
+    case 'TK0': case 'TK1': case 'TK2': {
+      const i = +id[2], S0 = TICKETS[i].S, tp = TK_POSE[i];
+      k = clamp(eback(p(t, S0 + .15, .55))) * (1 - eo(p(t, S0 + 2.0, .45)));
+      pos = [tp.pos.x, tp.pos.y - (1 - clamp(eback(p(t, S0 + .15, .55)))) * .4, tp.pos.z]; yaw = tp.yaw; rimK = 1.1; break;
+    }
+  }
+  if (t < 5.4 && ['NT', 'SS', 'QP', 'RB'].includes(id)) k = Math.max(k, .8 * (1 - p(t, 3.9, 1.0)));
+  return { k, rimK: clamp(rimK, 0, 1.6), rimCol, pos, yaw };
+}
+
+// ── thick glowing lines (screen-space quads) ─────────────────
+const MAXSEG = 1200;
+const lineGeo = new THREE.InstancedBufferGeometry();
+lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+lineGeo.setIndex([0, 1, 2, 0, 2, 3]);
+const iA = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iB = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3);
+const iC = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG * 3), 3), iWd = new THREE.InstancedBufferAttribute(new Float32Array(MAXSEG), 1);
+[iA, iB, iC, iWd].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+lineGeo.setAttribute('iA', iA); lineGeo.setAttribute('iB', iB); lineGeo.setAttribute('iC', iC); lineGeo.setAttribute('iW', iWd);
+const lineMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uRes: { value: new THREE.Vector2(W, H) } },
+  vertexShader: `attribute vec3 iA; attribute vec3 iB; attribute vec3 iC; attribute float iW; uniform vec2 uRes; varying vec3 vC; varying float vS;
+    void main(){
+      vec4 a = projectionMatrix * viewMatrix * vec4(iA, 1.);
+      vec4 b = projectionMatrix * viewMatrix * vec4(iB, 1.);
+      const float N = .12;
+      if (a.w < N && b.w < N) { gl_Position = vec4(2., 2., 2., 1.); vC = vec3(0.); vS = 0.; return; }
+      if (a.w < N) a = mix(a, b, (N - a.w) / (b.w - a.w));
+      if (b.w < N) b = mix(b, a, (N - b.w) / (a.w - b.w));
+      vec2 sa = a.xy / a.w * uRes * .5, sb = b.xy / b.w * uRes * .5;
+      vec2 dir = sb - sa; float L = length(dir); dir = L > 1e-4 ? dir / L : vec2(1., 0.);
+      vec2 n = vec2(-dir.y, dir.x);
+      vec4 c = mix(a, b, position.x);
+      vec2 off = (n * position.y + dir * (position.x * 2. - 1.) * .5) * iW;
+      c.xy += off / (uRes * .5) * c.w;
+      gl_Position = c; vC = iC; vS = position.y;
+    }`,
+  fragmentShader: `varying vec3 vC; varying float vS; void main(){ float f = exp(-vS * vS * 3.5); gl_FragColor = vec4(vC * f, 1.); }`,
+});
+const lineMesh = new THREE.Mesh(lineGeo, lineMat); lineMesh.frustumCulled = false; lineMesh.renderOrder = 7; scene.add(lineMesh);
+let NS = 0;
+const _c = new THREE.Color();
+function seg(a, b, col, inten, wd) {
+  if (NS >= MAXSEG || inten <= .002) return;
+  _c.set(col);
+  iA.array.set([a.x, a.y, a.z], NS * 3); iB.array.set([b.x, b.y, b.z], NS * 3);
+  iC.array.set([_c.r * inten, _c.g * inten, _c.b * inten], NS * 3); iWd.array[NS] = wd; NS++;
+}
+function bez(P, u) {
+  const [a, b, c, d] = P, v = 1 - u;
+  return new THREE.Vector3(
+    v * v * v * a.x + 3 * v * v * u * b.x + 3 * v * u * u * c.x + u * u * u * d.x,
+    v * v * v * a.y + 3 * v * v * u * b.y + 3 * v * u * u * c.y + u * u * u * d.y,
+    v * v * v * a.z + 3 * v * v * u * b.z + 3 * v * u * u * c.z + u * u * u * d.z);
+}
+function curve(P, k, col, base, wd = 3, hot = -1, dash = false, sub = 36) {
+  if (k <= 0) return;
+  let prev = bez(P, 0);
+  for (let i = 1; i <= sub; i++) {
+    const u = k * i / sub, q = bez(P, u);
+    if (!dash || i % 2) { const heat = hot >= 0 ? Math.exp(-Math.pow((u - hot) * 9, 2)) : 0; seg(prev, q, col, base + heat * 1.6, wd + heat * 3); }
+    prev = q;
+  }
+}
+const lift = (a, b, up = 1.5, out = 1.2, dz = .6) => {
+  const dx = b.x - a.x, sgn = Math.sign(dx) || 1;
+  return [a, new THREE.Vector3(a.x + sgn * Math.max(out, Math.abs(dx) * .3), a.y + up, a.z + dz), new THREE.Vector3(b.x - sgn * Math.max(out, Math.abs(dx) * .3), b.y + up, b.z + dz), b];
+};
+const straight = (a, b) => [a, a.clone().lerp(b, .33), a.clone().lerp(b, .66), b];
+
+// ── data chips: the thing in flight (a timestamp, a skill packet, a ping) ─────
+function chipTex(label, col) {
+  const size = 34, padX = 22;
+  const c0 = mkCanvas(8, 8).getContext('2d'); c0.font = `700 ${size}px ${MONO}`;
+  const w = Math.ceil(c0.measureText(label).width + padX * 2 + 30), h = 64;
+  const c = mkCanvas(w * 2, h * 2), g = c.getContext('2d'); g.scale(2, 2);
+  rr(g, 2, 2, w - 4, h - 4, 32); g.fillStyle = '#0a0e15'; g.fill(); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
+  gdot(g, padX + 4, h / 2, 8, col);
+  g.font = `700 ${size}px ${MONO}`; g.fillStyle = '#f2f5fa'; g.textBaseline = 'middle'; g.fillText(label, padX + 22, h / 2 + 2);
+  const t = canvasTex(c, false); return { t, aspect: w / h };
+}
+const CHIPS = [];
+function addChip(label, col, size, posFn) {
+  const { t, aspect } = chipTex(label, col);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  sp.renderOrder = 9; sp.center.set(.5, .5); scene.add(sp);
+  const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(col).multiplyScalar(1.6), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+  gl.renderOrder = 8; scene.add(gl);
+  CHIPS.push({ sp, gl, size, aspect, label, col, posFn });
+}
+// travel along a list of [t0, t1, pathFn] legs; returns {q, a} or null
+function legs(L) {
+  return t => {
+    for (const [a, b, P, hold] of L) {
+      if (t >= a && t < b) { const r = (t - a) / (b - a); return { q: hold ? P() : bez(P(), eio(r)) }; }
+    }
+    return null;
+  };
+}
+// anchors
+const FT_EDGE = (y = 640) => artPt('FT', FTW, y);
+const SD_EDGE = (y = 330) => artPt('SD', 0, y);
+const wire1 = () => lift(FT_EDGE(), SD_EDGE(), 2.4, 2.5, 1.4);
+const wire1back = () => { const P = wire1(); return [P[3], P[2], P[1], P[0]]; };
+const ME = () => artPt('FT', meX(8.8), meY(8.8));
+const TICK_SD = () => artPt('SD', graphSD.x1 - 60, graphSD.y0 - 60);
+// ch01: one reaction
+addChip('스킬 입력', K.client, .95, legs([
+  [6.5, 6.95, () => straight(ME(), FT_EDGE())],
+  [6.95, 7.4, wire1],
+  [7.4, 7.85, () => straight(SD_EDGE(), TICK_SD())],
+]));
+addChip('결과', K.server, .95, legs([
+  [7.85, 8.3, wire1back],
+  [8.3, 8.8, () => straight(FT_EDGE(), ME())],
+]));
+// ch02–04: the report's timestamp flies to the graph
+const TK_TIME = i => () => artPt('TK' + i, 90, TKH - 38);
+const CURSOR_PT = [() => artPt('FT', lerp(graphA.x0, graphA.x1, .32), graphA.y1 - 20), () => artPt('FT', lerp(graphB.x0, graphB.x1, .4), graphB.y1 - 20), () => artPt('SD', lerp(graphSD.x0, graphSD.x1, .34), graphSD.y1 - 20)];
+const tkPath = i => () => lift(TK_TIME(i)(), CURSOR_PT[i](), 1.6, 1, .8);
+TICKETS.forEach((T, i) => addChip(T.time, K.tk, .62, legs([[T.S + .95, T.S + 1.8, tkPath(i)]])));
+// ch05: pings
+const C5 = 47.5;
+const CL_T = () => artPt('FT', FTW, 560), CL_A = () => artPt('FT', FTW, 820);
+const SO_T = () => artPt('SS', 0, 150), SO_A = () => artPt('SS', 0, 262), SO_A2 = () => artPt('SS', SSW, 262);
+const Q_TAIL = d => () => artPt('QP', qTailX(d), QP_LANE.y + QP_LANE.h / 2), Q_TICK = () => artPt('QP', QP_TICK.x + QP_TICK.w / 2, QP_TICK.y + QP_TICK.h / 2);
+const wireT = () => straight(CL_T(), SO_T());
+const wireA = () => straight(CL_A(), SO_A());
+PH.forEach(ph => {
+  const T0 = C5 + ph.t0 + .3, w = ph.wire, d = ph.name === '서버렉' ? 12 : 2;
+  addChip('전송 핑', K.net, .62, legs([
+    [T0, T0 + w, wireT],
+    [T0 + w, T0 + w + .1, () => [SO_T(), SO_T(), SO_T(), SO_T()], true],
+    [T0 + w + .1, T0 + 2 * w + .1, () => { const P = wireT(); return [P[3], P[2], P[1], P[0]]; }],
+  ]));
+  const tA = [w, w + .25, w + .25 + ph.wait, w + .45 + ph.wait, 2 * w + .45 + ph.wait].map(x => T0 + x);
+  addChip('앱 핑', K.server, .62, legs([
+    [T0, tA[0], wireA],
+    [tA[0], tA[1], () => straight(SO_A(), Q_TAIL(d)())],
+    [tA[1], tA[2], () => { const q = Q_TAIL(d)(); return [q, q, q, q]; }, true],
+    [tA[2], tA[3], () => straight(Q_TAIL(d)(), Q_TICK())],
+    [tA[3], tA[4], () => lift(Q_TICK(), CL_A(), 2.2, 2, 1.2)],
+  ]));
+});
+
+// floor labels: which side of the wall is which
+const FLOOR_LABELS = [];
+function floorLabel(lines, col, wU) {
+  const c = mkCanvas(1400, 260), g = c.getContext('2d');
+  const paint = () => { g.clearRect(0, 0, 1400, 260); gt(g, lines[0], 20, 110, { size: 100, weight: 800, color: col });
+    if (lines[1]) gt(g, lines[1], 24, 210, { size: 64, weight: 600, color: 'rgba(210,218,230,0.75)' }); t.needsUpdate = true; };
+  const t = canvasTex(c); paint(); FLOOR_LABELS.push(paint);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(wU, wU * 260 / 1400), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, fog: false, opacity: 0 }));
+  m.rotation.x = -Math.PI / 2; m.renderOrder = 3; scene.add(m); return m;
+}
+const signC = floorLabel(['클라', '내 PC · 게임 화면'], K.client, 8); signC.position.set(-20, .02, 6.2);
+const signN = floorLabel(['네트워크', '인터넷 구간'], K.net, 7); signN.position.set(-3.5, .02, 7.2);
+const signS = floorLabel(['서버', '게임 서버 · 채널 3'], K.server, 8); signS.position.set(14.5, .02, 7.0);
+
+// dust in the air
+const dust = (() => {
+  const R = rng(17), n = 500, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = -30 + R() * 80; pos[i * 3 + 1] = R() * 16; pos[i * 3 + 2] = -18 + R() * 30; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: .05, color: 0xb9d4ff, transparent: true, opacity: .3, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scene.add(pts); return pts;
+})();
+
+// ── 2D overlay ───────────────────────────────────────────────
+function txt(s, x, y, o = {}) {
+  const { size = 32, weight = 500, color = '#e6e9ee', align = 'left', alpha = 1, mono = false, ls = 0, base = 'alphabetic', shadow = 0 } = o;
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; if (ls) ctx.letterSpacing = ls + 'px';
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = shadow; }
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function tw(s, size, weight = 500, mono = false) { ctx.font = `${weight} ${size}px ${mono ? MONO : SANS}`; return ctx.measureText(s).width; }
+function wrap(s, size, weight, maxW) {
+  const words = s.split(' '), out = []; let cur = '';
+  for (const w of words) { const n = cur ? cur + ' ' + w : w; if (tw(n, size, weight) > maxW && cur) { out.push(cur); cur = w; } else cur = n; }
+  if (cur) out.push(cur); return out;
+}
+function proj(v) { const q = v.clone().project(camera); return [(q.x + 1) / 2 * W, (1 - q.y) / 2 * H, q.z]; }
+function shade(x0, y0, x1, y1, a) {
+  const g = ctx.createRadialGradient((x0 + x1) / 2, (y0 + y1) / 2, 0, (x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) * .62);
+  g.addColorStop(0, `rgba(5,7,11,${.8 * a})`); g.addColorStop(1, 'rgba(5,7,11,0)'); ctx.fillStyle = g; ctx.fillRect(x0 - 200, y0 - 200, x1 - x0 + 400, y1 - y0 + 400);
+}
+function pill(label, x, y, col, o = {}) {
+  const { size = 28, align = 'left', fillA = .16, alpha = 1, mono = false, weight = 700 } = o;
+  if (alpha <= 0) return 0;
+  const w = tw(label, size, weight, mono) + size * 1.1, h = size * 1.6, X = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.beginPath(); ctx.roundRect(X, y - h / 2, w, h, h / 2); ctx.fillStyle = rgba(col, fillA); ctx.fill(); ctx.lineWidth = 1.8; ctx.strokeStyle = rgba(col, .8); ctx.stroke();
+  txt(label, X + w / 2, y + size * .36, { size, weight, color: col, align: 'center', mono }); ctx.restore();
+  return w;
+}
+const X0 = 60, X1 = W - 60, CX = W / 2;
+function fitSize(sz, s0, weight, maxW) { let z = s0; while (z > 24 && tw(sz, z, weight) > maxW) z -= 2; return z; }
+function band(y0, y1, a) {
+  const g = ctx.createLinearGradient(0, y0 - 60, 0, y1 + 60);
+  g.addColorStop(0, 'rgba(5,7,11,0)'); g.addColorStop(.18, `rgba(5,7,11,${.88 * a})`); g.addColorStop(.82, `rgba(5,7,11,${.88 * a})`); g.addColorStop(1, 'rgba(5,7,11,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, y0 - 60, W, y1 - y0 + 120);
+}
+function vheader(v) {
+  for (const [s, e, n, title, sub] of VHEAD) {
+    const a = win(v, s, e, .3); if (a <= 0) continue;
+    const k = eo(p(v, s + .05, .5)), k2 = eo(p(v, s + .2, .5));
+    ctx.save(); ctx.globalAlpha = a;
+    band(130, 340, 1);
+    ctx.beginPath(); ctx.arc(X0 + 8, 166, 8, 0, 7); ctx.fillStyle = K.red; ctx.fill();
+    txt('LAG TRIAGE', X0 + 28, 176, { size: 30, mono: true, weight: 700, color: '#aeb6c3', ls: 2 });
+    const sx = X0 + 28 + tw('LAG TRIAGE', 30, 700, true) + 36;
+    VHEAD.forEach((h, i) => { ctx.fillStyle = h[2] === n ? K.tk : h[0] < s ? 'rgba(255,159,67,0.45)' : 'rgba(255,255,255,0.14)'; ctx.fillRect(sx + i * 30, 155, 22, 22); });
+    txt(title, X0 - (1 - k) * 24, 268, { size: 80, weight: 800, color: '#f3f5f8', alpha: k });
+    txt(sub, X0, 326, { size: fitSize(sub, 38, 500, X1 - X0), color: '#a9b1bd', alpha: k2 });
+    ctx.restore();
+  }
+}
+const CAPS = [
+  [1.0, 3.4, '체감 렉 = 클라 + 네트워크 + 서버', '8 + 25 + 30 + 25 + 16 = 104ms'],
+  [4.3, 7.6, '프레임타임이 튀면 → 클라렉', '화면 · UI · 입력이 전부 멈칫, 핑은 정상'],
+  [8.6, 11.8, '전송 핑 · 손실이 튀면 → 네트워크렉', 'FPS · UI는 정상, 다른 캐릭터가 순간이동'],
+  [13.0, 15.8, '앱 핑만 높고 채널 전체가 동시에 → 서버렉', '틱 20Hz → 8Hz, FPS · 전송 핑은 정상'],
+  [16.6, 19.4, '전송 핑은 정상인데 앱 핑만 높음 → 서버가 문제', '차이 = 서버 안에서 기다린 시간'],
+];
+function captions(v) {
+  for (const [s, e, l1, l2] of CAPS) {
+    const a = win(v, s, e, .3); if (a <= 0) continue;
+    ctx.save(); ctx.globalAlpha = a; band(1560, 1720, 1);
+    const k2 = eo(p(v, s + .25, .4));
+    txt(l1, CX, 1618, { size: fitSize(l1, 54, 800, X1 - X0), weight: 800, color: '#f3f5f8', align: 'center' });
+    txt(l2, CX, 1690, { size: fitSize(l2, 44, 500, X1 - X0), color: '#c3cad4', align: 'center', alpha: k2 });
+    ctx.restore();
+  }
+  txt('* 화면의 수치는 이해를 돕기 위한 예시', X0, 1800, { size: 30, color: '#8a94a6', alpha: win(v, 3.4, END, .3), shadow: 8 });
+}
+function readoutsV(v, t) {
+  const a = win(v, 15.9, END + .2, .35); if (a <= 0) return;
+  const ph = phaseAt(t - 47.5);
+  ctx.save(); ctx.globalAlpha = a;
+  band(1210, 1480, 1);
+  [['전송 핑', ph.tp, K.net, '커널 TCP RTT'], ['앱 핑', ph.ap, K.server, '게임 로직 큐를 거침']].forEach(([lab, val, col, sub], i) => {
+    const x = X0 + i * 490, y = 1206, w = 470, h = 270, hot = val > 150;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fillStyle = '#141820'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(hot ? K.red : col, .75); ctx.stroke();
+    txt(lab, x + 28, y + 58, { size: 42, weight: 800, color: col });
+    txt(String(val), x + w - 86, y + 192, { size: 124, weight: 800, mono: true, color: hot ? K.red : K.ok, align: 'right' });
+    txt('ms', x + w - 24, y + 192, { size: 44, weight: 700, mono: true, color: hot ? K.red : K.ok, align: 'right' });
+    txt(sub, x + 28, y + 246, { size: 30, color: '#a9b1bd' });
+  });
+  ctx.restore();
+}
+function progressV(v) {
+  const a = clamp(Math.min(v - .2, END - .2 - v) * 3) * .9; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(X0, 110, X1 - X0, 4);
+  ctx.fillStyle = K.tk; ctx.fillRect(X0, 110, (X1 - X0) * clamp(v / END), 4);
+  ctx.restore();
+}
+function titleV(v) {
+  const a = 1 - eio(p(v, 2.9, .45)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  band(130, 560, 1);
+  txt('FRAME TIME · RTT · SERVER TICK', X0, 182, { size: 30, weight: 600, color: '#8a94a6', mono: true, ls: 3, alpha: eo(p(v, .05, .5)) });
+  const k1 = eo(p(v, .15, .6)), k2 = eo(p(v, .4, .6)), k3 = eo(p(v, .6, .6));
+  txt('렉', X0, 300 + (1 - k1) * 20, { size: 104, weight: 800, color: K.red, alpha: k1 });
+  txt(' 걸렸다.', X0 + tw('렉', 104, 800), 300 + (1 - k1) * 20, { size: 104, weight: 800, color: '#f4f6f9', alpha: k1 });
+  txt('서버', X0, 420 + (1 - k2) * 20, { size: 104, weight: 800, color: K.server, alpha: k2 });
+  txt(' 탓일까,', X0 + tw('서버', 104, 800), 420 + (1 - k2) * 20, { size: 104, weight: 800, color: '#f4f6f9', alpha: k2 });
+  txt('내', X0, 540 + (1 - k3) * 20, { size: 104, weight: 800, color: K.client, alpha: k3 });
+  txt(' 탓일까?', X0 + tw('내', 104, 800), 540 + (1 - k3) * 20, { size: 104, weight: 800, color: '#f4f6f9', alpha: k3 });
+  ctx.restore();
+}
+function endCard(v) {
+  const a = eo(p(v, END, .7)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,7,11,0.95)'); g.addColorStop(.72, 'rgba(5,7,11,0.9)'); g.addColorStop(1, 'rgba(5,7,11,0.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  const k0 = eo(p(v, END + .2, .6));
+  txt('보는 순서', X0, 420, { size: 46, weight: 700, color: '#a9b1bd', alpha: k0 });
+  [['1', '프레임타임', '튀면 클라렉', K.client], ['2', '전송 핑', '튀면 네트워크렉', K.net], ['3', '앱 핑 · 영향 범위', '앱 핑만 + 채널 전체 → 서버렉', K.server]].forEach(([n, lab, sub, col], i) => {
+    const k = eo(p(v, END + .35 + i * .25, .5)); if (k <= 0) return;
+    const y = 560 + i * 200;
+    ctx.save(); ctx.globalAlpha = k;
+    ctx.beginPath(); ctx.arc(X0 + 44, y - 26, 42, 0, 7); ctx.fillStyle = '#0d1118'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+    txt(n, X0 + 44, y - 8, { size: 48, weight: 800, mono: true, color: col, align: 'center' });
+    txt(lab, X0 + 120, y - 6, { size: 72, weight: 800, color: col });
+    txt(sub, X0 + 120, y + 60, { size: 40, color: '#c9cfd8' });
+    ctx.restore();
+  });
+  const k3 = eo(p(v, END + 1.2, .6));
+  ctx.save(); ctx.globalAlpha = k3; ctx.fillStyle = 'rgba(255,159,67,0.55)'; ctx.fillRect(X0, 1190, 80, 3); ctx.restore();
+  txt('전체 영상 · 설명 · 용어집', X0, 1260, { size: 40, weight: 700, color: '#c9cfd8', alpha: k3 });
+  txt('jungrok5.github.io/motion-graphics/', X0, 1322, { size: 36, mono: true, color: K.tk, alpha: k3 });
+  txt('lag-diagnosis-artifacts-wide', X0, 1372, { size: 36, mono: true, color: K.tk, alpha: k3 });
+}
+function overlay(v, t) {
+  { const ta = win(v, 2.8, END + .2, .3); if (ta > 0) { ctx.fillStyle = `rgba(5,7,11,${.9 * ta})`; ctx.fillRect(0, 0, W, 110); } }
+  titleV(v); vheader(v); readoutsV(v, t); captions(v); progressV(v); endCard(v);
+}
+
+// ── frame ────────────────────────────────────────────────────
+const frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sphere = new THREE.Sphere();
+function renderAt(v) {
+  v = clamp(v, 0, DURATION);
+  const t = srcT(v);
+  const cam = camAt(v);
+  camera.position.copy(cam.pos);
+  camera.position.x += Math.sin(v * .5) * .03; camera.position.y += Math.sin(v * .37 + 1) * .03;
+  camera.lookAt(cam.tgt); camera.updateMatrixWorld();
+  _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(_pm);
+  const pools = floorMat.uniforms.uPool.value, pcs = floorMat.uniforms.uPC.value; let pi = 0;
+  for (const id of ORDER) {
+    const a = ART[id], pl = place(id, t), k = pl.k;
+    const [x, y, z] = pl.pos, rise = (1 - k) * .6;
+    a.grp.position.set(x, y - rise, z); a.grp.rotation.set(0, pl.yaw, 0); a.grp.updateMatrixWorld();
+    const vis = k > .003, grounded = !id.startsWith('TK');
+    a.grp.visible = vis; a.refl.visible = vis && grounded; a.shadow.visible = vis && grounded;
+    const br = brightness(id, t);
+    a.mat.opacity = k; a.slabMat.opacity = k; a.mat.color.setScalar(.97 * br); a.reflMat.color.setScalar(.58 * br);
+    a.rm.uniforms.uK.value = pl.rimK * k * br; a.rm.uniforms.uC.value.set(pl.rimCol); a.rm.uniforms.uS.value = ((t * .3 + x * .05) % 1.8) - .4;
+    a.refl.position.set(x, -(y - rise), z + .06); a.refl.rotation.set(0, pl.yaw, 0); a.refl.scale.set(1, -1, 1); a.reflMat.opacity = .18 * k;
+    a.shadow.position.set(x, .012, z + .25); a.shMat.opacity = .7 * k * clamp(1.4 - (y - a.s.h / 200) * .12);
+    if (pi < NPOOL && grounded) { pools[pi].set(x, z + 1.4, a.s.w / 100 * .7, k * (.35 + .9 * clamp(pl.rimK))); pcs[pi].set(pl.rimCol); pi++; }
+    if (vis) {
+      _sphere.set(a.grp.position, Math.hypot(a.s.w, a.s.h) / 200);
+      if (frustum.intersectsSphere(_sphere)) {
+        const fps = a.s.fps || 60, key = Math.round(liveT(a.s.live, t) * fps);
+        if (a.key !== key) { a.g.setTransform(1, 0, 0, 1, 0, 0); a.s.draw(a.g, key / fps); a.tex.needsUpdate = true; a.key = key; }
+      }
+    }
+  }
+  for (; pi < NPOOL; pi++) pools[pi].set(0, 0, 1, 0);
+  const ov = OVER(t);
+  floorMat.uniforms.uCam.value.copy(camera.position);
+  floorMat.uniforms.uNet.value = Math.max(ov, win(t, 5.4, 13.6), win(t, 47.6, 57.8), .35);
+  const sk = 0;
+  signC.material.opacity = sk; signN.material.opacity = sk; signS.material.opacity = sk;
+
+  // lines
+  NS = 0;
+  // ch01: the reaction's wire, hot head where the packet is
+  const k1 = 0;
+  if (k1 > 0) {
+    const up = p(t, 6.95, .45), dn = p(t, 7.85, .45);
+    curve(wire1(), 1, K.net, .28 * k1, 3, up > 0 && up < 1 ? eio(up) : dn > 0 && dn < 1 ? 1 - eio(dn) : -1);
+  }
+  // ch02–04: the report's timestamp path
+  TICKETS.forEach((T, i) => {
+    const r = p(t, T.S + .95, .85), kk = win(t, T.S + .9, T.S + 2.3, .3);
+    if (kk > 0) curve(tkPath(i)(), Math.min(1, eo(p(t, T.S + .9, .5))), K.tk, .3 * kk, 2.6, r > 0 && r < 1 ? eio(r) : -1, true, 28);
+  });
+  // ch05: the two ping wires (+ the app ping's path through the socket into the queue)
+  const k5 = Math.max(win(t, 47.7, 57.9, .5), ov * .6);
+  if (k5 > 0) {
+    const ph = phaseAt(Math.max(0, t - 47.5)), netHot = ph.name === '네트워크렉' && t < 58;
+    curve(wireT(), 1, netHot ? K.red : K.net, .32 * k5, 3, -1, false, 16);
+    curve(wireA(), 1, netHot ? K.red : K.server, .3 * k5, 3, -1, false, 16);
+    curve(straight(SO_A(), SO_A2()), 1, K.server, .14 * k5, 2.4, -1, true, 12);
+    curve(straight(SO_A2(), Q_TAIL(2)()), 1, K.server, .2 * k5, 2.4, -1, true, 12);
+  }
+  iA.needsUpdate = iB.needsUpdate = iC.needsUpdate = iWd.needsUpdate = true;
+  lineGeo.instanceCount = Math.max(1, NS);
+  if (!NS) iC.array.fill(0, 0, 3);
+
+  // chips
+  for (const c of CHIPS) {
+    const r = c.posFn(t);
+    c.sp.visible = !!r; c.gl.visible = !!r;
+    if (!r) continue;
+    c.sp.position.copy(r.q).add(new THREE.Vector3(0, c.size * .7, 0));
+    c.sp.scale.set(c.size * c.aspect, c.size, 1); c.sp.material.opacity = 1;
+    c.gl.position.copy(r.q); const gs = c.size * 1.9 * (1 + .12 * Math.sin(v * 20)); c.gl.scale.set(gs, gs, 1); c.gl.material.opacity = 1;
+  }
+  dust.rotation.y = v * .004; dust.position.y = Math.sin(v * .3) * .15;
+  composer.render();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  overlay(v, t);
+}
+window.renderAt = renderAt;
+window.DURATION = DURATION;
+
+window.ready = (async () => {
+  const faces = [['Pretendard', 'Pretendard-Variable.woff2', '100 900'], ['JetBrains Mono', 'JetBrainsMono.woff2', '100 800']];
+  for (const [family, file, weight] of faces) {
+    for (const base of ['assets/fonts/', '../assets/fonts/']) {
+      try { document.fonts.add(await new FontFace(family, `url(${base}${file})`, { weight }).load()); break; } catch (e) { /* try next */ }
+    }
+  }
+  await document.fonts.ready;
+  for (const c of CHIPS) { const { t: tex, aspect } = chipTex(c.label, c.col); c.sp.material.map.dispose(); c.sp.material.map = tex; c.aspect = aspect; }
+  for (const id of ORDER) ART[id].key = null;
+  FLOOR_LABELS.forEach(f => f());
+})();
+
+// ── player (skipped when ?render) ────────────────────────────
+if (!location.search.includes('render')) {
+  const $ = id => document.getElementById(id);
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
+    replay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5"/></svg>',
+  };
+  const CHAPTERS = [[0, '', '인트로'], ...VHEAD.map(h => [h[0], h[2], h[3]]), [END, '', '정리']];
+  $('scrub').setAttribute('aria-valuemax', Math.round(DURATION));
+  const POSTER = 4.6;
+  let t = 0, playing = false, started = false, last = 0;
+  const mmss = x => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+
+  CHAPTERS.forEach(([s, n, label], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = (n ? `<span>${n}</span>` : '') + label;
+    b.addEventListener('click', () => { seek(s + .01); play(); });
+    $('chapters').appendChild(b);
+    if (i) { const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (s / DURATION * 100) + '%'; $('ticks').appendChild(tk); }
+  });
+
+  function ui() {
+    const k = t / DURATION, ended = t >= DURATION;
+    $('fill').style.width = k * 100 + '%'; $('knob').style.left = k * 100 + '%';
+    $('time').textContent = `${mmss(t)} / ${mmss(DURATION)}`;
+    $('scrub').setAttribute('aria-valuenow', Math.round(t));
+    $('play').innerHTML = playing ? ICON.pause : ended ? ICON.replay : ICON.play;
+    $('play').setAttribute('aria-label', playing ? '일시정지' : '재생');
+    $('big').hidden = playing;
+    $('big').innerHTML = ended ? ICON.replay : ICON.play;
+    $('big').classList.toggle('replay', ended);
+    let cur = 0; CHAPTERS.forEach(([s], i) => { if (t >= s) cur = i; });
+    [...$('chapters').children].forEach((b, i) => b.setAttribute('aria-current', i === cur && started));
+  }
+  function draw() { renderAt(started ? Math.min(t, DURATION - .001) : POSTER); }
+  function play() { if (t >= DURATION) t = 0; started = true; playing = true; last = performance.now(); ui(); }
+  function pause() { playing = false; ui(); }
+  function toggle() { playing ? pause() : play(); }
+  function seek(x) { started = true; t = clamp(x, 0, DURATION); draw(); ui(); }
+
+  function frame(now) {
+    if (playing) {
+      t += Math.min(.1, (now - last) / 1000) * rate; last = now;
+      if (t >= DURATION) { t = DURATION; playing = false; }
+      draw(); ui();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const RATES = [1, .75, .5];
+  let rate = 1;
+  try { rate = +localStorage.getItem('mg-rate') || 1; } catch (e) { /* storage unavailable */ }
+  if (!RATES.includes(rate)) rate = 1;
+  function setRate(r) {
+    rate = r; $('rate').textContent = r + '×'; $('rate').setAttribute('aria-label', `재생 속도 ${r}배`);
+    try { localStorage.setItem('mg-rate', String(r)); } catch (e) { /* storage unavailable */ }
+  }
+  setRate(rate);
+  $('rate').addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+  $('stage').addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('fs').addEventListener('click', () => {
+    const el = $('stage');
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  });
+  const scrub = $('scrub');
+  const fromEvent = e => { const r = scrub.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width) * DURATION; };
+  let wasPlaying = false;
+  scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); wasPlaying = playing; playing = false; seek(fromEvent(e)); });
+  scrub.addEventListener('pointermove', e => { if (scrub.hasPointerCapture(e.pointerId)) seek(fromEvent(e)); });
+  scrub.addEventListener('pointerup', () => { if (wasPlaying && t < DURATION) play(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(t + 5); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(t - 5); }
+    else if (e.key === 'Home') seek(0);
+    else if (e.key === ',' || e.key === '<') setRate(RATES[Math.min(RATES.length - 1, RATES.indexOf(rate) + 1)]);
+    else if (e.key === '.' || e.key === '>') setRate(RATES[Math.max(0, RATES.indexOf(rate) - 1)]);
+  });
+
+  const posterMode = location.hash === '#poster';
+  if (posterMode) document.body.classList.add('poster');
+  ui();
+  const deep = /^#ch(\d\d)$/.exec(location.hash), deepHead = deep && VHEAD.find(r => r[2] === deep[1]);
+  window.ready.then(() => {
+    draw(); requestAnimationFrame(frame);
+    if (deepHead) seek(deepHead[0] + .01);
+    if (posterMode) { play(); setInterval(() => { if (!playing) { t = 0; play(); } }, 500); }
+  });
+  renderAt(POSTER);
+}
+</script>
